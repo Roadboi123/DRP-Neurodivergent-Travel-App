@@ -47,12 +47,14 @@ jobs:
       - run: echo "hello, building!"
 
   test:
+    runs-on: ubuntu-latest
     needs: build
     #TODO: get stuff from build and then test it
     steps:
       - run: echo "hello, testing!"
   
   deploy:
+    runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main' #TODO: test this
     #TODO: get stuff from build and then deploy
