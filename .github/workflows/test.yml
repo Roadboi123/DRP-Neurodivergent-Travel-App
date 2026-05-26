@@ -46,6 +46,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: build/
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
