@@ -6,19 +6,17 @@ on:
 env:
   NODE_VERSION: "20"
 
-# reusable container config
-x-container: &builder_container
-  image: siva123134/drp10:latest
-  credentials:
-    username: ${{ secrets.DOCKER_USERNAME }}
-    password: ${{ secrets.DOCKER_TOKEN }}
 
 jobs:
 
   lint:
     runs-on: ubuntu-latest
 
-    container: *builder_container
+    container: &builder_container
+      image: siva123134/drp10:latest
+      credentials:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
