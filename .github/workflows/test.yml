@@ -9,6 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-latest 
 
+    containter: 
+      image: siva123134/drp10:latest
+
     steps:
       - uses: actions/checkout@v4
       - run: ls -la
