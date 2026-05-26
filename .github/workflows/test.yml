@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest 
 
-    containter: 
+    container: 
       image: siva123134/drp10:latest
 
     steps:
