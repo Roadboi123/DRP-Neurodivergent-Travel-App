@@ -45,12 +45,28 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - run: ls -la
-      - run: echo "hello, building!"
       - uses: actions/upload-artifact@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          name: build-output
-          path: build/
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+ 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+ 
+      - name: Install Node deps (app)
+        working-directory: app
+        run: npm ci
+ 
+      # Expo export — confirms the RN bundle compiles cleanly
+      # Uses EXPO_TOKEN secret set in GitHub repo settings
+      - name: Expo export (web + validate)
+        working-directory: app
+        run: npx expo export --platform web
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
   test:
     runs-on: ubuntu-latest
