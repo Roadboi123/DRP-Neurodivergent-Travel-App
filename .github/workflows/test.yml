@@ -11,6 +11,9 @@ jobs:
 
     container: 
       image: siva123134/drp10:latest
+      credentials:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
