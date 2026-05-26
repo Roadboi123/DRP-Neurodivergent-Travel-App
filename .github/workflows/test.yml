@@ -2,20 +2,60 @@ name: Test Project
 
 on:
   push:
-    branches:
-      - main 
+  
 
 jobs:
-  build:
-    runs-on: ubuntu-latest 
+  lint:
+    runs-on: ubuntu-latest
 
-    container: 
+    container: &builder_container
       image: siva123134/drp10:latest
       credentials:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_TOKEN }}
+    
+    steps:
+     - uses: actions/checkout@v4
+ 
+     - name: Set up Node
+       uses: actions/setup-node@v4
+       with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: npm
+        cache-dependency-path: app/package-lock.json
+     - name: Install Node deps (app)
+       working-directory: app
+       run: npm ci
+
+     - name: ESLint (app)
+       working-directory: app
+       run: npm run lint
+     - name: tsc --noEmit (app)
+       working-directory: app
+       run: npx tsc --noEmit
+      
+    
+  build:
+    needs: lint
+    runs-on: ubuntu-latest 
+
+    container: *builder_container
 
     steps:
       - uses: actions/checkout@v4
       - run: ls -la
-      - run: echo "hello, test!"
+      - run: echo "hello, building!"
+
+  test:
+    needs: build
+    #TODO: get stuff from build and then test it
+    steps:
+      - run: echo "hello, testing!"
+  
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' #TODO: test this
+    #TODO: get stuff from build and then deploy
+    steps:
+      - run: echo "hello, deploying!"
+  
