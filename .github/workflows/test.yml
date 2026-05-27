@@ -136,16 +136,15 @@ jobs:
 
       # Deploy the pre-built dist/ folder to Netlify production
       - name: Deploy to Netlify
-        id: deploy
-        run: |
-          URL=$(netlify deploy \
-            --dir=dist \
-            --prod \
-            --site=${{ secrets.NETLIFY_SITE_ID }} \
-            --auth=${{ secrets.NETLIFY_AUTH_TOKEN }} \
-            --json \
-            | jq -r '.deploy_url')
-          echo "url=$URL" >> $GITHUB_OUTPUT
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: dist
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy from GitHub Actions ${{ github.sha }}"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
       - name: Print live URL
         run: echo "Live at ${{ steps.deploy.outputs.url }}"
