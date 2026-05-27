@@ -1,14 +1,19 @@
-name: Test Project
+name: CI / CD
 
 on:
   push:
 
-env:
-  NODE_VERSION: "20"
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
 
+  # ─────────────────────────────────────────────
+  # JOB 1 — Lint & typecheck
+  # Runs on every push, every branch
+  # No Expo involved — just fast feedback
+  # ─────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
 
@@ -20,6 +25,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: app/node_modules
+          key: node-${{ hashFiles('app/package-lock.json') }}
+          restore-keys: node-
 
       - name: Install Node deps
         working-directory: app
@@ -34,53 +46,73 @@ jobs:
         run: npx tsc --noEmit
 
 
-  build:
+  # ─────────────────────────────────────────────
+  # JOB 2 — Test
+  # Runs in builder container for consistent env
+  # ─────────────────────────────────────────────
+  test:
     needs: lint
     runs-on: ubuntu-latest
+
     container: *builder_container
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: app/node_modules
+          key: node-${{ hashFiles('app/package-lock.json') }}
+          restore-keys: node-
+
       - name: Install Node deps
         working-directory: app
         run: npm ci
 
-      - name: Expo export (web)
+      - name: Run tests
         working-directory: app
-        run: npx expo export --platform web
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-output
-          path: app/dist
+        # --passWithNoTests: won't fail while test suite is still being built
+        # Remove this flag once you have real tests
+        run: npm test -- --passWithNoTests --watchAll=false
 
 
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-output
-
-      - run: echo "hello, testing!"
-
-
+  # ─────────────────────────────────────────────
+  # JOB 3 — Deploy (main branch only)
+  # Vercel pulls the source and runs expo export
+  # itself — no Expo quota used here at all
+  # ─────────────────────────────────────────────
   deploy:
-    runs-on: ubuntu-latest
     needs: test
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-output
+      - uses: actions/checkout@v4
 
-      - run: echo "hello, deploying!"
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      # Pull project config (.vercel/project.json must be committed —
+      # run `vercel link` once locally in app/ to generate it)
+      - name: Pull Vercel project settings
+        working-directory: app
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      # Vercel builds from source — runs expo export on their servers
+      # Set EXPO_TOKEN in Vercel's environment variables dashboard,
+      # not here — keeps it out of GitHub secrets entirely
+      - name: Build on Vercel
+        working-directory: app
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      # Ship the Vercel-built output to production
+      - name: Deploy to production
+        id: deploy
+        working-directory: app
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Print live URL
+        run: echo "Live at ${{ steps.deploy.outputs.url }}"
