@@ -123,6 +123,17 @@ jobs:
             app/android/.gradle
           key: gradle-deps-${{ hashFiles('app/android/**/*.gradle*', 'app/android/**/gradle-wrapper.properties') }}
           restore-keys: gradle-deps-
+      - name: Cache Android SDK NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ndk-27.1.12297006
+
+      - name: Cache Android SDK CMake
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/cmake
+          key: cmake-3.22.1
  
       # Cache 3 — Expo prebuild output
       # If nothing in your JS or app.json changed, skip regenerating
