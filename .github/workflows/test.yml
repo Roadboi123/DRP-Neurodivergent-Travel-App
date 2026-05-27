@@ -12,7 +12,6 @@ jobs:
   # ─────────────────────────────────────────────
   # JOB 1 — Lint & typecheck
   # Runs on every push, every branch
-  # No Expo involved — just fast feedback
   # ─────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
