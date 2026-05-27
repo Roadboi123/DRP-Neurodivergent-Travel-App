@@ -105,19 +105,48 @@ jobs:
         working-directory: app
         run: npm ci
  
-      # Generates the native android/ folder from your Expo config
+      # Cache 1 — Gradle wrapper and caches
+      # Saves downloading Gradle itself (~100MB) every run
+      - name: Cache Gradle wrapper
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/wrapper
+          key: gradle-wrapper-${{ hashFiles('app/android/gradle/wrapper/gradle-wrapper.properties') }}
+ 
+      # Cache 2 — Gradle build cache and dependencies
+      # Saves re-downloading all Android dependencies (~500MB) every run
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            app/android/.gradle
+          key: gradle-deps-${{ hashFiles('app/android/**/*.gradle*', 'app/android/**/gradle-wrapper.properties') }}
+          restore-keys: gradle-deps-
+ 
+      # Cache 3 — Expo prebuild output
+      # If nothing in your JS or app.json changed, skip regenerating
+      # the native android/ folder entirely
+      - name: Cache expo prebuild
+        id: cache-prebuild
+        uses: actions/cache@v4
+        with:
+          path: app/android
+          key: prebuild-${{ hashFiles('app/package.json', 'app/app.json', 'app/app.config.*') }}
+ 
+      # Only runs expo prebuild if app.json or package.json changed
+      # If the cache hit, the android/ folder is already there
       - name: Expo prebuild
+        if: steps.cache-prebuild.outputs.cache-hit != 'true'
         working-directory: app
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
  
-      # Build debug APK — installable on any Android device
       - name: Build APK
         working-directory: app/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --build-cache
  
-      # Download from the Actions run page and sideload onto your phone
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
