@@ -76,9 +76,59 @@ jobs:
       #   run: npm test -- --passWithNoTests --watchAll=false
       #   # run: npm test -- --passWithNoTests --watchAll=false
 
+# ─────────────────────────────────────────────
+  # JOB 3 — Build
+  # No EAS — plain Gradle build via expo prebuild
+  # APK uploaded as artifact, download from
+  # Actions run page and sideload onto any Android
+  # ─────────────────────────────────────────────
+  build-android:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+ 
+    steps:
+      - uses: actions/checkout@v4
+ 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+ 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+ 
+      - name: Install Node deps
+        working-directory: app
+        run: npm ci
+ 
+      # Generates the native android/ folder from your Expo config
+      - name: Expo prebuild
+        working-directory: app
+        run: npx expo prebuild --platform android --clean
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+ 
+      # Build debug APK — installable on any Android device
+      - name: Build APK
+        working-directory: app/android
+        run: ./gradlew assembleDebug --no-daemon
+ 
+      # Download from the Actions run page and sideload onto your phone
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-${{ github.sha }}
+          path: app/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+
 
   # ─────────────────────────────────────────────
-  # JOB 3 — Deploy (main branch only)
+  # JOB 4 — Deploy (main branch only)
   # Vercel pulls the source and runs expo export
   # itself — no Expo quota used here at all
   # ─────────────────────────────────────────────
