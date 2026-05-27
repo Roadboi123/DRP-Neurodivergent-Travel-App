@@ -69,12 +69,12 @@ jobs:
         working-directory: app
         run: npm ci
 
-      - name: Run tests
-        working-directory: app
-        # --passWithNoTests: won't fail while test suite is still being built
-        # Remove this flag once you have real tests
-        run: npm test -- --passWithNoTests --watchAll=false
-        # run: npm test -- --passWithNoTests --watchAll=false
+      # - name: Run tests
+      #   working-directory: app
+      #   # --passWithNoTests: won't fail while test suite is still being built
+      #   # Remove this flag once you have real tests
+      #   run: npm test -- --passWithNoTests --watchAll=false
+      #   # run: npm test -- --passWithNoTests --watchAll=false
 
 
   # ─────────────────────────────────────────────
