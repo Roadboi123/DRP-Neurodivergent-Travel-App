@@ -115,3 +115,4 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Print live URL
+        run: echo "Live at ${{ steps.deploy.outputs.url }}"
