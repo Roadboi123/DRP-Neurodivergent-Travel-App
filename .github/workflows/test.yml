@@ -47,7 +47,6 @@ jobs:
 
   # ─────────────────────────────────────────────
   # JOB 2 — Test
-  # Runs in builder container for consistent env
   # ─────────────────────────────────────────────
   test:
     needs: lint
@@ -69,48 +68,83 @@ jobs:
         working-directory: app
         run: npm ci
 
-      # - name: Run tests
-      #   working-directory: app
-      #   # --passWithNoTests: won't fail while test suite is still being built
-      #   # Remove this flag once you have real tests
-      #   # run: npm test -- --passWithNoTests --watchAll=false
+      - name: Run tests
+        working-directory: app
+        run: npm test -- --passWithNoTests --watchAll=false
 
 
   # ─────────────────────────────────────────────
-  # JOB 3 — Deploy (main branch only)
-  # Vercel pulls the source and runs expo export
-  # itself — no Expo quota used here at all
+  # JOB 3 — Build
+  # Runs expo export and uploads artifact
+  # Only on main to avoid unnecessary builds
   # ─────────────────────────────────────────────
-  deploy:
+  build:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
+    container: *builder_container
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: app/node_modules
+          key: node-${{ hashFiles('app/package-lock.json') }}
+          restore-keys: node-
 
-      # Pull project config (.vercel/project.json must be committed —
-      # run `vercel link` once locally in app/ to generate it)
-      - name: Pull Vercel project settings
+      - name: Install Node deps
         working-directory: app
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: npm ci
 
-      # Vercel builds from source — runs expo export on their servers
-      # Set EXPO_TOKEN in Vercel's environment variables dashboard,
-      # not here — keeps it out of GitHub secrets entirely
-      - name: Build on Vercel
+      - name: Expo export (web)
         working-directory: app
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: npx expo export --platform web
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      # Ship the Vercel-built output to production
-      - name: Deploy to production
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          # Expo outputs to dist/ by default — change to web-build/ if yours differs
+          path: app/dist
+          retention-days: 7
+
+
+  # ─────────────────────────────────────────────
+  # JOB 4 — Deploy to Netlify (main only)
+  # Deploys the pre-built dist/ folder directly
+  # No rebuild on Netlify's side — fast and free
+  # ─────────────────────────────────────────────
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: dist
+
+      - name: Install Netlify CLI
+        run: npm install -g netlify-cli@latest
+
+      # Deploy the pre-built dist/ folder to Netlify production
+      - name: Deploy to Netlify
         id: deploy
-        working-directory: app
         run: |
-          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          URL=$(netlify deploy \
+            --dir=dist \
+            --prod \
+            --site=${{ secrets.NETLIFY_SITE_ID }} \
+            --auth=${{ secrets.NETLIFY_AUTH_TOKEN }} \
+            --json \
+            | jq -r '.deploy_url')
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Print live URL
