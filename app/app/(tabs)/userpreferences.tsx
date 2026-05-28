@@ -116,10 +116,25 @@ export default function UserPreferencesScreen() {
 
   const allSet = preferences.every((p) => p.value !== null);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!allSet) return;
-    // TODO: POST to backend
-    setSaved(true);
+    try {
+      const res = await fetch('https://your-railway-url.railway.app/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          noise:       preferences.find(p => p.id === 'noise')?.value,
+          crowds:      preferences.find(p => p.id === 'crowds')?.value,
+          temperature: preferences.find(p => p.id === 'temperature')?.value,
+          smell:       preferences.find(p => p.id === 'smell')?.value,
+          lights:      preferences.find(p => p.id === 'lights')?.value,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setSaved(true);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const completedCount = preferences.filter((p) => p.value !== null).length;
