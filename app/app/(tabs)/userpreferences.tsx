@@ -7,7 +7,6 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  Animated,
 } from 'react-native';
 
 type SensitivityLevel = 'little' | 'manageable' | 'dontcare';
@@ -22,7 +21,7 @@ interface Preference {
 const OPTIONS: { value: SensitivityLevel; label: string }[] = [
   { value: 'little',     label: 'A little' },
   { value: 'manageable', label: 'Manageable' },
-  { value: 'dontcare',   label: "Don't care" },
+  { value: 'dontcare',   label: "Do not care" },
 ];
 
 const OPTION_COLORS: Record<SensitivityLevel, { bg: string; text: string; border: string }> = {
@@ -70,7 +69,7 @@ function OptionChip({
           selected ? { color: colors.text, fontWeight: '600' } : styles.chipLabelUnselected,
         ]}
       >
-        {option.value === 'dontcare' ? "Don't care" : option.label}
+        {option.value === 'dontcare' ? "Do not care" : option.label}
       </Text>
     </TouchableOpacity>
   );
@@ -135,7 +134,7 @@ export default function UserPreferencesScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Your preferences</Text>
           <Text style={styles.subtitle}>
-            Tell us what affects you most — we'll find calmer routes for you.
+            Tell us what affects you most — we will find calmer routes for you.
           </Text>
         </View>
 
@@ -159,7 +158,7 @@ export default function UserPreferencesScreen() {
             <View style={styles.rowLabel} />
             {OPTIONS.map((o) => (
               <Text key={o.value} style={styles.columnHeader}>
-                {o.value === 'dontcare' ? "Don't\ncare" : o.label}
+                {o.value === 'dontcare' ? "Do not\ncare" : o.label}
               </Text>
             ))}
           </View>
