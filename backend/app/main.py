@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 # from app.api.routes import router
 from app.api.health import health_router
+from app.api.database_health import dbrouter
 
 app = FastAPI(
     title="Calm Travel API",
@@ -8,7 +9,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
-# app.include_router(router)
+app.include_router(dbrouter)
 
 @app.get("/")
 async def root():

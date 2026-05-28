@@ -1,9 +1,10 @@
 from app.integrations.supabase import supabase
-from health import health_router
+from fastapi import APIRouter
 import uuid
 
+dbrouter = APIRouter()
 
-@health_router.get("/supabase-test")
+@dbrouter.get("/supabase-test")
 def test_supabase():
     test_id = str(uuid.uuid4())
 
