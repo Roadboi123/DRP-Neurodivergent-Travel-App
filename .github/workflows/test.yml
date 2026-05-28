@@ -160,7 +160,8 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' &&
+      contains(join(github.event.commits.*.modified, ','), 'app/')
 
     steps:
       - uses: actions/checkout@v4
