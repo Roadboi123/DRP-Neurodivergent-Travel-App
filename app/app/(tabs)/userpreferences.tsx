@@ -119,7 +119,7 @@ export default function UserPreferencesScreen() {
   const handleSave = async () => {
     if (!allSet) return;
     try {
-      const res = await fetch('https://drp-neurodivergent-travel-app-production.up.railway.app/preferences', {
+      const res = await fetch('https://drp-neurodivergent-travel-app-production.up.railway.app/preferences/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
