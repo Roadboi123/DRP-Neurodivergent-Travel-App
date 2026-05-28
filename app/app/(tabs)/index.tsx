@@ -6,8 +6,18 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Link } from 'expo-router';
+import {useState} from 'react';
 
 export default function HomeScreen() {
+
+  const [webstate, setWebstate] = useState("Offline");
+
+  fetch('https://drp-neurodivergent-travel-app-production.up.railway.app/', {
+    method: 'GET'
+  }).then(response => {
+      setWebstate(JSON.stringify(response.json()))
+  })
+  
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -18,7 +28,7 @@ export default function HomeScreen() {
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome here!🥀🥀🥀🥀🥀</ThemedText>
+        <ThemedText type="title">Welcome here!🥀🥀🥀🥀🥀- The backend says {webstate}</ThemedText>
         <HelloWave />
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
@@ -43,7 +53,7 @@ export default function HomeScreen() {
           </Link.Trigger>
           <Link.Preview />
           <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
+            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action presserd')} />
             <Link.MenuAction
               title="Share"
               icon="square.and.arrow.up"
