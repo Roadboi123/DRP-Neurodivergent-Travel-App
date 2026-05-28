@@ -24,7 +24,7 @@ export default function HomeScreen() {
       setWebstate(data.status);
     } catch (error) {
       console.error(error);
-      setWebstate("Offline");
+      setWebstate("Error");
     }
   }
 
