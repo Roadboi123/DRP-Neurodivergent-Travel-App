@@ -82,73 +82,73 @@ jobs:
   # APK uploaded as artifact, download from
   # Actions run page and sideload onto any Android
   # ─────────────────────────────────────────────
-  # build-android:
-  #   needs: test
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/main'
+  build-android:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
  
-  #   steps:
-  #     - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
  
-  #     - name: Set up Node
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
  
-  #     - name: Set up Java
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: temurin
-  #         java-version: "17"
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
  
-  #     # Cache NDK and CMake before prebuild so they're available when Gradle runs
-  #     - name: Cache Android NDK
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: /usr/local/lib/android/sdk/ndk
-  #         key: ndk-27.1.12297006
+      # Cache NDK and CMake before prebuild so they're available when Gradle runs
+      - name: Cache Android NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ndk-27.1.12297006
  
-  #     - name: Cache Android CMake
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: /usr/local/lib/android/sdk/cmake
-  #         key: cmake-3.22.1
+      - name: Cache Android CMake
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/cmake
+          key: cmake-3.22.1
  
-  #     # Cache Gradle — keyed on package.json not android/ (android/ gets wiped by --clean)
-  #     - name: Cache Gradle
-  #       uses: actions/cache@v4
-  #       with:
-  #         path: |
-  #           ~/.gradle/caches
-  #           ~/.gradle/wrapper
-  #         key: gradle-${{ hashFiles('app/package.json') }}
-  #         restore-keys: gradle-
+      # Cache Gradle — keyed on package.json not android/ (android/ gets wiped by --clean)
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('app/package.json') }}
+          restore-keys: gradle-
  
-  #     - name: Install Node deps
-  #       working-directory: app
-  #       run: npm ci
+      - name: Install Node deps
+        working-directory: app
+        run: npm ci
  
-  #     # Generates android/ fresh — ABI filter injected via expo-build-properties in app.json
-  #     - name: Expo prebuild
-  #       working-directory: app
-  #       run: npx expo prebuild --platform android --clean
-  #       env:
-  #         EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      # Generates android/ fresh — ABI filter injected via expo-build-properties in app.json
+      - name: Expo prebuild
+        working-directory: app
+        run: npx expo prebuild --platform android --clean
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
  
-  #     - name: Build APK
-  #       working-directory: app/android
-  #       run: ./gradlew assembleDebug --no-daemon -Pandroid.injected.build.abi=arm64-v8a
+      - name: Build APK
+        working-directory: app/android
+        run: ./gradlew assembleDebug --no-daemon -Pandroid.injected.build.abi=arm64-v8a
  
-  #     # Find the APK so we know the exact path
-  #     - name: Find APK
-  #       run: find app/android -name "*.apk" 2>/dev/null
+      # Find the APK so we know the exact path
+      - name: Find APK
+        run: find app/android -name "*.apk" 2>/dev/null
  
-  #     - name: Upload APK
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: android-debug-${{ github.sha }}
-  #         path: app/android/app/build/intermediates/apk/debug/app-debug.apk
-  #         retention-days: 14
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-${{ github.sha }}
+          path: app/android/app/build/intermediates/apk/debug/app-debug.apk
+          retention-days: 14
 
 
 
@@ -160,7 +160,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(toJson(github.event.head_commit.modified), 'app/')
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
