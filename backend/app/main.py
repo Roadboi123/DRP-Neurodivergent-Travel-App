@@ -4,7 +4,10 @@ from app.api.health import health_router
 from app.api.database_health import dbrouter
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(
+    title="Calm Travel API",
+    version="0.1.0"
+)
 
 origins = [
     "https://drp10-nd-travel-app.vercel.app",
@@ -16,11 +19,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
-
-app = FastAPI(
-    title="Calm Travel API",
-    version="0.1.0"
 )
 
 app.include_router(health_router)
