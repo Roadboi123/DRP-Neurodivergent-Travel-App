@@ -1,6 +1,7 @@
 from supabase import create_client
 import os
 
+print({k:v for k,v in os.environ.items()})
 print("SUPABASE_URL =", os.getenv("SUPABASE_URL"))
 print("SUPABASE_KEY exists =", bool(os.getenv("SUPABASE_KEY")))
 
