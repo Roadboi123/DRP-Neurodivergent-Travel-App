@@ -9,6 +9,7 @@ import {
   StatusBar,
 } from 'react-native';
 
+
 type SensitivityLevel = 'little' | 'manageable' | 'dontcare';
 
 interface Preference {
