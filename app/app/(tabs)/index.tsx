@@ -6,18 +6,31 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Link } from 'expo-router';
-import {useState} from 'react';
+import {useState, useEffect} from 'react';
 
 export default function HomeScreen() {
 
   const [webstate, setWebstate] = useState("Offline");
 
-  fetch('https://drp-neurodivergent-travel-app-production.up.railway.app/', {
-    method: 'GET'
-  }).then(response => {
-      setWebstate(JSON.stringify(response.json()))
-  })
-  
+  useEffect(() => {
+  async function checkBackend() {
+    try {
+      const response = await fetch(
+        'https://drp-neurodivergent-travel-app-production.up.railway.app/health'
+      );
+
+      const data = await response.json();
+
+      setWebstate(data.status);
+    } catch (error) {
+      console.error(error);
+      setWebstate("Offline");
+    }
+  }
+
+  checkBackend();
+}, []);
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
