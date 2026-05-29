@@ -51,12 +51,11 @@ def save_preferences(prefs: SensitivityPreferences):
     }
  
  
-@pref_router.get("/{preference_id}")
-def get_preferences(preference_id: str):
-    """Retrieve a saved preference set by UUID."""
+@pref_router.get("/{username}")
+def get_preferences(username: str):
     result = supabase.table("user_sensitivities") \
         .select("*") \
-        .eq("id", preference_id) \
+        .eq("id", username) \
         .execute()
  
     if not result.data:
