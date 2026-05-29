@@ -34,7 +34,7 @@ class SensitivityPreferences(BaseModel):
 def save_preferences(prefs: SensitivityPreferences):
     """Save sensory preferences from the user preferences screen."""
     result = supabase.table("user_sensitivities").insert({
-        "username":prefs.username
+        "username": prefs.username,
         "noise_sensitivity":  SENSITIVITY_MAP[prefs.noise],
         "crowd_sensitivity":  SENSITIVITY_MAP[prefs.crowds],
         "heat_sensitivity":   SENSITIVITY_MAP[prefs.temperature],
