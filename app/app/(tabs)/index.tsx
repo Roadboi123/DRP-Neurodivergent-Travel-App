@@ -111,27 +111,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Sensory Stats */}
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
-          Sensory Achievements
-        </Text>
-        <View style={[styles.statsCard, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>142 km</Text>
-            <Text style={[styles.statLabel, { color: isDark ? '#AAA' : '#666' }]}>Calmly Traveled</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>8</Text>
-            <Text style={[styles.statLabel, { color: isDark ? '#AAA' : '#666' }]}>Crowds Avoided</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>5</Text>
-            <Text style={[styles.statLabel, { color: isDark ? '#AAA' : '#666' }]}>Overloads Saved</Text>
-          </View>
-        </View>
-
         {/* Daily Travel Tips */}
         <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
           Daily Travel Tips
@@ -257,33 +236,6 @@ const styles = StyleSheet.create({
   cardDescText: {
     fontSize: 11,
     lineHeight: 14,
-  },
-  statsCard: {
-    borderRadius: 18,
-    borderWidth: 1.5,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#1D9E75',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: '#EAEAEA',
   },
   tipsContainer: {
     borderRadius: 18,
