@@ -11,9 +11,17 @@ SENSITIVITY_MAP = {
     "manageable": 2,
     "dontcare":   3,
 }
+
+REVERSE_SENSITIVITY_MAP = {
+    1:"little",
+    2:"manageable",
+    3:"dontcare"
+}
+
  
  
 class SensitivityPreferences(BaseModel):
+    username:    str
     noise:       str
     crowds:      str
     temperature: str
@@ -33,7 +41,7 @@ class SensitivityPreferences(BaseModel):
 @pref_router.post("/", status_code=201)
 def save_preferences(prefs: SensitivityPreferences):
     """Save sensory preferences from the user preferences screen."""
-    result = supabase.table("user_sensitivities").insert({
+    result = supabase.table("user_sensitivities").upsert({
         "username": prefs.username,
         "noise_sensitivity":  SENSITIVITY_MAP[prefs.noise],
         "crowd_sensitivity":  SENSITIVITY_MAP[prefs.crowds],
@@ -61,4 +69,14 @@ def get_preferences(username: str):
     if not result.data:
         raise HTTPException(status_code=404, detail="Preferences not found")
  
-    return result.data[0]
+    db_data = result.data[0]
+    
+    # Map database columns back to the structure the React Native screen expects
+    return {
+        "username":    db_data["username"],
+        "noise":       REVERSE_SENSITIVITY_MAP.get(db_data["noise_sensitivity"]),
+        "crowds":      REVERSE_SENSITIVITY_MAP.get(db_data["crowd_sensitivity"]),
+        "temperature": REVERSE_SENSITIVITY_MAP.get(db_data["heat_sensitivity"]),
+        "smell":       REVERSE_SENSITIVITY_MAP.get(db_data["smell_sensitivity"]),
+        "lights":      REVERSE_SENSITIVITY_MAP.get(db_data["light_sensitivity"]),
+    }
