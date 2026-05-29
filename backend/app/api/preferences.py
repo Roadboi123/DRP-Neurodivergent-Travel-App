@@ -55,7 +55,7 @@ def save_preferences(prefs: SensitivityPreferences):
 def get_preferences(username: str):
     result = supabase.table("user_sensitivities") \
         .select("*") \
-        .eq("id", username) \
+        .eq("username", username) \
         .execute()
  
     if not result.data:
