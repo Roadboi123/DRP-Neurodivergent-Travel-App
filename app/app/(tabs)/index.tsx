@@ -1,121 +1,297 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
-import {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Fonts } from '@/constants/theme';
+import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const router = useRouter();
 
-  const [webstate, setWebstate] = useState("Offline");
+  const [backendState, setBackendState] = useState<'Online' | 'Offline' | 'Checking'>('Checking');
 
   useEffect(() => {
-  async function checkBackend() {
-    try {
-      const response = await fetch(
-        'https://drp-neurodivergent-travel-app-production.up.railway.app/health'
-      );
-
-      const data = await response.json();
-
-      setWebstate(data.status);
-    } catch (error) {
-      console.error(error);
-      setWebstate("Error");
+    async function checkBackend() {
+      try {
+        const response = await fetch(
+          'https://drp-neurodivergent-travel-app-production.up.railway.app/health'
+        );
+        const data = await response.json();
+        if (data.status === 'ok') {
+          setBackendState('Online');
+        } else {
+          setBackendState('Offline');
+        }
+      } catch (error) {
+        console.warn('Backend checking failed, falling back to offline state:', error);
+        setBackendState('Offline');
+      }
     }
-  }
-
-  checkBackend();
-}, []);
+    checkBackend();
+  }, []);
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome here!🥀🥀🥀🥀🥀- The backend says {webstate}</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it NOW mobius alex</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action presserd')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? '#121517' : '#FAF9F6' }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={[styles.greetingText, { color: isDark ? '#AAA' : '#666' }]}>
+              Hello, Traveler 🥀
+            </Text>
+            <Text style={[styles.title, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
+              CalmTravel
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: backendState === 'Online' ? '#E8F5E9' : '#FFEBEE' }]}>
+            <View style={[styles.statusDot, { backgroundColor: backendState === 'Online' ? '#4CAF50' : '#F44336' }]} />
+            <Text style={[styles.statusText, { color: backendState === 'Online' ? '#2E7D32' : '#C62828' }]}>
+              API: {backendState}
+            </Text>
+          </View>
+        </View>
+
+        {/* Welcome Banner Card */}
+        <View style={[styles.bannerCard, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
+          <Text style={[styles.bannerTitle, { color: isDark ? '#FFF' : '#1A1A1A' }]}>
+            Your Sensory Safe Space
+          </Text>
+          <Text style={[styles.bannerDesc, { color: isDark ? '#AAA' : '#666' }]}>
+            {"Let's find quieter, cooler, and less crowded routes tailored precisely to your sensory profile."}
+          </Text>
+        </View>
+
+        {/* Quick Actions Grid */}
+        <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
+          Quick Actions
+        </Text>
+        <View style={styles.gridRow}>
+          <TouchableOpacity
+            onPress={() => router.push('/routes')}
+            style={[styles.gridCard, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }]}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: '#E3F2FD' }]}>
+              <Ionicons name="navigate" size={24} color="#1E88E5" />
+            </View>
+            <Text style={[styles.cardTitleText, { color: isDark ? '#FFF' : '#1A1A1A' }]}>Plan Calm Route</Text>
+            <Text style={[styles.cardDescText, { color: isDark ? '#AAA' : '#888' }]}>Find sensory friendly paths</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('/preferences')}
+            style={[styles.gridCard, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }]}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: '#E8F5E9' }]}>
+              <Ionicons name="settings-sharp" size={24} color="#4CAF50" />
+            </View>
+            <Text style={[styles.cardTitleText, { color: isDark ? '#FFF' : '#1A1A1A' }]}>Sensory Sensitivities</Text>
+            <Text style={[styles.cardDescText, { color: isDark ? '#AAA' : '#888' }]}>Update comfort thresholds</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Sensory Stats */}
+        <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
+          Sensory Achievements
+        </Text>
+        <View style={[styles.statsCard, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>142 km</Text>
+            <Text style={[styles.statLabel, { color: isDark ? '#AAA' : '#666' }]}>Calmly Traveled</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>8</Text>
+            <Text style={[styles.statLabel, { color: isDark ? '#AAA' : '#666' }]}>Crowds Avoided</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>5</Text>
+            <Text style={[styles.statLabel, { color: isDark ? '#AAA' : '#666' }]}>Overloads Saved</Text>
+          </View>
+        </View>
+
+        {/* Daily Travel Tips */}
+        <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
+          Daily Travel Tips
+        </Text>
+        <View style={[styles.tipsContainer, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
+          <View style={styles.tipRow}>
+            <Ionicons name="sunny" size={20} color="#FF9800" />
+            <Text style={[styles.tipText, { color: isDark ? '#FFF' : '#333' }]}>
+              Central Line temperature is deep and elevated at 32°C. Taking the District Line is recommended.
+            </Text>
+          </View>
+          <View style={[styles.tipDivider, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]} />
+          <View style={styles.tipRow}>
+            <Ionicons name="volume-high" size={20} color="#4A90E2" />
+            <Text style={[styles.tipText, { color: isDark ? '#FFF' : '#333' }]}>
+              Active drilling near Gloucester Road entrance. Scent/sound isolation headphones advised.
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  safe: {
+    flex: 1,
+  },
+  container: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  greetingText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    gap: 6,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bannerCard: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  bannerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  bannerDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 12,
+    letterSpacing: -0.2,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 24,
+  },
+  gridCard: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: 16,
+    alignItems: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  cardTitleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  cardDescText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  statsCard: {
+    borderRadius: 18,
+    borderWidth: 1.5,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1D9E75',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#EAEAEA',
+  },
+  tipsContainer: {
+    borderRadius: 18,
+    borderWidth: 1.5,
+    padding: 16,
+    gap: 12,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 17,
+  },
+  tipDivider: {
+    height: 1,
   },
 });

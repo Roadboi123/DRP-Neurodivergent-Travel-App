@@ -15,20 +15,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Fonts } from '@/constants/theme';
 
-// Types for Route Suggesstions
+// Types for Route Suggestions
 type SensoryLevel = 1 | 2 | 3; // 1 = Low (Green), 2 = Med (Orange), 3 = High (Red)
 
 interface RouteOption {
   id: string;
   type: 'best' | 'quickest' | 'suggested';
   name: string;
-  subName?: string;
+  subName?: string | null;
   details?: string;
   duration: number; // in minutes
   price: number; // in GBP
-  noise: SensoryLevel;
+  noise: SensoryLevel;     // Mapped to Sound in UI
   crowds: SensoryLevel;
   heat: SensoryLevel;
+  light: SensoryLevel;
+  smell: SensoryLevel;
+  sensory_score?: number;   // Calculated by Backend
   description: string;
 }
 
@@ -65,58 +68,6 @@ const warnings: WarningItem[] = [
   },
 ];
 
-// Default routes list
-const defaultRoutes: RouteOption[] = [
-  {
-    id: 'r1',
-    type: 'best',
-    name: 'Bus 345',
-    duration: 50,
-    price: 1.75,
-    noise: 1,
-    crowds: 1,
-    heat: 2,
-    description: 'Sensory preference route. Usually quiet and air-conditioned.',
-  },
-  {
-    id: 'r2',
-    type: 'quickest',
-    name: 'Bus 49',
-    subName: 'Walk',
-    duration: 43,
-    price: 1.75,
-    noise: 3,
-    crowds: 2,
-    heat: 3,
-    description: 'Saves 7 mins, but includes a noisy intersection and crowded bus boarding.',
-  },
-  {
-    id: 'r3',
-    type: 'suggested',
-    name: 'Bus 170',
-    subName: 'District Line + Walk',
-    details: 'district line',
-    duration: 51,
-    price: 4.85,
-    noise: 2,
-    crowds: 2,
-    heat: 2,
-    description: 'Standard tube link. Watch out for potential minor platform crowding.',
-  },
-  {
-    id: 'r4',
-    type: 'suggested',
-    name: 'Bus 170',
-    subName: 'Central Line + Walk',
-    details: 'central line',
-    duration: 55,
-    price: 4.85,
-    noise: 2,
-    crowds: 2,
-    heat: 3,
-    description: 'Central Line tube runs deep underground and can get extremely hot.',
-  },
-];
 
 export default function RoutesScreen() {
   const colorScheme = useColorScheme();
@@ -125,6 +76,7 @@ export default function RoutesScreen() {
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
   const [endLoc, setEndLoc] = useState('Imperial College London');
+  const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Sorting and filtering states
@@ -132,101 +84,112 @@ export default function RoutesScreen() {
   const [selectedTransport, setSelectedTransport] = useState<string | null>(null);
   const [warningsExpanded, setWarningsExpanded] = useState(false);
 
-  const [routes, setRoutes] = useState<RouteOption[]>(defaultRoutes);
+  // Routes state
+  const [routes, setRoutes] = useState<RouteOption[]>([]);
 
-  // Trigger brief loading state on input changes to feel highly dynamic and interactive
+  // Fetch routes from FastAPI backend with preference scoring
   useEffect(() => {
-    setLoading(true);
-    const timer = setTimeout(() => {
-      // Create some dynamic values based on the input text so it feels alive
+    let active = true;
+
+    async function fetchRoutes() {
       if (!startLoc.trim() || !endLoc.trim()) {
         setRoutes([]);
-        setLoading(false);
         return;
       }
 
-      const seed = (startLoc.length + endLoc.length) % 5;
-      
-      // If it matches the original user inputs, restore standard values
-      if (
-        startLoc.toLowerCase().includes('current') &&
-        endLoc.toLowerCase().includes('imperial')
-      ) {
-        setRoutes(defaultRoutes);
-      } else {
-        // Generate pseudo-random routes based on the destination
-        setRoutes([
-          {
-            id: 'dr1',
-            type: 'best',
-            name: `Bus ${100 + seed * 23}`,
-            duration: 45 + seed * 4,
-            price: 1.75,
-            noise: 1,
-            crowds: 1,
-            heat: 1,
-            description: 'Direct quiet bus line with low sensory stimulation.',
-          },
-          {
-            id: 'dr2',
-            type: 'quickest',
-            name: `Tube Line ${seed + 1}`,
-            subName: 'Walk',
-            duration: 30 + seed * 3,
-            price: 2.80,
-            noise: 3,
-            crowds: 3,
-            heat: seed > 2 ? 3 : 2,
-            description: 'Fastest transit connection, but high sound levels and crowd density.',
-          },
-          {
-            id: 'dr3',
-            type: 'suggested',
-            name: `Bus ${300 - seed * 12}`,
-            subName: 'Walk',
-            duration: 40 + seed * 5,
-            price: 1.75,
-            noise: 2,
-            crowds: 2,
-            heat: 2,
-            description: 'Good compromise with moderate sensory metrics and short transfer.',
-          },
-        ]);
+      setLoading(true);
+
+      try {
+        const startParam = encodeURIComponent(startLoc.trim());
+        const endParam = encodeURIComponent(endLoc.trim());
+        const userParam = username.trim() ? `&username=${encodeURIComponent(username.trim())}` : '';
+
+        // Fetch from Railway production backend
+        const url = `https://drp-neurodivergent-travel-app-production.up.railway.app/routes?start=${startParam}&end=${endParam}${userParam}`;
+        
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error('Railway backend response error');
+        }
+
+        const data = await res.json();
+        if (active) {
+          setRoutes(data);
+        }
+      } catch (error) {
+        console.warn('Production backend unavailable, trying local backend...', error);
+        
+        try {
+          const startParam = encodeURIComponent(startLoc.trim());
+          const endParam = encodeURIComponent(endLoc.trim());
+          const userParam = username.trim() ? `&username=${encodeURIComponent(username.trim())}` : '';
+          
+          const localUrl = `http://localhost:8000/routes?start=${startParam}&end=${endParam}${userParam}`;
+          const localRes = await fetch(localUrl);
+          
+          if (!localRes.ok) {
+            throw new Error('Local backend response error');
+          }
+
+          const localData = await localRes.json();
+          if (active) {
+            setRoutes(localData);
+          }
+        } catch (localError) {
+          console.warn('Local backend unavailable...', localError);
+          if (active) {
+            setRoutes([]);
+          }
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
+    }
+
+    const timer = setTimeout(() => {
+      fetchRoutes();
     }, 400);
 
-    return () => clearTimeout(timer);
-  }, [startLoc, endLoc]);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [startLoc, endLoc, username]);
 
-  // Apply sorting
+  // Apply sorting and filtering
   const getSortedRoutes = () => {
     let list = [...routes];
 
     // Filter by transport mode if clicked
     if (selectedTransport) {
       if (selectedTransport === 'walk') {
-        list = list.filter(r => r.name.toLowerCase().includes('walk') || (r.subName && r.subName.toLowerCase().includes('walk')));
+        list = list.filter(
+          (r) =>
+            r.name.toLowerCase().includes('walk') ||
+            (r.subName && r.subName.toLowerCase().includes('walk'))
+        );
       } else if (selectedTransport === 'bus') {
-        list = list.filter(r => r.name.toLowerCase().includes('bus'));
+        list = list.filter((r) => r.name.toLowerCase().includes('bus'));
       }
     }
 
     if (sortBy === 'speed') {
       return list.sort((a, b) => a.duration - b.duration);
     } else {
-      // Sort by best sensory profile (sum of sensory levels: lowest first)
+      // Sort by backend calculated sensory discomfort score (lowest score first)
+      // Fallback to simple sum if sensory_score is missing
       return list.sort((a, b) => {
-        const sumA = a.noise + a.crowds + a.heat;
-        const sumB = b.noise + b.crowds + b.heat;
-        return sumA - sumB;
+        const scoreA = a.sensory_score ?? (a.noise + a.crowds + a.heat + a.light + a.smell);
+        const scoreB = b.sensory_score ?? (b.noise + b.crowds + b.heat + b.light + b.smell);
+        return scoreA - scoreB;
       });
     }
   };
 
   // Helper to render the sensory indicator blocks
   const renderSensoryMeter = (level: SensoryLevel, label: string) => {
-    // Determine colors
     let barColor = '#4CAF50'; // Low (Green)
     if (level === 2) barColor = '#FF9800'; // Med (Orange)
     if (level === 3) barColor = '#F44336'; // High (Red)
@@ -237,9 +200,33 @@ export default function RoutesScreen() {
           {label}
         </Text>
         <View style={styles.meterBlocks}>
-          <View style={[styles.meterBlock, { backgroundColor: level >= 1 ? barColor : (isDark ? '#333' : '#E5E7EB') }]} />
-          <View style={[styles.meterBlock, { backgroundColor: level >= 2 ? barColor : (isDark ? '#333' : '#E5E7EB') }]} />
-          <View style={[styles.meterBlock, { backgroundColor: level >= 3 ? barColor : (isDark ? '#333' : '#E5E7EB') }]} />
+          <View
+            style={[
+              styles.meterBlock,
+              {
+                backgroundColor:
+                  level >= 1 ? barColor : isDark ? '#333' : '#E5E7EB',
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.meterBlock,
+              {
+                backgroundColor:
+                  level >= 2 ? barColor : isDark ? '#333' : '#E5E7EB',
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.meterBlock,
+              {
+                backgroundColor:
+                  level >= 3 ? barColor : isDark ? '#333' : '#E5E7EB',
+              },
+            ]}
+          />
         </View>
       </View>
     );
@@ -249,7 +236,7 @@ export default function RoutesScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? '#121517' : '#FAF9F6' }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {/* Main Container */}
+      {/* Inputs Header Spacer */}
       <View style={styles.headerSpacer}>
         {/* Navigation Bar */}
         <View style={styles.navBar}>
@@ -262,8 +249,16 @@ export default function RoutesScreen() {
           <View style={{ width: 24 }} />
         </View>
 
-        {/* Input Fields */}
-        <View style={[styles.inputCard, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2A303C' : '#E5E7EB' }]}>
+        {/* Input Fields Card */}
+        <View
+          style={[
+            styles.inputCard,
+            {
+              backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+              borderColor: isDark ? '#2A303C' : '#E5E7EB',
+            },
+          ]}
+        >
           {/* Start Location Input */}
           <View style={styles.inputRow}>
             <View style={styles.inputIconContainer}>
@@ -304,19 +299,57 @@ export default function RoutesScreen() {
             </View>
           </View>
         </View>
+
+        {/* Username Sensitivities Card */}
+        <View
+          style={[
+            styles.usernameCard,
+            {
+              backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+              borderColor: isDark ? '#2A303C' : '#E5E7EB',
+              marginTop: 10,
+            },
+          ]}
+        >
+          <View style={styles.inputRow}>
+            <View style={styles.inputIconContainer}>
+              <Ionicons name="person-circle-outline" size={22} color="#1D9E75" />
+            </View>
+            <View style={styles.inputTextContainer}>
+              <Text style={styles.fieldLabel}>Apply Username Sensitivities</Text>
+              <TextInput
+                style={[styles.textInput, { color: isDark ? '#FFF' : '#1A1A1A' }]}
+                value={username}
+                onChangeText={setUsername}
+                placeholder="Enter username (e.g. calm_traveler)..."
+                placeholderTextColor={isDark ? '#555' : '#999'}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+            {username.trim().length > 0 && !loading && (
+              <Ionicons name="checkmark-circle" size={20} color="#1D9E75" style={{ marginLeft: 6 }} />
+            )}
+          </View>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Quick transport options */}
         <View style={styles.modeSummaryRow}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setSelectedTransport(selectedTransport === 'walk' ? null : 'walk')}
             style={[
-              styles.modeCard, 
-              { 
-                backgroundColor: isDark ? '#1E2229' : '#FFFFFF', 
-                borderColor: selectedTransport === 'walk' ? '#4A90E2' : (isDark ? '#2E3543' : '#EAEAEA') 
-              }
+              styles.modeCard,
+              {
+                backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+                borderColor:
+                  selectedTransport === 'walk'
+                    ? '#4A90E2'
+                    : isDark
+                    ? '#2E3543'
+                    : '#EAEAEA',
+              },
             ]}
           >
             <View style={styles.modeIconRow}>
@@ -326,10 +359,13 @@ export default function RoutesScreen() {
             <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>41 min</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.modeCard, 
-              { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }
+              styles.modeCard,
+              {
+                backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+                borderColor: isDark ? '#2E3543' : '#EAEAEA',
+              },
             ]}
           >
             <View style={styles.modeIconRow}>
@@ -339,10 +375,13 @@ export default function RoutesScreen() {
             <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>16 min</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.modeCard, 
-              { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }
+              styles.modeCard,
+              {
+                backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+                borderColor: isDark ? '#2E3543' : '#EAEAEA',
+              },
             ]}
           >
             <View style={styles.modeIconRow}>
@@ -352,10 +391,13 @@ export default function RoutesScreen() {
             <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>31 min</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.modeCard, 
-              { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }
+              styles.modeCard,
+              {
+                backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+                borderColor: isDark ? '#2E3543' : '#EAEAEA',
+              },
             ]}
           >
             <View style={styles.modeIconRow}>
@@ -382,7 +424,12 @@ export default function RoutesScreen() {
           >
             <View style={styles.warningTitleGroup}>
               <Ionicons name="warning" size={22} color="#FF7F50" />
-              <Text style={[styles.warningHeaderText, { color: isDark ? '#FF9E79' : '#D04E1F' }]}>
+              <Text
+                style={[
+                  styles.warningHeaderText,
+                  { color: isDark ? '#FF9E79' : '#D04E1F' },
+                ]}
+              >
                 Sensory Warnings [3]
               </Text>
             </View>
@@ -394,19 +441,45 @@ export default function RoutesScreen() {
           </TouchableOpacity>
 
           {warningsExpanded && (
-            <View style={[styles.warningDropdown, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#F0EEED' }]}>
+            <View
+              style={[
+                styles.warningDropdown,
+                {
+                  backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+                  borderColor: isDark ? '#2E3543' : '#F0EEED',
+                },
+              ]}
+            >
               {warnings.map((w, index) => (
                 <View key={w.id}>
                   <View style={styles.warningItemRow}>
-                    <View style={[styles.warningBullet, { backgroundColor: w.severity === 'high' ? '#FF4D4D' : w.severity === 'medium' ? '#FF944D' : '#4DA6FF' }]}>
+                    <View
+                      style={[
+                        styles.warningBullet,
+                        {
+                          backgroundColor:
+                            w.severity === 'high'
+                              ? '#FF4D4D'
+                              : w.severity === 'medium'
+                              ? '#FF944D'
+                              : '#4DA6FF',
+                        },
+                      ]}
+                    >
                       <Ionicons name={w.icon as any} size={14} color="#FFF" />
                     </View>
                     <View style={styles.warningItemText}>
-                      <Text style={[styles.warningItemTitle, { color: isDark ? '#FFF' : '#1A1A1A' }]}>{w.title}</Text>
-                      <Text style={[styles.warningItemDesc, { color: isDark ? '#AAA' : '#666' }]}>{w.desc}</Text>
+                      <Text style={[styles.warningItemTitle, { color: isDark ? '#FFF' : '#1A1A1A' }]}>
+                        {w.title}
+                      </Text>
+                      <Text style={[styles.warningItemDesc, { color: isDark ? '#AAA' : '#666' }]}>
+                        {w.desc}
+                      </Text>
                     </View>
                   </View>
-                  {index < warnings.length - 1 && <View style={[styles.warningSeparator, { backgroundColor: isDark ? '#2E3543' : '#F0EEED' }]} />}
+                  {index < warnings.length - 1 && (
+                    <View style={[styles.warningSeparator, { backgroundColor: isDark ? '#2E3543' : '#F0EEED' }]} />
+                  )}
                 </View>
               ))}
             </View>
@@ -426,7 +499,15 @@ export default function RoutesScreen() {
                 sortBy === 'speed' && { backgroundColor: isDark ? '#2E3543' : '#FFFFFF' },
               ]}
             >
-              <Text style={[styles.sortText, { color: isDark ? '#FFF' : '#1A1A1A', fontWeight: sortBy === 'speed' ? '700' : '400' }]}>
+              <Text
+                style={[
+                  styles.sortText,
+                  {
+                    color: isDark ? '#FFF' : '#1A1A1A',
+                    fontWeight: sortBy === 'speed' ? '700' : '400',
+                  },
+                ]}
+              >
                 Speed
               </Text>
             </TouchableOpacity>
@@ -437,7 +518,15 @@ export default function RoutesScreen() {
                 sortBy === 'sensory' && { backgroundColor: isDark ? '#2E3543' : '#FFFFFF' },
               ]}
             >
-              <Text style={[styles.sortText, { color: isDark ? '#FFF' : '#1A1A1A', fontWeight: sortBy === 'sensory' ? '700' : '400' }]}>
+              <Text
+                style={[
+                  styles.sortText,
+                  {
+                    color: isDark ? '#FFF' : '#1A1A1A',
+                    fontWeight: sortBy === 'sensory' ? '700' : '400',
+                  },
+                ]}
+              >
                 Sensory
               </Text>
             </TouchableOpacity>
@@ -447,17 +536,21 @@ export default function RoutesScreen() {
         {loading ? (
           <View style={styles.loadingSpinner}>
             <ActivityIndicator size="large" color="#4A90E2" />
-            <Text style={[styles.loadingText, { color: isDark ? '#AAA' : '#666' }]}>Finding calmest routes...</Text>
+            <Text style={[styles.loadingText, { color: isDark ? '#AAA' : '#666' }]}>
+              Calculating calmest routes...
+            </Text>
           </View>
         ) : getSortedRoutes().length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="map" size={48} color={isDark ? '#333' : '#CCC'} />
-            <Text style={[styles.emptyText, { color: isDark ? '#888' : '#888' }]}>No routes found. Please check location inputs.</Text>
+            <Text style={[styles.emptyText, { color: isDark ? '#888' : '#888' }]}>
+              No routes found. Please check location inputs.
+            </Text>
           </View>
         ) : (
           <View style={styles.routesList}>
             {getSortedRoutes().map((route) => {
-              // Get route group title
+              // Get route group titles and badges
               let groupTitle = 'Suggested';
               let badgeColor = isDark ? '#2E3543' : '#F0F0EE';
               let badgeTextColor = isDark ? '#CCC' : '#666';
@@ -474,22 +567,48 @@ export default function RoutesScreen() {
 
               return (
                 <View key={route.id} style={styles.routeGroupWrapper}>
-                  <Text style={[styles.groupHeaderLabel, { color: isDark ? '#AAA' : '#555', fontFamily: Fonts?.rounded }]}>
+                  <Text
+                    style={[
+                      styles.groupHeaderLabel,
+                      { color: isDark ? '#AAA' : '#555', fontFamily: Fonts?.rounded },
+                    ]}
+                  >
                     {groupTitle}
+                    {route.sensory_score !== undefined && (
+                      <Text style={{ fontSize: 11, fontWeight: '400', color: '#999' }}>
+                        {' '}
+                        (Sensory Score: {route.sensory_score})
+                      </Text>
+                    )}
                   </Text>
-                  
-                  <View style={[styles.routeCard, { backgroundColor: isDark ? '#1E2229' : '#FFFFFF', borderColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
+
+                  <View
+                    style={[
+                      styles.routeCard,
+                      {
+                        backgroundColor: isDark ? '#1E2229' : '#FFFFFF',
+                        borderColor: isDark ? '#2E3543' : '#EAEAEA',
+                      },
+                    ]}
+                  >
                     {/* Header: Mode Icon + Name */}
                     <View style={styles.cardHeader}>
                       <View style={styles.transitBadgeRow}>
                         <View style={[styles.transitBadge, { backgroundColor: badgeColor }]}>
                           <Ionicons name="bus" size={16} color={badgeTextColor} />
-                          <Text style={[styles.badgeText, { color: badgeTextColor }]}>{route.name}</Text>
+                          <Text style={[styles.badgeText, { color: badgeTextColor }]}>
+                            {route.name}
+                          </Text>
                         </View>
 
                         {route.subName && (
                           <>
-                            <Ionicons name="arrow-forward" size={14} color={isDark ? '#666' : '#999'} style={styles.arrowSpacing} />
+                            <Ionicons
+                              name="arrow-forward"
+                              size={14}
+                              color={isDark ? '#666' : '#999'}
+                              style={styles.arrowSpacing}
+                            />
                             {route.subName.toLowerCase().includes('district') ? (
                               <View style={[styles.transitBadge, { backgroundColor: '#1B5E20' }]}>
                                 <Ionicons name="subway" size={14} color="#FFF" />
@@ -501,9 +620,14 @@ export default function RoutesScreen() {
                                 <Text style={[styles.badgeText, { color: '#FFF' }]}>Central Line</Text>
                               </View>
                             ) : null}
-                            
+
                             {route.subName.toLowerCase().includes('walk') && (
-                              <View style={[styles.transitBadge, { backgroundColor: isDark ? '#2E3543' : '#ECEFF1' }]}>
+                              <View
+                                style={[
+                                  styles.transitBadge,
+                                  { backgroundColor: isDark ? '#2E3543' : '#ECEFF1' },
+                                ]}
+                              >
                                 <Ionicons name="walk" size={14} color={isDark ? '#CCC' : '#455A64'} />
                               </View>
                             )}
@@ -513,16 +637,22 @@ export default function RoutesScreen() {
 
                       {/* Travel Stats: Time + Cost */}
                       <View style={styles.cardStats}>
-                        <Text style={[styles.cardTime, { color: isDark ? '#FFF' : '#1A1A1A' }]}>{route.duration} min</Text>
-                        <Text style={[styles.cardCost, { color: isDark ? '#AAA' : '#666' }]}>£{route.price.toFixed(2)}</Text>
+                        <Text style={[styles.cardTime, { color: isDark ? '#FFF' : '#1A1A1A' }]}>
+                          {route.duration} min
+                        </Text>
+                        <Text style={[styles.cardCost, { color: isDark ? '#AAA' : '#666' }]}>
+                          £{route.price.toFixed(2)}
+                        </Text>
                       </View>
                     </View>
 
-                    {/* Sensory Dashboard */}
+                    {/* Sensory Dashboard - Wrapping Grid layout for 5 distinct meters */}
                     <View style={[styles.sensoryRow, { borderTopColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
-                      {renderSensoryMeter(route.noise, 'Noise')}
+                      {renderSensoryMeter(route.noise, 'Sound')}
                       {renderSensoryMeter(route.crowds, 'Crowds')}
                       {renderSensoryMeter(route.heat, 'Heat')}
+                      {renderSensoryMeter(route.light, 'Light')}
+                      {renderSensoryMeter(route.smell, 'Smell')}
                     </View>
 
                     {/* Explanation */}
@@ -574,6 +704,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 3,
+  },
+  usernameCard: {
+    borderRadius: 18,
+    borderWidth: 1.5,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
   },
   inputRow: {
     flexDirection: 'row',
@@ -800,13 +941,17 @@ const styles = StyleSheet.create({
   },
   sensoryRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     borderTopWidth: 1,
     paddingTop: 10,
+    rowGap: 10,
+    columnGap: 4,
     justifyContent: 'space-between',
     marginBottom: 10,
   },
   meterContainer: {
-    flex: 1,
+    width: '30%',
+    minWidth: 80,
     alignItems: 'flex-start',
   },
   meterLabel: {
