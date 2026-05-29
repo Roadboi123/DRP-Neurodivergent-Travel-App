@@ -25,10 +25,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="routes"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Routes',
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="navigate-outline" size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
