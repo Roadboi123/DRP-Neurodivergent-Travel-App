@@ -74,7 +74,7 @@ def get_routes(start: str, end: str, username: Optional[str] = None):
     Get route suggestions based on start/end destinations,
     optionally applying personalized user sensitivities from Supabase.
     """
-    routes = [dict(r) for r in ROUTES_DATABASE]
+    routes = [r.copy() for r in ROUTES_DATABASE]
 
     # Dynamically generate slight route duration/cost shifts if inputs are changed from default
     is_default = (
@@ -93,7 +93,7 @@ def get_routes(start: str, end: str, username: Optional[str] = None):
             r["light"] = min(3, max(1, r["light"] + (seed % 2) - 1))
 
     # Fetch user preferences from Supabase if username is provided
-    user_prefs = None
+    user_prefs: Optional[Dict[str, Any]] = None
     if username and username.strip():
         try:
             res = supabase.table("user_sensitivities") \
@@ -101,8 +101,10 @@ def get_routes(start: str, end: str, username: Optional[str] = None):
                 .eq("username", username.strip()) \
                 .execute()
             
-            if res.data:
-                user_prefs = res.data[0]
+            if res.data and isinstance(res.data, list) and len(res.data) > 0:
+                prefs_data = res.data[0]
+                if isinstance(prefs_data, dict):
+                    user_prefs = prefs_data
         except Exception as e:
             # Fallback gracefully if database lookup fails
             print(f"Error fetching sensitivities for {username}: {e}")
@@ -111,10 +113,10 @@ def get_routes(start: str, end: str, username: Optional[str] = None):
     for r in routes:
         if user_prefs:
             # Retrieve user sensitivities (default to 2 if not found in db record)
-            u_noise = user_prefs.get("noise_sensitivity", 2)
-            u_crowds = user_prefs.get("crowd_sensitivity", 2)
-            u_heat = user_prefs.get("heat_sensitivity", 2)
-            u_light = user_prefs.get("light_sensitivity", 2)
+            u_noise = int(user_prefs.get("noise_sensitivity") or 2)
+            u_crowds = int(user_prefs.get("crowd_sensitivity") or 2)
+            u_heat = int(user_prefs.get("heat_sensitivity") or 2)
+            u_light = int(user_prefs.get("light_sensitivity") or 2)
 
             # Get weights
             w_noise = WEIGHTS_MAP.get(u_noise, 1.5)

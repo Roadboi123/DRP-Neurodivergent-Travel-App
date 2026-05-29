@@ -49,11 +49,15 @@ def save_preferences(prefs: SensitivityPreferences):
         "light_sensitivity":  SENSITIVITY_MAP[prefs.lights],
     }).execute()
  
-    if not result.data:
+    if not result.data or not isinstance(result.data, list) or len(result.data) == 0:
         raise HTTPException(status_code=500, detail="Failed to save preferences")
  
+    saved_row = result.data[0]
+    if not isinstance(saved_row, dict):
+        raise HTTPException(status_code=500, detail="Unexpected response format")
+
     return {
-        "username":      result.data[0]["username"],
+        "username":      saved_row.get("username"),
         "message": "Preferences saved successfully"
     }
  
@@ -65,17 +69,19 @@ def get_preferences(username: str):
         .eq("username", username) \
         .execute()
  
-    if not result.data:
+    if not result.data or not isinstance(result.data, list) or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Preferences not found")
  
     db_data = result.data[0]
+    if not isinstance(db_data, dict):
+        raise HTTPException(status_code=500, detail="Unexpected response format")
     
     # Map database columns back to the structure the React Native screen expects
     return {
-        "username":    db_data["username"],
-        "noise":       REVERSE_SENSITIVITY_MAP.get(db_data["noise_sensitivity"]),
-        "crowds":      REVERSE_SENSITIVITY_MAP.get(db_data["crowd_sensitivity"]),
-        "temperature": REVERSE_SENSITIVITY_MAP.get(db_data["heat_sensitivity"]),
-        "smell":       REVERSE_SENSITIVITY_MAP.get(db_data["smell_sensitivity"]),
-        "lights":      REVERSE_SENSITIVITY_MAP.get(db_data["light_sensitivity"]),
+        "username":    db_data.get("username"),
+        "noise":       REVERSE_SENSITIVITY_MAP.get(int(db_data.get("noise_sensitivity") or 2)),
+        "crowds":      REVERSE_SENSITIVITY_MAP.get(int(db_data.get("crowd_sensitivity") or 2)),
+        "temperature": REVERSE_SENSITIVITY_MAP.get(int(db_data.get("heat_sensitivity") or 2)),
+        "smell":       REVERSE_SENSITIVITY_MAP.get(int(db_data.get("smell_sensitivity") or 2)),
+        "lights":      REVERSE_SENSITIVITY_MAP.get(int(db_data.get("light_sensitivity") or 2)),
     }
