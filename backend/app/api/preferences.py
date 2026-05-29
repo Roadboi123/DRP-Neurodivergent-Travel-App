@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 from app.integrations.supabase import supabase
-import os
  
 pref_router = APIRouter(prefix="/preferences", tags=["preferences"])
 

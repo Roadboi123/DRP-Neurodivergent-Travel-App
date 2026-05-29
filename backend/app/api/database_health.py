@@ -34,7 +34,7 @@ def test_supabase():
         }
 
     # 3. DELETE test row
-    delete_response = supabase.table("healthcheck") \
+    supabase.table("healthcheck") \
         .delete() \
         .eq("id", test_id) \
         .execute()
