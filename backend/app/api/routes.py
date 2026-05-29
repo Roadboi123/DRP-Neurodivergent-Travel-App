@@ -6,7 +6,7 @@ routes_router = APIRouter(prefix="/routes", tags=["routes"])
 
 # Base routes data (preset/dummy data from wireframe)
 # Now enhanced with 4 sensory metrics: noise, crowds, heat, light
-ROUTES_DATABASE = [
+ROUTES_DATABASE: List[Dict[str, Any]] = [
     {
         "id": "r1",
         "name": "Bus 345",
