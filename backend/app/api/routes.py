@@ -4,12 +4,11 @@ from app.integrations.supabase import supabase
 
 routes_router = APIRouter(prefix="/routes", tags=["routes"])
 
-# Base routes database - Preset route options from wireframe
-# Enhanced with diverse values for 5 metrics: noise, crowds, heat, light, smell
-# - Bus 345: Pristine, cool, dimly lit, fragrance-free (Ultimate quiet preference)
-# - Bus 49: Fast, but hot, glaring lights, high sound, and exhaust smell
-# - District Line: Cool and moderate metrics
-# - Central Line: Extremely hot, glaring lights, very crowded, loud, average smell
+# Base routes database - Preset route options from wireframe (balanced for realism)
+# - Bus 345: Standard quiet bus, but still has moderate noise (engine hum) and A/C light heat (2/3).
+# - Bus 49: Fast, but hot, glaring lights, high sound, and exhaust smell.
+# - District Line: Cool, moderate crowds, and moderate rail noise.
+# - Central Line: Extremely hot, glaring lights, very crowded, loud, average smell.
 ROUTES_DATABASE: List[Dict[str, Any]] = [
     {
         "id": "r1",
@@ -17,11 +16,11 @@ ROUTES_DATABASE: List[Dict[str, Any]] = [
         "subName": None,
         "duration": 50,
         "price": 1.75,
-        "noise": 1,      # Sound: Low
+        "noise": 2,      # Sound: Moderate (standard engine hum)
         "crowds": 1,     # Crowds: Low
-        "heat": 1,       # Heat: Low (Strong A/C)
-        "light": 1,      # Light: Low (tinted windows)
-        "smell": 1,      # Smell: Low (clean, scent-free)
+        "heat": 1,       # Heat: Low (Active cooling)
+        "light": 1,      # Light: Low (tinted glass)
+        "smell": 1,      # Smell: Low (fresh/scent-free)
         "description": "Sensory preference route. Uncrowded, fully air-conditioned, low-light, and fragrance-free.",
     },
     {
@@ -30,11 +29,11 @@ ROUTES_DATABASE: List[Dict[str, Any]] = [
         "subName": "Walk",
         "duration": 43,
         "price": 1.75,
-        "noise": 3,      # Sound: High
-        "crowds": 3,     # Crowds: High
-        "heat": 3,       # Heat: High (No A/C today)
+        "noise": 3,      # Sound: High (traffic noise)
+        "crowds": 2,     # Crowds: Moderate
+        "heat": 2,       # Heat: Moderate
         "light": 2,      # Light: Moderate
-        "smell": 3,      # Smell: High (heavy diesel fumes on transfer)
+        "smell": 3,      # Smell: High (diesel fumes during pedestrian transfer)
         "description": "Quickest transit, but involves a high-sensory pedestrian transfer, fumes, and crowded boarding.",
     },
     {
@@ -43,11 +42,11 @@ ROUTES_DATABASE: List[Dict[str, Any]] = [
         "subName": "District Line + Walk",
         "duration": 51,
         "price": 4.85,
-        "noise": 2,      # Sound: Moderate
+        "noise": 2,      # Sound: Moderate (rail rumble)
         "crowds": 2,     # Crowds: Moderate
-        "heat": 1,       # Heat: Low (Well ventilated)
+        "heat": 1,       # Heat: Low (shallow well-ventilated line)
         "light": 2,      # Light: Moderate
-        "smell": 2,      # Smell: Moderate (standard station smell)
+        "smell": 2,      # Smell: Moderate (standard station air)
         "description": "Standard subway link. Moderate crowds and noise, but cool temperatures underground.",
     },
     {
@@ -56,9 +55,9 @@ ROUTES_DATABASE: List[Dict[str, Any]] = [
         "subName": "Central Line + Walk",
         "duration": 55,
         "price": 4.85,
-        "noise": 3,      # Sound: High (high screeching decibels)
-        "crowds": 3,     # Crowds: High (rush hour volumes)
-        "heat": 3,       # Heat: High (deep level tube, up to 32°C)
+        "noise": 3,      # Sound: High (intense rail screeching)
+        "crowds": 3,     # Crowds: High (congested cars)
+        "heat": 3,       # Heat: High (deep line, runs very hot)
         "light": 3,      # Light: High (intense fluorescent station lights)
         "smell": 2,      # Smell: Moderate
         "description": "Deep tube line. Extremely hot, highly packed, screeching rails, and glaring fluorescent station lights.",
@@ -117,6 +116,7 @@ def get_routes(start: str, end: str, username: Optional[str] = None):
 
     # Compute sensory discomfort scores for all routes
     for r in routes:
+        mismatch_triggers = []
         if user_prefs:
             # Retrieve user sensitivities (default to 2 if not found in db record)
             u_noise = int(user_prefs.get("noise_sensitivity") or 2)
@@ -141,9 +141,47 @@ def get_routes(start: str, end: str, username: Optional[str] = None):
                 w_smell * r["smell"]
             )
             r["sensory_score"] = round(sensory_score, 2)
+
+            # Identify specific triggers causing discomfort (user has high sensitivity [1] and route trigger level >= 2)
+            if u_noise == 1 and r["noise"] >= 2:
+                mismatch_triggers.append("sound")
+            if u_crowds == 1 and r["crowds"] >= 2:
+                mismatch_triggers.append("crowds")
+            if u_heat == 1 and r["heat"] >= 2:
+                mismatch_triggers.append("heat")
+            if u_light == 1 and r["light"] >= 2:
+                mismatch_triggers.append("bright light")
+            if u_smell == 1 and r["smell"] >= 2:
+                mismatch_triggers.append("fumes/scents")
+
+            # Max discomfort bound mapping
+            max_discomfort = (
+                w_noise * 3 +
+                w_crowds * 3 +
+                w_heat * 3 +
+                w_light * 3 +
+                w_smell * 3
+            )
+            
+            if max_discomfort > 0:
+                match_pct = max(0, min(100, int(100 - (sensory_score / max_discomfort) * 100)))
+            else:
+                match_pct = 100
+                
+            r["match_percentage"] = match_pct
+
+            # Generate dynamic sensory description
+            if len(mismatch_triggers) > 0:
+                r["sensory_description"] = f"⚠️ High sensory load: includes triggers ({', '.join(mismatch_triggers)}) that affect you."
+            else:
+                r["sensory_description"] = "✅ Excellent match: completely aligned with your sensory profile."
         else:
             # Fallback score if no user profile is loaded (simple sum of all 5 metrics)
-            r["sensory_score"] = float(r["noise"] + r["crowds"] + r["heat"] + r["light"] + r["smell"])
+            sensory_score = float(r["noise"] + r["crowds"] + r["heat"] + r["light"] + r["smell"])
+            r["sensory_score"] = sensory_score
+            # Default fallback match percentage mapping
+            r["match_percentage"] = int(max(0, 100 - (sensory_score / 15) * 60))
+            r["sensory_description"] = "Enter a username to view personalized sensory alignment ratings."
 
     # Determine "quickest" route
     quickest_route = min(routes, key=lambda x: x["duration"])

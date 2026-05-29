@@ -32,6 +32,8 @@ interface RouteOption {
   light: SensoryLevel;
   smell: SensoryLevel;
   sensory_score?: number;   // Calculated by Backend
+  match_percentage?: number;
+  sensory_description?: string;
   description: string;
 }
 
@@ -87,6 +89,12 @@ export default function RoutesScreen() {
   // Routes state
   const [routes, setRoutes] = useState<RouteOption[]>([]);
 
+  // Hydration fix
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Fetch routes from FastAPI backend with preference scoring
   useEffect(() => {
     let active = true;
@@ -104,8 +112,8 @@ export default function RoutesScreen() {
         const endParam = encodeURIComponent(endLoc.trim());
         const userParam = username.trim() ? `&username=${encodeURIComponent(username.trim())}` : '';
 
-        // Fetch from Railway production backend
-        const url = `https://drp-neurodivergent-travel-app-production.up.railway.app/routes?start=${startParam}&end=${endParam}${userParam}`;
+        // Fetch from Railway production backend - added trailing slash to prevent HTTP redirect
+        const url = `https://drp-neurodivergent-travel-app-production.up.railway.app/routes/?start=${startParam}&end=${endParam}${userParam}`;
         
         const res = await fetch(url);
         if (!res.ok) {
@@ -124,7 +132,7 @@ export default function RoutesScreen() {
           const endParam = encodeURIComponent(endLoc.trim());
           const userParam = username.trim() ? `&username=${encodeURIComponent(username.trim())}` : '';
           
-          const localUrl = `http://localhost:8000/routes?start=${startParam}&end=${endParam}${userParam}`;
+          const localUrl = `http://localhost:8000/routes/?start=${startParam}&end=${endParam}${userParam}`;
           const localRes = await fetch(localUrl);
           
           if (!localRes.ok) {
@@ -231,6 +239,10 @@ export default function RoutesScreen() {
       </View>
     );
   };
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? '#121517' : '#FAF9F6' }]}>
@@ -633,6 +645,13 @@ export default function RoutesScreen() {
                             )}
                           </>
                         )}
+                        
+                        {/* Match Rating Pill */}
+                        <View style={[styles.matchBadge, { backgroundColor: route.match_percentage !== undefined ? (route.match_percentage >= 80 ? (isDark ? '#1C3224' : '#E8F5E9') : route.match_percentage >= 50 ? (isDark ? '#3E2F1F' : '#FFF3E0') : (isDark ? '#351C1C' : '#FFEBEE')) : (isDark ? '#2E3543' : '#F0EEED'), marginLeft: 4 }]}>
+                          <Text style={[styles.matchBadgeText, { color: route.match_percentage !== undefined ? (route.match_percentage >= 80 ? (isDark ? '#81C784' : '#2E7D32') : route.match_percentage >= 50 ? (isDark ? '#FFB74D' : '#E65100') : (isDark ? '#E57373' : '#C62828')) : (isDark ? '#CCC' : '#666') }]}>
+                            {route.match_percentage ?? 100}% Match
+                          </Text>
+                        </View>
                       </View>
 
                       {/* Travel Stats: Time + Cost */}
@@ -655,8 +674,28 @@ export default function RoutesScreen() {
                       {renderSensoryMeter(route.smell, 'Smell')}
                     </View>
 
+                    {/* Sensory Compatibility Score Explanation */}
+                    {route.sensory_description && (
+                      <Text
+                        style={[
+                          styles.sensoryExplanationText,
+                          {
+                            color: route.sensory_description.includes('⚠️')
+                              ? isDark
+                                ? '#FF8A65'
+                                : '#D84315'
+                              : isDark
+                              ? '#81C784'
+                              : '#2E7D32',
+                          },
+                        ]}
+                      >
+                        {route.sensory_description}
+                      </Text>
+                    )}
+
                     {/* Explanation */}
-                    <Text style={[styles.routeDescription, { color: isDark ? '#9BA1A6' : '#555' }]}>
+                    <Text style={[styles.routeDescription, { color: isDark ? '#9BA1A6' : '#666', marginTop: 6 }]}>
                       💡 {route.description}
                     </Text>
                   </View>
@@ -967,6 +1006,23 @@ const styles = StyleSheet.create({
     width: 14,
     height: 7,
     borderRadius: 2,
+  },
+  matchBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  matchBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  sensoryExplanationText: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginBottom: 4,
   },
   routeDescription: {
     fontSize: 11.5,

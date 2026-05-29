@@ -20,6 +20,12 @@ export default function HomeScreen() {
 
   const [backendState, setBackendState] = useState<'Online' | 'Offline' | 'Checking'>('Checking');
 
+  // Hydration mismatch fix
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     async function checkBackend() {
       try {
@@ -39,6 +45,10 @@ export default function HomeScreen() {
     }
     checkBackend();
   }, []);
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? '#121517' : '#FAF9F6' }]}>
