@@ -256,7 +256,7 @@ export default function RoutesScreen() {
             <Ionicons name="arrow-back" size={24} color={isDark ? '#FFF' : '#1A1A1A'} />
           </TouchableOpacity>
           <Text style={[styles.navTitle, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
-            CalmRoute Planner
+            Planner
           </Text>
           <View style={{ width: 24 }} />
         </View>

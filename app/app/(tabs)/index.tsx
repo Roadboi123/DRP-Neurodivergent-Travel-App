@@ -62,7 +62,7 @@ export default function HomeScreen() {
               Hello, Traveler 🥀
             </Text>
             <Text style={[styles.title, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
-              CalmTravel
+              Planner
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: backendState === 'Online' ? '#E8F5E9' : '#FFEBEE' }]}>
