@@ -18,6 +18,15 @@ import { Fonts } from '@/constants/theme';
 // Types for Route Suggestions
 type SensoryLevel = 1 | 2 | 3; // 1 = Low (Green), 2 = Med (Orange), 3 = High (Red)
 
+interface LegOption {
+  mode: string;
+  line: string;
+  duration_mins: number;
+  departure: string;
+  arrival: string;
+  instruction: string;
+}
+
 interface RouteOption {
   id: string;
   type: 'best' | 'quickest' | 'suggested';
@@ -35,6 +44,7 @@ interface RouteOption {
   match_percentage?: number;
   sensory_description?: string;
   description: string;
+  legs?: LegOption[];
 }
 
 interface WarningItem {
@@ -603,48 +613,25 @@ export default function RoutesScreen() {
                       },
                     ]}
                   >
-                    {/* Header: Mode Icon + Name */}
+                    {/* Header: Dynamic Icon + Name */}
                     <View style={styles.cardHeader}>
                       <View style={styles.transitBadgeRow}>
                         <View style={[styles.transitBadge, { backgroundColor: badgeColor }]}>
-                          <Ionicons name="bus" size={16} color={badgeTextColor} />
+                          <Ionicons
+                            name={
+                              route.name.toLowerCase().includes('walk')
+                                ? 'walk'
+                                : route.name.toLowerCase().includes('bus')
+                                ? 'bus'
+                                : 'subway'
+                            }
+                            size={16}
+                            color={badgeTextColor}
+                          />
                           <Text style={[styles.badgeText, { color: badgeTextColor }]}>
                             {route.name}
                           </Text>
                         </View>
-
-                        {route.subName && (
-                          <>
-                            <Ionicons
-                              name="arrow-forward"
-                              size={14}
-                              color={isDark ? '#666' : '#999'}
-                              style={styles.arrowSpacing}
-                            />
-                            {route.subName.toLowerCase().includes('district') ? (
-                              <View style={[styles.transitBadge, { backgroundColor: '#1B5E20' }]}>
-                                <Ionicons name="subway" size={14} color="#FFF" />
-                                <Text style={[styles.badgeText, { color: '#FFF' }]}>District Line</Text>
-                              </View>
-                            ) : route.subName.toLowerCase().includes('central') ? (
-                              <View style={[styles.transitBadge, { backgroundColor: '#B71C1C' }]}>
-                                <Ionicons name="subway" size={14} color="#FFF" />
-                                <Text style={[styles.badgeText, { color: '#FFF' }]}>Central Line</Text>
-                              </View>
-                            ) : null}
-
-                            {route.subName.toLowerCase().includes('walk') && (
-                              <View
-                                style={[
-                                  styles.transitBadge,
-                                  { backgroundColor: isDark ? '#2E3543' : '#ECEFF1' },
-                                ]}
-                              >
-                                <Ionicons name="walk" size={14} color={isDark ? '#CCC' : '#455A64'} />
-                              </View>
-                            )}
-                          </>
-                        )}
                         
                         {/* Match Rating Pill */}
                         <View style={[styles.matchBadge, { backgroundColor: route.match_percentage !== undefined ? (route.match_percentage >= 80 ? (isDark ? '#1C3224' : '#E8F5E9') : route.match_percentage >= 50 ? (isDark ? '#3E2F1F' : '#FFF3E0') : (isDark ? '#351C1C' : '#FFEBEE')) : (isDark ? '#2E3543' : '#F0EEED'), marginLeft: 4 }]}>
@@ -673,6 +660,96 @@ export default function RoutesScreen() {
                       {renderSensoryMeter(route.light, 'Light')}
                       {renderSensoryMeter(route.smell, 'Smell')}
                     </View>
+
+                    {/* Dynamic Horizontal Leg Timeline */}
+                    {route.legs && route.legs.length > 0 && (
+                      <View style={[styles.timelineContainer, { borderTopColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
+                        <Text style={[styles.timelineTitle, { color: isDark ? '#AAA' : '#888' }]}>
+                          Journey Timeline
+                        </Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineScroll}>
+                          {route.legs.map((leg, lIdx) => {
+                            const mode = leg.mode.toLowerCase();
+                            const line = leg.line ? leg.line.toLowerCase() : '';
+                            
+                            let iconName: any = 'walk';
+                            let legBadgeColor = isDark ? '#2A2E35' : '#ECEFF1';
+                            let legTextColor = isDark ? '#CCC' : '#455A64';
+                            let displayName = 'Walk';
+
+                            if (mode === 'bus') {
+                              iconName = 'bus';
+                              legBadgeColor = isDark ? '#4D1D1D' : '#FFEBEE';
+                              legTextColor = isDark ? '#EF5350' : '#C62828';
+                              displayName = leg.line ? `Bus ${leg.line}` : 'Bus';
+                            } else if (mode === 'tube' || mode === 'subway' || mode === 'underground') {
+                              iconName = 'subway';
+                              displayName = leg.line || 'Tube';
+                              
+                              if (line.includes('central')) {
+                                legBadgeColor = '#B71C1C';
+                                legTextColor = '#FFF';
+                              } else if (line.includes('district')) {
+                                legBadgeColor = '#1B5E20';
+                                legTextColor = '#FFF';
+                              } else if (line.includes('northern')) {
+                                legBadgeColor = isDark ? '#2C2C2C' : '#212121';
+                                legTextColor = '#FFF';
+                              } else if (line.includes('victoria')) {
+                                legBadgeColor = '#00838F';
+                                legTextColor = '#FFF';
+                              } else if (line.includes('jubilee')) {
+                                legBadgeColor = '#455A64';
+                                legTextColor = '#FFF';
+                              } else if (line.includes('elizabeth')) {
+                                legBadgeColor = '#4A148C';
+                                legTextColor = '#FFF';
+                              } else if (line.includes('overground')) {
+                                legBadgeColor = '#E65100';
+                                legTextColor = '#FFF';
+                              } else if (line.includes('dlr')) {
+                                legBadgeColor = '#006064';
+                                legTextColor = '#FFF';
+                              } else {
+                                legBadgeColor = '#0D47A1';
+                                legTextColor = '#FFF';
+                              }
+                            } else if (mode === 'train' || mode === 'national-rail') {
+                              iconName = 'train';
+                              displayName = leg.line || 'Train';
+                              legBadgeColor = isDark ? '#1F344D' : '#E3F2FD';
+                              legTextColor = isDark ? '#64B5F6' : '#0D47A1';
+                            }
+
+                            return (
+                              <View key={lIdx} style={styles.timelineItem}>
+                                {lIdx > 0 && (
+                                  <Ionicons
+                                    name="chevron-forward"
+                                    size={12}
+                                    color={isDark ? '#555' : '#BBB'}
+                                    style={styles.timelineArrow}
+                                  />
+                                )}
+                                <View style={[styles.timelineBadge, { backgroundColor: legBadgeColor }]}>
+                                  <Ionicons name={iconName} size={13} color={legTextColor} />
+                                  <View>
+                                    <Text style={[styles.timelineBadgeText, { color: legTextColor }]}>
+                                      {displayName}
+                                    </Text>
+                                    {leg.duration_mins > 0 && (
+                                      <Text style={[styles.timelineDurText, { color: legTextColor }]}>
+                                        {leg.duration_mins} min
+                                      </Text>
+                                    )}
+                                  </View>
+                                </View>
+                              </View>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
 
                     {/* Sensory Compatibility Score Explanation */}
                     {route.sensory_description && (
@@ -1017,6 +1094,50 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.2,
+  },
+  timelineContainer: {
+    borderTopWidth: 1,
+    paddingTop: 10,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  timelineTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  timelineScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timelineArrow: {
+    marginHorizontal: 1,
+  },
+  timelineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  timelineBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  timelineDurText: {
+    fontSize: 8,
+    fontWeight: '600',
+    opacity: 0.8,
+    marginTop: 1,
   },
   sensoryExplanationText: {
     fontSize: 12,
