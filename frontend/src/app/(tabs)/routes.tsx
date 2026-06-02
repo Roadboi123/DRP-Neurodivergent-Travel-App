@@ -17,7 +17,7 @@ import { TransportModes } from '@/components/routes/transport-modes';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { getRoutes } from '@/services/routes';
+import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
 
 function sensoryScoreOf(route: RouteOption): number {
@@ -27,6 +27,7 @@ function sensoryScoreOf(route: RouteOption): number {
 export default function RoutesScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const routesService = useRoutesService();
 
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
@@ -59,7 +60,7 @@ export default function RoutesScreen() {
 
       setLoading(true);
       try {
-        const data = await getRoutes(startLoc, endLoc, username);
+        const data = await routesService.getRoutes(startLoc, endLoc, username);
         if (active) {
           setRoutes(data);
         }
@@ -81,7 +82,7 @@ export default function RoutesScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [startLoc, endLoc, username]);
+  }, [startLoc, endLoc, username, routesService]);
 
   // Apply filtering and sorting
   const getSortedRoutes = (): RouteOption[] => {

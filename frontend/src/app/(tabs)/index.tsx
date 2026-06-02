@@ -8,12 +8,13 @@ import { WelcomeBanner } from '@/components/home/welcome-banner';
 import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
 import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { checkBackendHealth } from '@/services/health';
+import { useHealthService } from '@/services/services-context';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const router = useRouter();
+  const health = useHealthService();
 
   const [backendState, setBackendState] = useState<BackendStatus>('Checking');
 
@@ -26,7 +27,7 @@ export default function HomeScreen() {
   useEffect(() => {
     async function checkBackend() {
       try {
-        const ok = await checkBackendHealth();
+        const ok = await health.checkBackendHealth();
         setBackendState(ok ? 'Online' : 'Offline');
       } catch (error) {
         console.warn('Backend checking failed, falling back to offline state:', error);
@@ -34,7 +35,7 @@ export default function HomeScreen() {
       }
     }
     checkBackend();
-  }, []);
+  }, [health]);
 
   if (!mounted) {
     return null;
