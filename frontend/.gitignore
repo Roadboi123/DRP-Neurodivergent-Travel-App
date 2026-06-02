@@ -36,6 +36,9 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# generated API types (regenerated from ../shared/openapi.json on install/build)
+src/types/generated/
+
 app-example
 
 # generated native folders
