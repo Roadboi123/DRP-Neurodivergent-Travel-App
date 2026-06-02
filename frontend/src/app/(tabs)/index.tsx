@@ -1,0 +1,133 @@
+import React, { useEffect, useState } from 'react';
+import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+
+import { DailyTips } from '@/components/home/daily-tips';
+import { QuickActionCard } from '@/components/home/quick-action-card';
+import { WelcomeBanner } from '@/components/home/welcome-banner';
+import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
+import { Fonts, getPalette } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { checkBackendHealth } from '@/services/health';
+
+export default function HomeScreen() {
+  const isDark = useColorScheme() === 'dark';
+  const palette = getPalette(isDark);
+  const router = useRouter();
+
+  const [backendState, setBackendState] = useState<BackendStatus>('Checking');
+
+  // Hydration mismatch fix
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    async function checkBackend() {
+      try {
+        const ok = await checkBackendHealth();
+        setBackendState(ok ? 'Online' : 'Offline');
+      } catch (error) {
+        console.warn('Backend checking failed, falling back to offline state:', error);
+        setBackendState('Offline');
+      }
+    }
+    checkBackend();
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return (
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={[styles.greetingText, { color: palette.textSecondary }]}>
+              Hello, Traveler 🥀
+            </Text>
+            <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+              My Planner
+            </Text>
+          </View>
+          <StatusBadge status={backendState} />
+        </View>
+
+        {/* Welcome Banner Card */}
+        <WelcomeBanner />
+
+        {/* Quick Actions Grid */}
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+          Quick Actions
+        </Text>
+        <View style={styles.gridRow}>
+          <QuickActionCard
+            iconName="navigate"
+            iconColor="#1E88E5"
+            iconBackground="#E3F2FD"
+            title="Plan Calm Route"
+            description="Find sensory friendly paths"
+            onPress={() => router.push('/routes')}
+          />
+          <QuickActionCard
+            iconName="settings-sharp"
+            iconColor="#4CAF50"
+            iconBackground="#E8F5E9"
+            title="Sensory Sensitivities"
+            description="Update comfort thresholds"
+            onPress={() => router.push('/preferences')}
+          />
+        </View>
+
+        {/* Daily Travel Tips */}
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+          Daily Travel Tips
+        </Text>
+        <DailyTips />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  container: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  greetingText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 12,
+    letterSpacing: -0.2,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 24,
+  },
+});

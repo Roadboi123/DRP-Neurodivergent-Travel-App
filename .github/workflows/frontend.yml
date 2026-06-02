@@ -3,7 +3,7 @@ name: CI / CD
 on:
   push:
     paths:
-     - app/**
+     - frontend/**
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,20 +30,20 @@ jobs:
       - name: Cache node_modules
         uses: actions/cache@v4
         with:
-          path: app/node_modules
-          key: node-${{ hashFiles('app/package-lock.json') }}
+          path: frontend/node_modules
+          key: node-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: node-
 
       - name: Install Node deps
-        working-directory: app
+        working-directory: frontend
         run: npm ci
 
       - name: ESLint
-        working-directory: app
+        working-directory: frontend
         run: npm run lint
 
       - name: TypeScript check
-        working-directory: app
+        working-directory: frontend
         run: npx tsc --noEmit
 
 
@@ -63,16 +63,16 @@ jobs:
       - name: Cache node_modules
         uses: actions/cache@v4
         with:
-          path: app/node_modules
-          key: node-${{ hashFiles('app/package-lock.json') }}
+          path: frontend/node_modules
+          key: node-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: node-
 
       - name: Install Node deps
-        working-directory: app
+        working-directory: frontend
         run: npm ci
 
       # - name: Run tests
-      #   working-directory: app
+      #   working-directory: frontend
       #   # --passWithNoTests: won't fail while test suite is still being built
       #   # Remove this flag once you have real tests
       #   run: npm test -- --passWithNoTests --watchAll=false
@@ -88,34 +88,34 @@ jobs:
 #     needs: test
 #     runs-on: ubuntu-latest
 #     if: github.ref == 'refs/heads/main'
- 
+
 #     steps:
 #       - uses: actions/checkout@v4
- 
+
 #       - name: Set up Node
 #         uses: actions/setup-node@v4
 #         with:
 #           node-version: "20"
- 
+
 #       - name: Set up Java
 #         uses: actions/setup-java@v4
 #         with:
 #           distribution: temurin
 #           java-version: "17"
- 
+
 #       # Cache NDK and CMake before prebuild so they're available when Gradle runs
 #       - name: Cache Android NDK
 #         uses: actions/cache@v4
 #         with:
 #           path: /usr/local/lib/android/sdk/ndk
 #           key: ndk-27.1.12297006
- 
+
 #       - name: Cache Android CMake
 #         uses: actions/cache@v4
 #         with:
 #           path: /usr/local/lib/android/sdk/cmake
 #           key: cmake-3.22.1
- 
+
 #       # Cache Gradle — keyed on package.json not android/ (android/ gets wiped by --clean)
 #       - name: Cache Gradle
 #         uses: actions/cache@v4
@@ -123,33 +123,33 @@ jobs:
 #           path: |
 #             ~/.gradle/caches
 #             ~/.gradle/wrapper
-#           key: gradle-${{ hashFiles('app/package.json') }}
+#           key: gradle-${{ hashFiles('frontend/package.json') }}
 #           restore-keys: gradle-
- 
+
 #       - name: Install Node deps
-#         working-directory: app
+#         working-directory: frontend
 #         run: npm ci
- 
+
 #       # Generates android/ fresh — ABI filter injected via expo-build-properties in app.json
 #       - name: Expo prebuild
-#         working-directory: app
+#         working-directory: frontend
 #         run: npx expo prebuild --platform android --clean
 #         env:
 #           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
- 
+
 #       - name: Build APK
-#         working-directory: app/android
+#         working-directory: frontend/android
 #         run: ./gradlew assembleDebug --no-daemon -Pandroid.injected.build.abi=arm64-v8a
- 
+
 #       # Find the APK so we know the exact path
 #       - name: Find APK
-#         run: find app/android -name "*.apk" 2>/dev/null
- 
+#         run: find frontend/android -name "*.apk" 2>/dev/null
+
 #       - name: Upload APK
 #         uses: actions/upload-artifact@v4
 #         with:
 #           name: android-debug-${{ github.sha }}
-#           path: app/android/app/build/intermediates/apk/debug/app-debug.apk
+#           path: frontend/android/app/build/intermediates/apk/debug/app-debug.apk
 #           retention-days: 14
 
 
@@ -171,22 +171,22 @@ jobs:
         run: npm install -g vercel@latest
 
       # Pull project config (.vercel/project.json must be committed —
-      # run `vercel link` once locally in app/ to generate it)
+      # run `vercel link` once locally in frontend/ to generate it)
       - name: Pull Vercel project settings
-        working-directory: app
+        working-directory: frontend
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       # Vercel builds from source — runs expo export on their servers
       # Set EXPO_TOKEN in Vercel's environment variables dashboard,
       # not here — keeps it out of GitHub secrets entirely
       - name: Build on Vercel
-        working-directory: app
+        working-directory: frontend
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       # Ship the Vercel-built output to production
       - name: Deploy to production
         id: deploy
-        working-directory: app
+        working-directory: frontend
         run: |
           URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$URL" >> $GITHUB_OUTPUT
