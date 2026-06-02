@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx expo export --platform web",
+  "buildCommand": "npm run gen:api && npx expo export --platform web",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
