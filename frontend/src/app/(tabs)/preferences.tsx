@@ -12,7 +12,7 @@ import {
 
 import { OPTIONS } from '@/components/preferences/options';
 import { PreferenceRow } from '@/components/preferences/preference-row';
-import { getPreferences, savePreferences } from '@/services/preferences';
+import { usePreferencesService } from '@/services/services-context';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
 const INITIAL_PREFERENCES: Preference[] = [
@@ -27,6 +27,7 @@ const valueFor = (prefs: Preference[], id: string): SensitivityLevel | null =>
   prefs.find((p) => p.id === id)?.value ?? null;
 
 export default function UserPreferencesScreen() {
+  const preferencesService = usePreferencesService();
   const [preferences, setPreferences] = useState<Preference[]>(INITIAL_PREFERENCES);
   const [saved, setSaved] = useState(false);
   const [username, setUsername] = useState('');
@@ -41,7 +42,7 @@ export default function UserPreferencesScreen() {
 
       try {
         setLoading(true);
-        const data = await getPreferences(username);
+        const data = await preferencesService.getPreferences(username);
 
         if (!data) {
           setPreferences(INITIAL_PREFERENCES);
@@ -64,7 +65,7 @@ export default function UserPreferencesScreen() {
 
     const timeout = setTimeout(loadPreferences, 500);
     return () => clearTimeout(timeout);
-  }, [username]);
+  }, [username, preferencesService]);
 
   const handleSelect = (id: string, value: SensitivityLevel) => {
     setSaved(false);
@@ -77,7 +78,7 @@ export default function UserPreferencesScreen() {
     if (!allSet) return;
 
     try {
-      await savePreferences({
+      await preferencesService.savePreferences({
         username: username.trim(),
         noise: valueFor(preferences, 'noise'),
         crowds: valueFor(preferences, 'crowds'),

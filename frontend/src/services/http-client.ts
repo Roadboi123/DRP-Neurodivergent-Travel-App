@@ -1,0 +1,66 @@
+/**
+ * The single place that knows how to talk HTTP to a backend: it owns base-URL
+ * concatenation, JSON headers/serialization, response-status checking, and JSON
+ * parsing. Services depend on the {@link HttpClient} interface and never touch
+ * `fetch`, a base URL, or a host string directly.
+ */
+
+/** Thrown by {@link HttpClient.get}/{@link HttpClient.post} when a response is not `ok`. */
+export class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly path: string
+  ) {
+    super(`HTTP ${status} for ${path}`);
+    this.name = 'HttpError';
+  }
+}
+
+export interface HttpClient {
+  /** GET `path`, parse JSON as `T`. Throws {@link HttpError} on a non-ok response. */
+  get<T>(path: string): Promise<T>;
+  /** POST `body` as JSON to `path`, parse JSON as `T`. Throws {@link HttpError} on a non-ok response. */
+  post<T>(path: string, body: unknown): Promise<T>;
+  /**
+   * GET `path` returning the raw {@link Response} without status checking or
+   * parsing — for callers that treat specific statuses (e.g. 404) as data
+   * rather than an error.
+   */
+  getResponse(path: string): Promise<Response>;
+}
+
+export interface HttpClientOptions {
+  /** Absolute origin (and optional prefix) every path is resolved against. */
+  baseUrl: string;
+}
+
+/** Build an {@link HttpClient} bound to a single `baseUrl`. */
+export function createHttpClient({ baseUrl }: HttpClientOptions): HttpClient {
+  const url = (path: string) => `${baseUrl}${path}`;
+
+  async function parse<T>(res: Response, path: string): Promise<T> {
+    if (!res.ok) {
+      throw new HttpError(res.status, path);
+    }
+    return (await res.json()) as T;
+  }
+
+  return {
+    async get<T>(path: string): Promise<T> {
+      return parse<T>(await fetch(url(path)), path);
+    },
+
+    async post<T>(path: string, body: unknown): Promise<T> {
+      const res = await fetch(url(path), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return parse<T>(res, path);
+    },
+
+    getResponse(path: string): Promise<Response> {
+      return fetch(url(path));
+    },
+  };
+}
