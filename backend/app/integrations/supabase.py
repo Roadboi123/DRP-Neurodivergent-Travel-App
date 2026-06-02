@@ -1,7 +1,5 @@
 from supabase import create_client
-import os
 
-SUPABASE_URL = os.getenv("SUPABASE_URL") or "https://placeholder.supabase.co"
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or "placeholder_key"
+from app.config import settings
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
