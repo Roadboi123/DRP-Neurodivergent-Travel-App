@@ -5,6 +5,11 @@ on:
     paths:
      - frontend/**
      - shared/**
+  pull_request:
+    branches: [main]
+    paths:
+     - frontend/**
+     - shared/**
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +44,12 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # API types are generated, not committed — produce them from the committed
+      # shared/openapi.json before lint and typecheck (both need the file present).
+      - name: Generate API types
+        working-directory: frontend
+        run: npm run gen:api
+
       - name: ESLint
         working-directory: frontend
         run: npm run lint
@@ -46,19 +57,6 @@ jobs:
       - name: TypeScript check
         working-directory: frontend
         run: npx tsc --noEmit
-
-      # Drift guard: src/types/generated/ must match what the committed
-      # shared/openapi.json generates. Uses plain diff (not git) so it works
-      # regardless of the container's git-repo ownership context.
-      - name: Check generated API types are up to date
-        working-directory: frontend
-        run: |
-          cp src/types/generated/api.ts /tmp/api.committed.ts
-          npm run gen:api
-          if ! diff -u /tmp/api.committed.ts src/types/generated/api.ts; then
-            echo "::error::Generated API types are stale. Run 'npm run gen:api' and commit."
-            exit 1
-          fi
 
 
   # ─────────────────────────────────────────────
