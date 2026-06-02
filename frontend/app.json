@@ -44,10 +44,13 @@
         "expo-build-properties",
         {
           "android": {
-            "ndkAbiFilters": ["arm64-v8a"]
+            "ndkAbiFilters": [
+              "arm64-v8a"
+            ]
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
