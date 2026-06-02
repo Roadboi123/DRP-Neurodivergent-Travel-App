@@ -49,11 +49,11 @@ export default function UserPreferencesScreen() {
         }
 
         setPreferences([
-          { id: 'noise', label: 'Noise', emoji: '🔊', value: data.noise },
-          { id: 'crowds', label: 'Crowds', emoji: '👥', value: data.crowds },
-          { id: 'temperature', label: 'Temperature', emoji: '🌡️', value: data.temperature },
-          { id: 'smell', label: 'Smell', emoji: '👃', value: data.smell },
-          { id: 'lights', label: 'Lights', emoji: '💡', value: data.lights },
+          { id: 'noise', label: 'Noise', emoji: '🔊', value: data.noise ?? null },
+          { id: 'crowds', label: 'Crowds', emoji: '👥', value: data.crowds ?? null },
+          { id: 'temperature', label: 'Temperature', emoji: '🌡️', value: data.temperature ?? null },
+          { id: 'smell', label: 'Smell', emoji: '👃', value: data.smell ?? null },
+          { id: 'lights', label: 'Lights', emoji: '💡', value: data.lights ?? null },
         ]);
       } catch (e) {
         console.error('Failed to load preferences', e);
