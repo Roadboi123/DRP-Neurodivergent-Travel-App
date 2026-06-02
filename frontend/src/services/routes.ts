@@ -1,4 +1,4 @@
-import { apiUrl, localApiUrl } from '@/services/api-client';
+import type { HttpClient } from '@/services/http-client';
 import type { RouteOption } from '@/types/route';
 
 /** Build the `/routes/` query string, applying a username only when provided. */
@@ -11,33 +11,25 @@ function buildRoutesQuery(start: string, end: string, username: string): string 
   return `routes/?start=${startParam}&end=${endParam}${userParam}`;
 }
 
+export interface RoutesService {
+  /**
+   * Fetch route suggestions. Throws if the (possibly failover-wrapped) client
+   * cannot reach a backend; callers decide how to surface that.
+   */
+  getRoutes(start: string, end: string, username: string): Promise<RouteOption[]>;
+}
+
 /**
- * Fetch route suggestions from the deployed backend, transparently falling back
- * to a local FastAPI instance if the production backend is unreachable.
- *
- * Throws if neither backend can be reached; callers decide how to surface that.
+ * Build a {@link RoutesService} over an injected client. Production→local
+ * failover, when desired, is supplied by handing in a fallback client at the
+ * composition root — this service stays unaware of it.
  */
-export async function getRoutes(
-  start: string,
-  end: string,
-  username: string
-): Promise<RouteOption[]> {
-  const query = buildRoutesQuery(start, end, username);
-
-  try {
-    // Trailing slash is already part of the query to avoid an HTTP redirect.
-    const res = await fetch(apiUrl(`/${query}`));
-    if (!res.ok) {
-      throw new Error('Railway backend response error');
-    }
-    return (await res.json()) as RouteOption[];
-  } catch (error) {
-    console.warn('Production backend unavailable, trying local backend...', error);
-
-    const localRes = await fetch(localApiUrl(`/${query}`));
-    if (!localRes.ok) {
-      throw new Error('Local backend response error');
-    }
-    return (await localRes.json()) as RouteOption[];
-  }
+export function createRoutesService(client: HttpClient): RoutesService {
+  return {
+    getRoutes(start, end, username) {
+      const query = buildRoutesQuery(start, end, username);
+      // Trailing slash is already part of the query to avoid an HTTP redirect.
+      return client.get<RouteOption[]>(`/${query}`);
+    },
+  };
 }
