@@ -14,6 +14,11 @@ class RouteOption(BaseModel):
 
     Field names mirror the contract the React Native client consumes exactly,
     including the camelCase ``subName`` alongside the snake_case sensory fields.
+    This model is the single source of truth for the route contract: the
+    frontend's TS types are generated from it (see ``shared/`` and
+    ``scripts/export_openapi.py``). Annotations are kept precise so the generated
+    types are precise, but JSON serialization is unchanged (``SensoryLevel`` still
+    serializes as the integers 1/2/3).
     """
 
     id: str
@@ -21,13 +26,14 @@ class RouteOption(BaseModel):
     subName: Optional[str] = None
     duration: int
     price: float
-    noise: int
-    crowds: int
-    heat: int
-    light: int
-    smell: int
+    noise: SensoryLevel
+    crowds: SensoryLevel
+    heat: SensoryLevel
+    light: SensoryLevel
+    smell: SensoryLevel
     description: str
     sensory_score: Optional[float] = None
     match_percentage: Optional[int] = None
     sensory_description: Optional[str] = None
-    type: Optional[RouteType] = None
+    # Always populated by the route service before the response is built.
+    type: RouteType

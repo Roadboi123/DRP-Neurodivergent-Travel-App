@@ -1,9 +1,13 @@
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
+
+# Client-facing sensitivity labels. This is the single source of truth for the
+# preference contract: the frontend's TS union is generated from these schemas.
+SensitivityLevel = Literal["little", "manageable", "dontcare"]
 
 # Accepted sensitivity labels and their stored integer encodings.
-SENSITIVITY_MAP = {
+SENSITIVITY_MAP: dict[SensitivityLevel, int] = {
     "little": 1,
     "manageable": 2,
     "dontcare": 3,
@@ -11,31 +15,31 @@ SENSITIVITY_MAP = {
 
 
 class SensitivityPreferences(BaseModel):
-    """Request body for ``POST /preferences/``."""
+    """Request body for ``POST /preferences/``.
+
+    The ``SensitivityLevel`` literal enforces the accepted labels, so invalid
+    values are rejected with a 422 before the handler runs.
+    """
 
     username: str
-    noise: str
-    crowds: str
-    temperature: str
-    smell: str
-    lights: str
-
-    @field_validator("noise", "crowds", "temperature", "smell", "lights")
-    @classmethod
-    def must_be_valid(cls, v: str) -> str:
-        if v not in SENSITIVITY_MAP:
-            raise ValueError(
-                f"Invalid value '{v}'. Must be one of: {list(SENSITIVITY_MAP.keys())}"
-            )
-        return v
+    noise: SensitivityLevel
+    crowds: SensitivityLevel
+    temperature: SensitivityLevel
+    smell: SensitivityLevel
+    lights: SensitivityLevel
 
 
 class PreferenceResponse(BaseModel):
-    """Response body for ``GET /preferences/{username}``."""
+    """Response body for ``GET /preferences/{username}``.
+
+    Sensitivity fields are always one of the ``SensitivityLevel`` labels (the
+    service maps stored integers back through ``REVERSE_SENSITIVITY_MAP``) or
+    ``None`` when a column is unset.
+    """
 
     username: str
-    noise: Optional[str] = None
-    crowds: Optional[str] = None
-    temperature: Optional[str] = None
-    smell: Optional[str] = None
-    lights: Optional[str] = None
+    noise: Optional[SensitivityLevel] = None
+    crowds: Optional[SensitivityLevel] = None
+    temperature: Optional[SensitivityLevel] = None
+    smell: Optional[SensitivityLevel] = None
+    lights: Optional[SensitivityLevel] = None
