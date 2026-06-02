@@ -4,6 +4,12 @@ on:
   push:
     paths:
      - frontend/**
+     - shared/**
+  pull_request:
+    branches: [main]
+    paths:
+     - frontend/**
+     - shared/**
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -37,6 +43,12 @@ jobs:
       - name: Install Node deps
         working-directory: frontend
         run: npm ci
+
+      # API types are generated, not committed — produce them from the committed
+      # shared/openapi.json before lint and typecheck (both need the file present).
+      - name: Generate API types
+        working-directory: frontend
+        run: npm run gen:api
 
       - name: ESLint
         working-directory: frontend

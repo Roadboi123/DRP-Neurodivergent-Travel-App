@@ -29,8 +29,8 @@ function getGroupStyling(type: RouteOption['type'], isDark: boolean) {
   };
 }
 
-function matchBadgeColors(matchPercentage: number | undefined, isDark: boolean) {
-  if (matchPercentage === undefined) {
+function matchBadgeColors(matchPercentage: number | null | undefined, isDark: boolean) {
+  if (matchPercentage == null) {
     return {
       bg: isDark ? '#2E3543' : '#F0EEED',
       text: isDark ? '#CCC' : '#666',
@@ -69,7 +69,7 @@ export function RouteCard({ route }: { route: RouteOption }) {
           { color: isDark ? '#AAA' : '#555', fontFamily: Fonts?.rounded },
         ]}>
         {group.title}
-        {route.sensory_score !== undefined && (
+        {route.sensory_score != null && (
           <Text style={{ fontSize: 11, fontWeight: '400', color: '#999' }}>
             {' '}
             (Sensory Score: {route.sensory_score})
