@@ -10,6 +10,10 @@
 Python can't import TS and Metro won't bundle outside `frontend/`, so this is a
 build-time artifact, not runtime-imported by either side.
 
-To change the contract: edit the Pydantic schema, then regenerate both ends
-(`export_openapi.py`, then `gen:api`) and commit together. CI drift guards in both
-workflows fail if either artifact is stale. See `README.md` for the full walkthrough.
+`openapi.json` is the **only committed artifact**. The frontend types
+(`frontend/src/types/generated/`) are gitignored and regenerated on install/CI/build.
+
+To change the contract: edit the Pydantic schema, run `python
+backend/scripts/export_openapi.py`, and commit `openapi.json` (just one command —
+the frontend types regenerate themselves). The backend CI drift guard fails if
+`openapi.json` is stale versus the schemas. See `README.md` for the full walkthrough.

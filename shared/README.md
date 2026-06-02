@@ -17,26 +17,26 @@ is one-directional:
 
 ```
 backend/app/schemas/*.py   →   shared/openapi.json   →   frontend/src/types/generated/api.ts
-   (edit here)                  (generated)               (generated)
+   (edit here)                  (committed)                (generated, gitignored)
 ```
+
+`openapi.json` is the **only committed artifact**. `api.ts` is gitignored and
+regenerated automatically: on `npm install` (frontend `prepare` script), in CI
+before lint/typecheck, and in the Vercel build (`gen:api` in `vercel.json`).
 
 ## Changing the contract
 
 1. Edit the relevant Pydantic model in `backend/app/schemas/`.
-2. Regenerate the contract:
+2. Regenerate and commit the contract — **one command**:
    ```bash
-   cd backend && python scripts/export_openapi.py
+   cd backend && python scripts/export_openapi.py   # updates shared/openapi.json
    ```
-3. Regenerate the frontend types:
-   ```bash
-   cd frontend && npm run gen:api
-   ```
-4. Commit all three changes together.
+   The frontend types regenerate themselves on the next install/build, so there's
+   nothing else to run or commit.
 
-CI enforces this: the backend job fails if `openapi.json` is stale versus the
-schemas, and the frontend job fails if the generated TS is stale versus
-`openapi.json`. So skipping a regeneration step breaks the build rather than
-silently drifting.
+The backend CI drift guard fails if `openapi.json` is stale versus the schemas, so
+skipping the regenerate-and-commit step breaks the build rather than silently
+drifting. (To preview the frontend types locally: `cd frontend && npm run gen:api`.)
 
 ## Note on the `/routes/` contract
 

@@ -14,18 +14,16 @@ All source under `src/`, with `@/*` → `./src/*`:
 - `src/constants/` — `config.ts` (`API_BASE_URL`), `theme.ts` (`getPalette`).
 - `assets/` + config (`app.json`, `vercel.json`) live at the `frontend/` root.
 
-## Generated API types — do not hand-edit
+## Generated API types — generated, not committed
 
-`src/types/generated/api.ts` is generated from `../shared/openapi.json`. After the
-backend contract changes (and `shared/openapi.json` is regenerated):
+`src/types/generated/api.ts` is generated from `../shared/openapi.json` and is
+**gitignored** — never commit it, never hand-edit it. It's produced automatically:
+on `npm install` (`prepare` script), in CI before lint/tsc, and in the Vercel build
+(`gen:api` in `vercel.json`'s `buildCommand`). A fresh clone has no `api.ts` until
+the first `npm install`; run `npm run gen:api` manually if you need it sooner.
 
-```bash
-npm run gen:api
-```
-
-Then commit. CI fails if the generated types are stale. Import contract types via
-`@/types/route` / `@/types/preference` (which re-export the generated schemas),
-not from `generated/` directly.
+Import contract types via `@/types/route` / `@/types/preference` (which re-export
+the generated schemas), not from `generated/` directly.
 
 ## Checks (match CI)
 

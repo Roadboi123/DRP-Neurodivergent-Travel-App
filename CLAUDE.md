@@ -13,10 +13,13 @@ The HTTP contract has **one source of truth**: the Pydantic schemas in
 
 ```
 backend/app/schemas/*.py  →  shared/openapi.json  →  frontend/src/types/generated/api.ts
+   (edit here)                 (committed)              (generated, gitignored)
 ```
 
-To change it: edit the schema → `cd backend && python scripts/export_openapi.py`
-→ `cd frontend && npm run gen:api` → commit all three. CI fails on drift.
+To change it: edit the schema → `cd backend && python scripts/export_openapi.py` →
+commit `shared/openapi.json`. That's the only manual step; `api.ts` is gitignored and
+regenerated on install/CI/Vercel build. The backend CI drift guard fails if
+`openapi.json` is stale versus the schemas.
 
 `GET /routes/` is **frozen** — the live frontend depends on exact field names
 (`subName` camelCase alongside snake_case `sensory_score`/`match_percentage`/
