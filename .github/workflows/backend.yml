@@ -78,9 +78,13 @@ jobs:
         run: pytest -q
 
       # Drift guard: the schemas are the contract source of truth, so the
-      # committed shared/openapi.json must match what they generate.
+      # committed shared/openapi.json must match what they generate. Uses plain
+      # diff (not git) so it works regardless of the runner's git-repo context.
       - name: Check shared/openapi.json is up to date
         run: |
+          cp ../shared/openapi.json /tmp/openapi.committed.json
           python scripts/export_openapi.py
-          git diff --exit-code ../shared/openapi.json \
-            || (echo "::error::shared/openapi.json is stale. Run 'python scripts/export_openapi.py' and commit." && exit 1)
+          if ! diff -u /tmp/openapi.committed.json ../shared/openapi.json; then
+            echo "::error::shared/openapi.json is stale. Run 'python scripts/export_openapi.py' and commit."
+            exit 1
+          fi

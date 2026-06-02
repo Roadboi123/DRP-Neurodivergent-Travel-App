@@ -48,13 +48,17 @@ jobs:
         run: npx tsc --noEmit
 
       # Drift guard: src/types/generated/ must match what the committed
-      # shared/openapi.json generates.
+      # shared/openapi.json generates. Uses plain diff (not git) so it works
+      # regardless of the container's git-repo ownership context.
       - name: Check generated API types are up to date
         working-directory: frontend
         run: |
+          cp src/types/generated/api.ts /tmp/api.committed.ts
           npm run gen:api
-          git diff --exit-code src/types/generated/ \
-            || (echo "::error::Generated API types are stale. Run 'npm run gen:api' and commit." && exit 1)
+          if ! diff -u /tmp/api.committed.ts src/types/generated/api.ts; then
+            echo "::error::Generated API types are stale. Run 'npm run gen:api' and commit."
+            exit 1
+          fi
 
 
   # ─────────────────────────────────────────────
