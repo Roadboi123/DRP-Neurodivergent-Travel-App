@@ -145,7 +145,7 @@ def _is_useless_bus_journey(journey: dict) -> bool:
 
 def _parse_journey(journey: dict) -> dict:
     legs  = journey.get("legs", [])
-    parsed_legs = [_parse_leg(l) for l in legs]
+    parsed_legs = [_parse_leg(leg) for leg in legs]
     
     # Calculate connection waiting times between adjacent legs
     from datetime import datetime
@@ -168,14 +168,14 @@ def _parse_journey(journey: dict) -> dict:
             
     if parsed_legs:
         parsed_legs[-1]["connection_waiting_mins"] = 0
-
+ 
     modes = list({leg.get("mode", "") for leg in parsed_legs})
     return {
         "source":        "tfl",
         "duration_mins": journey.get("duration", 0),
         "departs_at":    journey.get("startDateTime", ""),
         "arrives_at":    journey.get("arrivalDateTime", ""),
-        "changes":       max(len([l for l in parsed_legs if l.get("mode") != "walking"]) - 1, 0),
+        "changes":       max(len([leg for leg in parsed_legs if leg.get("mode") != "walking"]) - 1, 0),
         "modes":         modes,
         "legs":          parsed_legs,
     }
@@ -231,7 +231,7 @@ async def get_routes(
     seen_keys = set()
     
     for j in results_least_time + results_least_interchange:
-        leg_sig = tuple((l.get("mode"), l.get("line"), l.get("departure"), l.get("arrival")) for l in j.get("legs", []))
+        leg_sig = tuple((leg.get("mode"), leg.get("line"), leg.get("departure"), leg.get("arrival")) for leg in j.get("legs", []))
         key = (j.get("departs_at"), j.get("arrives_at"), leg_sig)
         
         if key not in seen_keys:

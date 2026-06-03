@@ -8,6 +8,11 @@ import asyncio
 import math
 from typing import Any, Dict, List, Optional
 
+from app.integrations.supabase import supabase
+from app.integrations import tlf_client
+from app.integrations import osm_client
+from app.integrations import route_resolver
+
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     # Radius of the Earth in meters
     R = 6371000
@@ -19,11 +24,6 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
     a = math.sin(delta_phi / 2.0)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0)**2
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return R * c
-
-from app.integrations.supabase import supabase
-from app.integrations import tlf_client
-from app.integrations import osm_client
-from app.integrations import route_resolver
 
 # Mapping Supabase integer sensitivities (1 = high sensitivity/little discomfort, 2 = manageable, 3 = dontcare/none)
 # to discomfort multiplier weights
@@ -297,7 +297,7 @@ async def _build_route_option(index: int, journey: dict) -> dict:
     # Construct descriptive neurodivergent-friendly leg summary
     desc_parts = []
     has_deep_tube = False
-    has_walk_only = all(str(l.get("mode", "")).lower() == "walking" for l in legs)
+    has_walk_only = all(str(leg.get("mode", "")).lower() == "walking" for leg in legs)
     
     for leg in legs:
         mode = str(leg.get("mode", "")).lower()
@@ -313,34 +313,34 @@ async def _build_route_option(index: int, journey: dict) -> dict:
         else:
             desc_parts.append("Uses sub-surface or modern spacious transit lines with air conditioning and quieter tracks.")
             
-        changes = max(len([l for l in legs if str(l.get("mode", "")).lower() != "walking"]) - 1, 0)
+        changes = max(len([leg for leg in legs if str(leg.get("mode", "")).lower() != "walking"]) - 1, 0)
         if changes > 0:
             desc_parts.append(f"Requires {changes} line transfer{'s' if changes > 1 else ''} which increases walking and platform crowding.")
         else:
             desc_parts.append("Direct line journey with no platform transfers.")
             
-        total_wait = sum(int(l.get("connection_waiting_mins", 0)) for l in legs)
+        total_wait = sum(int(leg.get("connection_waiting_mins", 0)) for leg in legs)
         if total_wait > 0:
             desc_parts.append(f"Includes {total_wait} minute{'s' if total_wait > 1 else ''} of waiting/interchange time between trains on platforms.")
 
     description = " ".join(desc_parts)
     
     # Formulate sub-name representing transit modes sequence
-    modes_list = [str(l.get("mode", "")).capitalize() for l in legs]
+    modes_list = [str(leg.get("mode", "")).capitalize() for leg in legs]
     subName = " ➔ ".join(modes_list) if modes_list else None
 
     # Map legs for front-end rendering
     formatted_legs = []
-    for l in legs:
+    for leg in legs:
         formatted_legs.append({
-            "mode": l.get("mode", "walking"),
-            "line": l.get("line", ""),
-            "duration_mins": l.get("duration_mins", 0),
-            "departure": l.get("departure", ""),
-            "arrival": l.get("arrival", ""),
-            "instruction": l.get("instruction", ""),
-            "stops": l.get("stops", []),
-            "connection_waiting_mins": l.get("connection_waiting_mins", 0),
+            "mode": leg.get("mode", "walking"),
+            "line": leg.get("line", ""),
+            "duration_mins": leg.get("duration_mins", 0),
+            "departure": leg.get("departure", ""),
+            "arrival": leg.get("arrival", ""),
+            "instruction": leg.get("instruction", ""),
+            "stops": leg.get("stops", []),
+            "connection_waiting_mins": leg.get("connection_waiting_mins", 0),
         })
 
     # Build features tag list for cleaner UI rendering
@@ -358,13 +358,13 @@ async def _build_route_option(index: int, journey: dict) -> dict:
             features.append({"type": "aircon", "label": "Air Conditioned", "icon": "snow-outline", "color": "green"})
             features.append({"type": "noise", "label": "Quiet Tracks", "icon": "volume-low-outline", "color": "green"})
 
-    changes = max(len([l for l in legs if str(l.get("mode", "")).lower() != "walking"]) - 1, 0)
+    changes = max(len([leg for leg in legs if str(leg.get("mode", "")).lower() != "walking"]) - 1, 0)
     if changes == 0:
         features.append({"type": "transfers", "label": "Direct Line", "icon": "arrow-forward-outline", "color": "green"})
     else:
         features.append({"type": "transfers", "label": f"{changes} Transfer{'s' if changes > 1 else ''}", "icon": "shuffle-outline", "color": "orange"})
 
-    total_wait = sum(int(l.get("connection_waiting_mins", 0)) for l in legs)
+    total_wait = sum(int(leg.get("connection_waiting_mins", 0)) for leg in legs)
     if total_wait > 0:
         features.append({"type": "waiting", "label": f"{total_wait}m Plat. Wait", "icon": "time-outline", "color": "orange"})
 
@@ -458,8 +458,8 @@ async def get_route_suggestions(
         seen_sigs = set()
         for rj in raw_journeys:
             leg_sig = tuple(
-                (l.get("mode"), l.get("line"), l.get("departure"), l.get("arrival"))
-                for l in rj.get("legs", [])
+                (leg.get("mode"), leg.get("line"), leg.get("departure"), leg.get("arrival"))
+                for leg in rj.get("legs", [])
             )
             seen_sigs.add(leg_sig)
             
@@ -470,8 +470,8 @@ async def get_route_suggestions(
                 continue
                 
             legs = j.get("legs", [])
-            for idx, l in enumerate(legs):
-                is_transit = l.get("mode") not in ("walking", "unknown", "")
+            for idx, leg in enumerate(legs):
+                is_transit = leg.get("mode") not in ("walking", "unknown", "")
                 if not is_transit:
                     continue
                     
@@ -481,9 +481,9 @@ async def get_route_suggestions(
                     for k in range(idx + 1, len(legs))
                 )
                 
-                arr_lat = l.get("arrival_lat")
-                arr_lon = l.get("arrival_lon")
-                arr_name = l.get("arrival")
+                arr_lat = leg.get("arrival_lat")
+                arr_lon = leg.get("arrival_lon")
+                arr_name = leg.get("arrival")
                 
                 if arr_lat is not None and arr_lon is not None and has_later_transit:
                     dist = _haversine_distance(arr_lat, arr_lon, dest_lat, dest_lon)
@@ -523,7 +523,7 @@ async def get_route_suggestions(
                             })
                             
                 # Option B: Exit at an intermediate stop of this leg
-                stops = l.get("stops", [])
+                stops = leg.get("stops", [])
                 for stop_idx, stop_name in enumerate(stops):
                     stop_coords = await _get_station_coords(stop_name)
                     if stop_coords:
@@ -542,24 +542,24 @@ async def get_route_suggestions(
                             )
                             
                             # Prepare modified transit leg up to the intermediate stop
-                            modified_l = l.copy()
-                            modified_l["arrival"] = stop_name
-                            modified_l["arrival_naptan"] = ""
-                            modified_l["arrival_lat"] = stop_lat
-                            modified_l["arrival_lon"] = stop_lon
+                            modified_leg = leg.copy()
+                            modified_leg["arrival"] = stop_name
+                            modified_leg["arrival_naptan"] = ""
+                            modified_leg["arrival_lat"] = stop_lat
+                            modified_leg["arrival_lon"] = stop_lon
                             
                             # Interpolate duration
                             total_stops = len(stops)
                             fraction = (stop_idx + 1) / (total_stops + 1)
-                            modified_l["duration_mins"] = max(1, round(l.get("duration_mins", 0) * fraction))
-                            modified_l["stops"] = stops[:stop_idx]
-                            modified_l["connection_waiting_mins"] = 0
+                            modified_leg["duration_mins"] = max(1, round(leg.get("duration_mins", 0) * fraction))
+                            modified_leg["stops"] = stops[:stop_idx]
+                            modified_leg["connection_waiting_mins"] = 0
                             
                             # Generate new journey legs
                             new_legs = []
                             for k in range(idx):
                                 new_legs.append(legs[k].copy())
-                            new_legs.append(modified_l)
+                            new_legs.append(modified_leg)
                             new_legs.append(new_walk_leg)
                             
                             new_sig = tuple(

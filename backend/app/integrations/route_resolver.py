@@ -2,7 +2,6 @@
 Route resolver — decides whether to use TfL, Google Maps, or both,
 based on the destination type and distance.
 """
-import os
 import math
 from app.integrations.osm_client import geocode as _geocode
 
