@@ -181,7 +181,7 @@ export default function RoutesScreen() {
         onUsernameChange={setUsername}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Warnings Banner + Options/Edit button */}
         <View style={styles.warningsRow}>
@@ -267,7 +267,7 @@ export default function RoutesScreen() {
 
       {/* Bottom Filter Selector Bar */}
       <View style={[styles.bottomBar, { borderTopColor: palette.divider, backgroundColor: palette.background }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bottomBarScroll}>
+        <ScrollView style={{ backgroundColor: palette.background }} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bottomBarScroll}>
           {FILTER_OPTIONS.map(({ value, label }) => {
             const active = sortBy === value;
             return (

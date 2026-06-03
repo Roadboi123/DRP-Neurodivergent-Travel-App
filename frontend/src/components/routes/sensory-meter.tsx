@@ -39,22 +39,21 @@ export function SensoryMeter({ level, label }: { level: SensoryLevel; label: str
 
 const styles = StyleSheet.create({
   meterContainer: {
-    width: '30%',
-    minWidth: 80,
-    alignItems: 'flex-start',
+    flex: 1,
+    alignItems: 'center',
   },
   meterLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10.5,
+    fontWeight: '700',
     marginBottom: 4,
   },
   meterBlocks: {
     flexDirection: 'row',
-    gap: 3,
+    gap: 2,
   },
   meterBlock: {
-    width: 14,
-    height: 7,
+    width: 12,
+    height: 6,
     borderRadius: 2,
   },
 });

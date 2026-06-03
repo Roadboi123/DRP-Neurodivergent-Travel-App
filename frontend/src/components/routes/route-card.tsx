@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { Fonts, getPalette } from '@/constants/theme';
@@ -68,7 +68,6 @@ export function RouteCard({
   const palette = getPalette(isDark);
   const group = getGroupStyling(route.type, isDark);
   const matchColors = matchBadgeColors(route.match_percentage, isDark);
-  const isWalkOnly = route.legs?.every(leg => leg.mode === 'walking') ?? route.name.toLowerCase() === 'walk';
 
   return (
     <View style={styles.routeGroupWrapper}>
@@ -93,34 +92,120 @@ export function RouteCard({
           styles.routeCard,
           { backgroundColor: palette.surface, borderColor: palette.border },
         ]}>
-        {/* Header: Dynamic Icon + Name */}
+        {/* Header: Journey Timeline + Match Rating Pill + Travel Stats */}
         <View style={styles.cardHeader}>
-          <View style={styles.transitBadgeRow}>
-            <View style={[styles.transitBadge, { backgroundColor: group.badgeColor }]}>
-              <Ionicons
-                name={
-                  isWalkOnly
-                    ? 'walk'
-                    : route.name.toLowerCase().includes('bus')
-                    ? 'bus'
-                    : 'subway'
-                }
-                size={16}
-                color={group.badgeTextColor}
-              />
-              <Text style={[styles.badgeText, { color: group.badgeTextColor }]}>{route.name}</Text>
-            </View>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }}>
+            {route.legs && route.legs.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineScroll} style={{ flex: 1 }}>
+                {route.legs.map((leg, lIdx) => {
+                  const mode = leg.mode.toLowerCase();
+                  const line = leg.line ? leg.line.toLowerCase() : '';
+                  
+                  let iconName: any = 'walk';
+                  let legBadgeColor = isDark ? '#2A2E35' : '#ECEFF1';
+                  let legTextColor = isDark ? '#CCC' : '#455A64';
+                  let displayName = 'Walk';
 
-            {/* Match Rating Pill */}
-            <View style={[styles.matchBadge, { backgroundColor: matchColors.bg, marginLeft: 4 }]}>
-              <Text style={[styles.matchBadgeText, { color: matchColors.text }]}>
-                {route.match_percentage ?? 100}% Match
-              </Text>
-            </View>
+                  const isBusLike = mode === 'bus' || mode === 'coach' || mode === 'national-coach' || mode === 'replacement-bus';
+
+                  if (isBusLike) {
+                    iconName = 'bus';
+                    legBadgeColor = isDark ? '#4D1D1D' : '#FFEBEE';
+                    legTextColor = isDark ? '#EF5350' : '#C62828';
+                    displayName = leg.line ? `Bus ${leg.line}` : (leg.instruction ? leg.instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '') : 'Bus');
+                  } else if (mode === 'tube' || mode === 'subway' || mode === 'underground' || mode.includes('elizabeth')) {
+                    iconName = 'subway';
+                    displayName = leg.line || 'Elizabeth line';
+                    
+                    if (line.includes('central')) {
+                      legBadgeColor = '#E32017';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('district')) {
+                      legBadgeColor = '#00782A';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('northern')) {
+                      legBadgeColor = '#000000';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('victoria')) {
+                      legBadgeColor = '#00A0E2';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('jubilee')) {
+                      legBadgeColor = '#868F98';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('piccadilly')) {
+                      legBadgeColor = '#003688';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('bakerloo')) {
+                      legBadgeColor = '#894E24';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('circle')) {
+                      legBadgeColor = '#FFD300';
+                      legTextColor = '#000';
+                    } else if (line.includes('hammersmith') || line.includes('city')) {
+                      legBadgeColor = '#F3A9C8';
+                      legTextColor = '#000';
+                    } else if (line.includes('metropolitan')) {
+                      legBadgeColor = '#9B005A';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('elizabeth')) {
+                      legBadgeColor = '#7156A5';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('overground')) {
+                      legBadgeColor = '#E86300';
+                      legTextColor = '#FFF';
+                    } else if (line.includes('dlr')) {
+                      legBadgeColor = '#00AFAD';
+                      legTextColor = '#FFF';
+                    } else {
+                      legBadgeColor = '#0D47A1';
+                      legTextColor = '#FFF';
+                    }
+                  } else if (mode === 'train' || mode === 'national-rail') {
+                    iconName = 'train';
+                    displayName = leg.line || 'Train';
+                    legBadgeColor = isDark ? '#1F344D' : '#E3F2FD';
+                    legTextColor = isDark ? '#64B5F6' : '#0D47A1';
+                  }
+
+                  return (
+                    <View key={lIdx} style={styles.timelineItem}>
+                      {lIdx > 0 && (
+                        <Ionicons
+                          name="chevron-forward"
+                          size={12}
+                          color={isDark ? '#555' : '#BBB'}
+                          style={styles.timelineArrow}
+                        />
+                      )}
+                      <View style={[styles.timelineBadge, { backgroundColor: legBadgeColor }]}>
+                        <Ionicons name={iconName} size={13} color={legTextColor} />
+                        <View>
+                          <Text style={[styles.timelineBadgeText, { color: legTextColor }]}>
+                            {displayName}
+                          </Text>
+                          {leg.duration_mins > 0 && (
+                            <Text style={[styles.timelineDurText, { color: legTextColor }]}>
+                              {leg.duration_mins} min
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {/* Match Rating Pill inside ScrollView at the end */}
+                <View style={[styles.matchBadge, { backgroundColor: matchColors.bg }]}>
+                  <Text style={[styles.matchBadgeText, { color: matchColors.text }]}>
+                    {route.match_percentage ?? 100}% Match
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
           </View>
 
           {/* Travel Stats: Time + Cost */}
-          <View style={styles.cardStats}>
+          <View style={[styles.cardStats, { marginLeft: 8 }]}>
             <Text style={[styles.cardTime, { color: palette.textPrimary }]}>
               {route.duration} min
             </Text>
@@ -129,6 +214,8 @@ export function RouteCard({
             </Text>
           </View>
         </View>
+
+
 
         {/* Sensory Dashboard - Wrapping Grid layout for 5 distinct meters */}
         <View style={[styles.sensoryRow, { borderTopColor: palette.divider }]}>
@@ -140,7 +227,7 @@ export function RouteCard({
         </View>
 
         {/* Sensory Compatibility Score Explanation */}
-        {route.sensory_description && (
+        {route.sensory_description && !route.sensory_description.includes('Enter a username') && (
           <Text
             style={[
               styles.sensoryExplanationText,

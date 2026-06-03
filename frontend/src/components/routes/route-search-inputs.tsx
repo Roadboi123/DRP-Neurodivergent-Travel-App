@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Fonts, getPalette } from '@/constants/theme';
+import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface RouteSearchInputsProps {
