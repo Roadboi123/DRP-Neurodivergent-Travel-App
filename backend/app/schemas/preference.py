@@ -2,15 +2,18 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-# Client-facing sensitivity labels. This is the single source of truth for the
-# preference contract: the frontend's TS union is generated from these schemas.
-SensitivityLevel = Literal["little", "manageable", "dontcare"]
+# Client-facing sensitivity labels, ordered from least to most affected. This is
+# the single source of truth for the preference contract: the frontend's TS union
+# is generated from these schemas.
+SensitivityLevel = Literal["little", "medium", "high", "veryhigh"]
 
-# Accepted sensitivity labels and their stored integer encodings.
+# Accepted sensitivity labels and their stored integer encodings. Higher integer
+# = more strongly affected (drives a larger discomfort weight in route scoring).
 SENSITIVITY_MAP: dict[SensitivityLevel, int] = {
     "little": 1,
-    "manageable": 2,
-    "dontcare": 3,
+    "medium": 2,
+    "high": 3,
+    "veryhigh": 4,
 }
 
 

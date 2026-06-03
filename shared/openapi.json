@@ -87,8 +87,9 @@
               {
                 "enum": [
                   "little",
-                  "manageable",
-                  "dontcare"
+                  "medium",
+                  "high",
+                  "veryhigh"
                 ],
                 "type": "string"
               },
@@ -103,8 +104,9 @@
               {
                 "enum": [
                   "little",
-                  "manageable",
-                  "dontcare"
+                  "medium",
+                  "high",
+                  "veryhigh"
                 ],
                 "type": "string"
               },
@@ -119,8 +121,9 @@
               {
                 "enum": [
                   "little",
-                  "manageable",
-                  "dontcare"
+                  "medium",
+                  "high",
+                  "veryhigh"
                 ],
                 "type": "string"
               },
@@ -135,8 +138,9 @@
               {
                 "enum": [
                   "little",
-                  "manageable",
-                  "dontcare"
+                  "medium",
+                  "high",
+                  "veryhigh"
                 ],
                 "type": "string"
               },
@@ -151,8 +155,9 @@
               {
                 "enum": [
                   "little",
-                  "manageable",
-                  "dontcare"
+                  "medium",
+                  "high",
+                  "veryhigh"
                 ],
                 "type": "string"
               },
@@ -374,8 +379,9 @@
           "crowds": {
             "enum": [
               "little",
-              "manageable",
-              "dontcare"
+              "medium",
+              "high",
+              "veryhigh"
             ],
             "title": "Crowds",
             "type": "string"
@@ -383,8 +389,9 @@
           "lights": {
             "enum": [
               "little",
-              "manageable",
-              "dontcare"
+              "medium",
+              "high",
+              "veryhigh"
             ],
             "title": "Lights",
             "type": "string"
@@ -392,8 +399,9 @@
           "noise": {
             "enum": [
               "little",
-              "manageable",
-              "dontcare"
+              "medium",
+              "high",
+              "veryhigh"
             ],
             "title": "Noise",
             "type": "string"
@@ -401,8 +409,9 @@
           "smell": {
             "enum": [
               "little",
-              "manageable",
-              "dontcare"
+              "medium",
+              "high",
+              "veryhigh"
             ],
             "title": "Smell",
             "type": "string"
@@ -410,8 +419,9 @@
           "temperature": {
             "enum": [
               "little",
-              "manageable",
-              "dontcare"
+              "medium",
+              "high",
+              "veryhigh"
             ],
             "title": "Temperature",
             "type": "string"

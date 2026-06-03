@@ -25,12 +25,14 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return R * c
 
-# Mapping Supabase integer sensitivities (1 = high sensitivity/little discomfort, 2 = manageable, 3 = dontcare/none)
-# to discomfort multiplier weights
+# Mapping Supabase integer sensitivities (1 = little, 2 = medium, 3 = high,
+# 4 = very high) to discomfort multiplier weights. Higher sensitivity = more
+# strongly affected = larger weight.
 WEIGHTS_MAP = {
-    1: 3.0,
-    2: 1.5,
-    3: 0.0
+    1: 0.0,
+    2: 1.0,
+    3: 2.0,
+    4: 3.0,
 }
 
 
@@ -642,16 +644,16 @@ async def get_route_suggestions(
             )
             r["sensory_score"] = round(sensory_score, 2)
 
-            # Mismatches (Highly sensitive [1] and trigger level >= 2)
-            if u_noise == 1 and r["noise"] >= 2:
+            # Mismatches (highly sensitive [high=3 or very high=4] and trigger level >= 2)
+            if u_noise >= 3 and r["noise"] >= 2:
                 mismatch_triggers.append("sound")
-            if u_crowds == 1 and r["crowds"] >= 2:
+            if u_crowds >= 3 and r["crowds"] >= 2:
                 mismatch_triggers.append("crowds")
-            if u_heat == 1 and r["heat"] >= 2:
+            if u_heat >= 3 and r["heat"] >= 2:
                 mismatch_triggers.append("heat")
-            if u_light == 1 and r["light"] >= 2:
+            if u_light >= 3 and r["light"] >= 2:
                 mismatch_triggers.append("bright light")
-            if u_smell == 1 and r["smell"] >= 2:
+            if u_smell >= 3 and r["smell"] >= 2:
                 mismatch_triggers.append("fumes/scents")
 
             max_discomfort = (

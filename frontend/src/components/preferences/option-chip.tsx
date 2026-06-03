@@ -29,20 +29,19 @@ export function OptionChip({
             }
           : (isDark ? styles.chipUnselectedDark : styles.chipUnselected),
       ]}>
-      {option.value === 'dontcare' && (
-        <Text style={[styles.chipX, selected && { color: colors.text }]}>✕ </Text>
-      )}
-
       <Text
         style={[
           styles.chipLabel,
           selected
             ? {
                 color: colors.text,
-                fontWeight: '600',
+                fontWeight: '700',
               }
             : (isDark ? styles.chipLabelUnselectedDark : styles.chipLabelUnselected),
-        ]}>
+        ]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}>
         {option.label}
       </Text>
     </TouchableOpacity>
@@ -52,10 +51,10 @@ export function OptionChip({
 const styles = StyleSheet.create({
   chip: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
     borderRadius: 10,
     borderWidth: 1.5,
   },
@@ -73,13 +72,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   chipLabel: {
-    fontSize: 11,
-    color: '#AAAAAA',
-    fontWeight: '500',
+    fontSize: 12,
+    color: '#888888',
+    fontWeight: '600',
     textAlign: 'center',
   },
   chipLabelUnselected: {
-    color: '#BBBBBB',
+    color: '#999999',
   },
   chipLabelUnselectedDark: {
     color: '#555555',

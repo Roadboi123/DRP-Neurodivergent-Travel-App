@@ -8,8 +8,9 @@ from app.schemas.preference import SENSITIVITY_MAP, SensitivityPreferences
 # Inverse of SENSITIVITY_MAP: stored integers back to client-facing labels.
 REVERSE_SENSITIVITY_MAP = {
     1: "little",
-    2: "manageable",
-    3: "dontcare",
+    2: "medium",
+    3: "high",
+    4: "veryhigh",
 }
 
 
