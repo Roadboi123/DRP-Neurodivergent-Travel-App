@@ -5,7 +5,7 @@ deterministically in CI without a live database.
 """
 
 import asyncio
-import pytest
+import pytest  # type: ignore
 from unittest.mock import AsyncMock, patch
 from app.services.routes import get_route_suggestions
 
