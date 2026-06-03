@@ -209,7 +209,8 @@
             "enum": [
               1,
               2,
-              3
+              3,
+              4
             ],
             "title": "Crowds",
             "type": "integer"
@@ -240,7 +241,8 @@
             "enum": [
               1,
               2,
-              3
+              3,
+              4
             ],
             "title": "Heat",
             "type": "integer"
@@ -267,7 +269,8 @@
             "enum": [
               1,
               2,
-              3
+              3,
+              4
             ],
             "title": "Light",
             "type": "integer"
@@ -291,7 +294,8 @@
             "enum": [
               1,
               2,
-              3
+              3,
+              4
             ],
             "title": "Noise",
             "type": "integer"
@@ -326,7 +330,8 @@
             "enum": [
               1,
               2,
-              3
+              3,
+              4
             ],
             "title": "Smell",
             "type": "integer"

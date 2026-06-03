@@ -4,19 +4,19 @@ import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SensoryLevel } from '@/types/route';
 
-// 1 = Low (Green), 2 = Med (Orange), 3 = High (Red).
+// 1 = Low (Green), 2 = Moderate (Amber), 3 = High (Orange), 4 = Extreme (Red).
 const LEVEL_COLORS: Record<SensoryLevel, string> = {
   1: '#4CAF50',
-  2: '#FF9800',
-  3: '#F44336',
+  2: '#FFC107',
+  3: '#FF9800',
+  4: '#F44336',
 };
 
-const THRESHOLDS: SensoryLevel[] = [1, 2, 3];
+const THRESHOLDS: SensoryLevel[] = [1, 2, 3, 4];
 
 export function SensoryMeter({ level, label }: { level: SensoryLevel; label: string }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const barColor = LEVEL_COLORS[level];
   const emptyColor = isDark ? '#333' : '#E5E7EB';
 
   return (
@@ -28,7 +28,7 @@ export function SensoryMeter({ level, label }: { level: SensoryLevel; label: str
             key={threshold}
             style={[
               styles.meterBlock,
-              { backgroundColor: level >= threshold ? barColor : emptyColor },
+              { backgroundColor: level >= threshold ? LEVEL_COLORS[threshold] : emptyColor },
             ]}
           />
         ))}

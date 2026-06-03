@@ -2,8 +2,8 @@ from typing import Literal, Optional, List
 
 from pydantic import BaseModel
 
-# Sensory intensity on a route: 1 = Low, 2 = Medium, 3 = High.
-SensoryLevel = Literal[1, 2, 3]
+# Sensory intensity on a route: 1 = Low, 2 = Medium, 3 = High, 4 = Extreme.
+SensoryLevel = Literal[1, 2, 3, 4]
 
 # Route classification surfaced to the client.
 RouteType = Literal["best", "quickest", "suggested"]

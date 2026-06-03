@@ -205,9 +205,11 @@ async def get_routes(
     if time:
         params["time"] = time
 
-    async def fetch_preference(preference: str) -> list[dict]:
+    async def fetch_preference(preference: str, extra_params: dict | None = None) -> list[dict]:
         local_params = params.copy()
         local_params["journeyPreference"] = preference
+        if extra_params:
+            local_params.update(extra_params)
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 res = await client.get(
@@ -220,17 +222,18 @@ async def get_routes(
             print(f"Error fetching TfL routes for preference {preference}: {e}")
         return []
 
-    # Parallel queries for LeastTime and LeastInterchange for richer alternatives
-    results_least_time, results_least_interchange = await asyncio.gather(
+    # Parallel queries for LeastTime, LeastInterchange, and a Bus-only preference
+    results_least_time, results_least_interchange, results_bus_only = await asyncio.gather(
         fetch_preference("LeastTime"),
-        fetch_preference("LeastInterchange")
+        fetch_preference("LeastInterchange"),
+        fetch_preference("LeastTime", {"mode": "bus"})
     )
     
     # Combine and de-duplicate based on departs_at, arrives_at and leg signatures
     combined = []
     seen_keys = set()
     
-    for j in results_least_time + results_least_interchange:
+    for j in results_least_time + results_least_interchange + results_bus_only:
         leg_sig = tuple((leg.get("mode"), leg.get("line"), leg.get("departure"), leg.get("arrival")) for leg in j.get("legs", []))
         key = (j.get("departs_at"), j.get("arrives_at"), leg_sig)
         
