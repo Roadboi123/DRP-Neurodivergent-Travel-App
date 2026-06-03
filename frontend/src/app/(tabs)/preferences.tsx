@@ -13,6 +13,7 @@ import {
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
+import { HeaderNav } from '@/components/ui/header-nav';
 import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
@@ -112,6 +113,8 @@ export default function UserPreferencesScreen() {
         backgroundColor={palette.background}
       />
 
+      <HeaderNav />
+
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -195,7 +198,7 @@ const styles = StyleSheet.create({
 
   container: {
     paddingHorizontal: 20,
-    paddingTop: 32,
+    paddingTop: 12,
     paddingBottom: 40,
   },
 
