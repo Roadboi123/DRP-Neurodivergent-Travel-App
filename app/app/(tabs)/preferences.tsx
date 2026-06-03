@@ -9,6 +9,8 @@ import {
   StatusBar,
   TextInput,
 } from 'react-native';
+import { API_BASE_URL } from '@/constants/api';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type SensitivityLevel = 'little' | 'manageable' | 'dontcare';
 
@@ -34,26 +36,45 @@ const OPTIONS: { value: SensitivityLevel; label: string }[] = [
   { value: 'dontcare', label: 'Do not care' },
 ];
 
-const OPTION_COLORS: Record<
-  SensitivityLevel,
-  { bg: string; text: string; border: string }
-> = {
-  little: {
-    bg: '#FFE8E8',
-    text: '#C0392B',
-    border: '#F5A9A9',
-  },
-  manageable: {
-    bg: '#FFF3DC',
-    text: '#B7770D',
-    border: '#F5D08A',
-  },
-  dontcare: {
-    bg: '#EAEAEA',
-    text: '#666666',
-    border: '#CCCCCC',
-  },
-};
+function getOptionColors(value: SensitivityLevel, isDark: boolean) {
+  if (isDark) {
+    return {
+      little: {
+        bg: '#4A1D1D',
+        text: '#FF8A8A',
+        border: '#7E2A2A',
+      },
+      manageable: {
+        bg: '#3E2F1F',
+        text: '#FFB74D',
+        border: '#60462B',
+      },
+      dontcare: {
+        bg: '#2E3543',
+        text: '#AAAAAA',
+        border: '#3E475A',
+      },
+    }[value];
+  } else {
+    return {
+      little: {
+        bg: '#FFE8E8',
+        text: '#C0392B',
+        border: '#F5A9A9',
+      },
+      manageable: {
+        bg: '#FFF3DC',
+        text: '#B7770D',
+        border: '#F5D08A',
+      },
+      dontcare: {
+        bg: '#EAEAEA',
+        text: '#666666',
+        border: '#CCCCCC',
+      },
+    }[value];
+  }
+}
 
 const INITIAL_PREFERENCES: Preference[] = [
   { id: 'noise', label: 'Noise', emoji: '🔊', value: null },
@@ -67,12 +88,14 @@ function OptionChip({
   option,
   selected,
   onPress,
+  isDark,
 }: {
   option: { value: SensitivityLevel; label: string };
   selected: boolean;
   onPress: () => void;
+  isDark: boolean;
 }) {
-  const colors = OPTION_COLORS[option.value];
+  const colors = getOptionColors(option.value, isDark);
 
   return (
     <TouchableOpacity
@@ -85,7 +108,7 @@ function OptionChip({
               backgroundColor: colors.bg,
               borderColor: colors.border,
             }
-          : styles.chipUnselected,
+          : (isDark ? styles.chipUnselectedDark : styles.chipUnselected),
       ]}
     >
       {option.value === 'dontcare' && (
@@ -107,7 +130,7 @@ function OptionChip({
                 color: colors.text,
                 fontWeight: '600',
               }
-            : styles.chipLabelUnselected,
+            : (isDark ? styles.chipLabelUnselectedDark : styles.chipLabelUnselected),
         ]}
       >
         {option.label}
@@ -119,15 +142,17 @@ function OptionChip({
 function PreferenceRow({
   preference,
   onSelect,
+  isDark,
 }: {
   preference: Preference;
   onSelect: (id: string, value: SensitivityLevel) => void;
+  isDark: boolean;
 }) {
   return (
     <View style={styles.row}>
       <View style={styles.rowLabel}>
         <Text style={styles.rowEmoji}>{preference.emoji}</Text>
-        <Text style={styles.rowText}>{preference.label}</Text>
+        <Text style={[styles.rowText, isDark && { color: '#FFF' }]}>{preference.label}</Text>
       </View>
 
       <View style={styles.chipRow}>
@@ -137,6 +162,7 @@ function PreferenceRow({
             option={option}
             selected={preference.value === option.value}
             onPress={() => onSelect(preference.id, option.value)}
+            isDark={isDark}
           />
         ))}
       </View>
@@ -165,7 +191,7 @@ export default function UserPreferencesScreen() {
         setLoading(true);
 
         const res = await fetch(
-          `https://drp-neurodivergent-travel-app-production.up.railway.app/preferences/${username.trim()}`
+          `${API_BASE_URL}/preferences/${username.trim()}`
         );
 
         if (!res.ok) {
@@ -243,7 +269,7 @@ export default function UserPreferencesScreen() {
 
     try {
       const res = await fetch(
-        'https://drp-neurodivergent-travel-app-production.up.railway.app/preferences/',
+        `${API_BASE_URL}/preferences/`,
         {
           method: 'POST',
           headers: {
@@ -286,15 +312,17 @@ export default function UserPreferencesScreen() {
     }
   };
 
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const completedCount = preferences.filter(
     (p) => p.value !== null
   ).length;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, isDark && { backgroundColor: '#121517' }]}>
       <StatusBar
-        barStyle="dark-content"
-        backgroundColor="#FAFAF8"
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#121517' : '#FAFAF8'}
       />
 
       <ScrollView
@@ -303,18 +331,18 @@ export default function UserPreferencesScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>
+          <Text style={[styles.title, isDark && { color: '#FFF' }]}>
             Your preferences
           </Text>
 
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, isDark && { color: '#AAA' }]}>
             Tell us what affects you most — we will
             find calmer routes for you.
           </Text>
 
           {/* Username Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>
+            <Text style={[styles.inputLabel, isDark && { color: '#CCC' }]}>
               Username
             </Text>
 
@@ -325,14 +353,21 @@ export default function UserPreferencesScreen() {
                 setUsername(text);
               }}
               placeholder="Enter your username"
-              placeholderTextColor="#999"
-              style={styles.input}
+              placeholderTextColor={isDark ? '#555' : '#999'}
+              style={[
+                styles.input,
+                isDark && {
+                  backgroundColor: '#1E2229',
+                  borderColor: '#2E3543',
+                  color: '#FFF',
+                },
+              ]}
               autoCapitalize="none"
               autoCorrect={false}
             />
 
             {loading && (
-              <Text style={styles.loadingText}>
+              <Text style={[styles.loadingText, isDark && { color: '#888' }]}>
                 Loading preferences...
               </Text>
             )}
@@ -340,7 +375,7 @@ export default function UserPreferencesScreen() {
         </View>
 
         {/* Progress bar */}
-        <View style={styles.progressTrack}>
+        <View style={[styles.progressTrack, isDark && { backgroundColor: '#2E3543' }]}>
           <View
             style={[
               styles.progressFill,
@@ -355,13 +390,13 @@ export default function UserPreferencesScreen() {
           />
         </View>
 
-        <Text style={styles.progressLabel}>
+        <Text style={[styles.progressLabel, isDark && { color: '#888' }]}>
           {completedCount} of{' '}
           {preferences.length} set
         </Text>
 
         {/* Card */}
-        <View style={styles.card}>
+        <View style={[styles.card, isDark && { backgroundColor: '#1E2229', borderColor: '#2E3543', borderWidth: 1 }]}>
           {/* Column headers */}
           <View style={styles.columnHeaders}>
             <View style={styles.rowLabel} />
@@ -369,7 +404,7 @@ export default function UserPreferencesScreen() {
             {OPTIONS.map((o) => (
               <Text
                 key={o.value}
-                style={styles.columnHeader}
+                style={[styles.columnHeader, isDark && { color: '#777' }]}
               >
                 {o.value === 'dontcare'
                   ? 'Do not\ncare'
@@ -379,7 +414,7 @@ export default function UserPreferencesScreen() {
           </View>
 
           {/* Divider */}
-          <View style={styles.divider} />
+          <View style={[styles.divider, isDark && { backgroundColor: '#2E3543' }]} />
 
           {/* Rows */}
           {preferences.map((pref, i) => (
@@ -387,18 +422,19 @@ export default function UserPreferencesScreen() {
               <PreferenceRow
                 preference={pref}
                 onSelect={handleSelect}
+                isDark={isDark}
               />
 
               {i < preferences.length - 1 && (
-                <View style={styles.rowDivider} />
+                <View style={[styles.rowDivider, isDark && { backgroundColor: '#2E3543' }]} />
               )}
             </View>
           ))}
         </View>
 
         {/* Info note */}
-        <View style={styles.note}>
-          <Text style={styles.noteText}>
+        <View style={[styles.note, isDark && { backgroundColor: '#1C2935', borderColor: '#2C4F7C', borderWidth: 1 }]}>
+          <Text style={[styles.noteText, isDark && { color: '#81B4E5' }]}>
             💬 These preferences shape your route
             suggestions. You can update them
             anytime.
@@ -411,15 +447,17 @@ export default function UserPreferencesScreen() {
           activeOpacity={0.85}
           style={[
             styles.saveBtn,
-            !allSet && styles.saveBtnDisabled,
-            saved && styles.saveBtnSaved,
+            isDark && { backgroundColor: '#FFF' },
+            !allSet && (isDark ? styles.saveBtnDisabledDark : styles.saveBtnDisabled),
+            saved && (isDark ? styles.saveBtnSavedDark : styles.saveBtnSaved),
           ]}
           disabled={!allSet}
         >
           <Text
             style={[
               styles.saveBtnText,
-              saved && styles.saveBtnTextSaved,
+              isDark && !saved && { color: '#121517' },
+              saved && (isDark ? styles.saveBtnTextSavedDark : styles.saveBtnTextSaved),
             ]}
           >
             {saved
@@ -664,6 +702,22 @@ const styles = StyleSheet.create({
   },
 
   saveBtnTextSaved: {
+    color: '#FFFFFF',
+  },
+  chipUnselectedDark: {
+    backgroundColor: '#1C212A',
+    borderColor: '#2A313E',
+  },
+  chipLabelUnselectedDark: {
+    color: '#555555',
+  },
+  saveBtnDisabledDark: {
+    backgroundColor: '#2E3543',
+  },
+  saveBtnSavedDark: {
+    backgroundColor: '#1D9E75',
+  },
+  saveBtnTextSavedDark: {
     color: '#FFFFFF',
   },
 });

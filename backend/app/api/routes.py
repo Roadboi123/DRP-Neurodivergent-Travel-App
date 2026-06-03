@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 
 from app.integrations.supabase import supabase
 from app.integrations import tlf_client
-from app.integrations import gmaps_client
+from app.integrations import osm_client
 from app.integrations import route_resolver
 
 routes_router = APIRouter(prefix="/routes", tags=["routes"])
@@ -82,14 +82,48 @@ def _calculate_leg_sensory(leg: dict) -> tuple[int, int, int, int, int]:
         
     return noise, crowds, heat, light, smell
 
-def _build_route_option(index: int, journey: dict) -> dict:
+async def _calculate_leg_sensory_live(leg: dict) -> tuple[int, int, int, int, int]:
+    """
+    Determine sensory profile statically, and overlay live TfL crowding & disruption alerts.
+    """
+    # 1. Start with static baseline heuristics
+    noise, crowds, heat, light, smell = _calculate_leg_sensory(leg)
+    
+    # 2. Check live APIs for transit NaPTAN points
+    dep_naptan = leg.get("departure_naptan", "")
+    arr_naptan = leg.get("arrival_naptan", "")
+    
+    tasks = []
+    if dep_naptan:
+        tasks.append(tlf_client.check_live_station_disruption(dep_naptan))
+        tasks.append(tlf_client.check_live_station_crowding(dep_naptan))
+    if arr_naptan:
+        tasks.append(tlf_client.check_live_station_disruption(arr_naptan))
+        tasks.append(tlf_client.check_live_station_crowding(arr_naptan))
+        
+    if tasks:
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # If any live check returns True, escalate crowds and noise to High (3)
+            if any(r is True for r in results):
+                crowds = 3
+                noise = 3
+        except Exception:
+            pass  # Fall back to static heuristics on any error
+            
+    return noise, crowds, heat, light, smell
+
+async def _build_route_option(index: int, journey: dict) -> dict:
     """
     Format a fetched API journey route to match the frontend RouteOption model schema.
     """
     legs = journey.get("legs", [])
     
-    # Calculate sensory levels per leg, and use max-pooling for overall journey load
-    leg_profiles = [_calculate_leg_sensory(leg) for leg in legs]
+    # Calculate sensory levels per leg asynchronously with live API feeds, and use max-pooling for overall journey load
+    tasks = [_calculate_leg_sensory_live(leg) for leg in legs]
+    leg_profiles = await asyncio.gather(*tasks, return_exceptions=True)
+    leg_profiles = [p for p in leg_profiles if isinstance(p, tuple)]
+    
     if leg_profiles:
         noise = max(p[0] for p in leg_profiles)
         crowds = max(p[1] for p in leg_profiles)
@@ -168,6 +202,10 @@ def _build_route_option(index: int, journey: dict) -> dict:
             desc_parts.append(f"Requires {changes} line transfer{'s' if changes > 1 else ''} which increases walking and platform crowding.")
         else:
             desc_parts.append("Direct line journey with no platform transfers.")
+            
+        total_wait = sum(int(l.get("connection_waiting_mins", 0)) for l in legs)
+        if total_wait > 0:
+            desc_parts.append(f"Includes {total_wait} minute{'s' if total_wait > 1 else ''} of waiting/interchange time between trains on platforms.")
 
     description = " ".join(desc_parts)
     
@@ -185,7 +223,34 @@ def _build_route_option(index: int, journey: dict) -> dict:
             "departure": l.get("departure", ""),
             "arrival": l.get("arrival", ""),
             "instruction": l.get("instruction", ""),
+            "stops": l.get("stops", []),
+            "connection_waiting_mins": l.get("connection_waiting_mins", 0),
         })
+
+    # Build features tag list for cleaner UI rendering
+    features = []
+    
+    if has_walk_only:
+        features.append({"type": "aircon", "label": "Fresh Air", "icon": "leaf-outline", "color": "green"})
+        features.append({"type": "noise", "label": "Quiet Route", "icon": "volume-mute-outline", "color": "green"})
+    else:
+        if has_deep_tube:
+            features.append({"type": "aircon", "label": "No A/C", "icon": "alert-circle-outline", "color": "red"})
+            features.append({"type": "heat", "label": "Warm Carriage", "icon": "thermometer-outline", "color": "red"})
+            features.append({"type": "noise", "label": "Loud Rail Squeal", "icon": "volume-high-outline", "color": "red"})
+        else:
+            features.append({"type": "aircon", "label": "Air Conditioned", "icon": "snow-outline", "color": "green"})
+            features.append({"type": "noise", "label": "Quiet Tracks", "icon": "volume-low-outline", "color": "green"})
+
+    changes = max(len([l for l in legs if str(l.get("mode", "")).lower() != "walking"]) - 1, 0)
+    if changes == 0:
+        features.append({"type": "transfers", "label": "Direct Line", "icon": "arrow-forward-outline", "color": "green"})
+    else:
+        features.append({"type": "transfers", "label": f"{changes} Transfer{'s' if changes > 1 else ''}", "icon": "shuffle-outline", "color": "orange"})
+
+    total_wait = sum(int(l.get("connection_waiting_mins", 0)) for l in legs)
+    if total_wait > 0:
+        features.append({"type": "waiting", "label": f"{total_wait}m Plat. Wait", "icon": "time-outline", "color": "orange"})
 
     return {
         "id": f"real_r{index}",
@@ -201,10 +266,11 @@ def _build_route_option(index: int, journey: dict) -> dict:
         "description": description,
         "source": source,
         "legs": formatted_legs,
+        "features": features,
     }
 
 @routes_router.get("/", response_model=List[Dict[str, Any]])
-async def get_routes(start: str, end: str, username: Optional[str] = None):
+async def get_routes(start: str, end: str, username: Optional[str] = None, walking_speed: Optional[str] = "slow"):
     """
     Get live routing options resolved from TfL and Google Maps,
     automatically scored and prioritized based on Supabase saved sensory tolerances.
@@ -224,10 +290,23 @@ async def get_routes(start: str, end: str, username: Optional[str] = None):
     tfl_task = None
     gmaps_task = None
 
+    # Geocode to coordinates to bypass TfL "300 Multiple Choices" ambiguity redirects (only for London/commuter belt queries)
+    from app.integrations.osm_client import geocode
+    start_coords = await geocode(start)
+    end_coords = await geocode(end)
+    
+    def is_in_commuter_belt(lat: float, lon: float) -> bool:
+        # Covers the entire London commuter belt from Reading/Slough in the west (-1.05 lon)
+        # to Shenfield/Southend in the east (0.45 lon), plus commuter limits north/south
+        return 51.15 <= lat <= 51.85 and -1.05 <= lon <= 0.45
+        
+    tfl_start = f"{start_coords[0]},{start_coords[1]}" if (start_coords and is_in_commuter_belt(start_coords[0], start_coords[1])) else start
+    tfl_end = f"{end_coords[0]},{end_coords[1]}" if (end_coords and is_in_commuter_belt(end_coords[0], end_coords[1])) else end
+
     if strategy in ("tfl", "both"):
-        tfl_task = tlf_client.get_routes(start, end)
+        tfl_task = tlf_client.get_routes(tfl_start, tfl_end, walking_speed=walking_speed)
     if strategy in ("google", "both"):
-        gmaps_task = gmaps_client.get_walking_routes(start, end)
+        gmaps_task = osm_client.get_walking_routes(start, end)
 
     raw_journeys = []
 
@@ -253,13 +332,19 @@ async def get_routes(start: str, end: str, username: Optional[str] = None):
     except Exception as e:
         print(f"Error querying live routing APIs: {e}")
 
-    # Map raw journeys to frontend schema
-    routes = []
-    for i, j in enumerate(raw_journeys):
-        try:
-            routes.append(_build_route_option(i, j))
-        except Exception as ex:
-            print(f"Error building route option for journey {i}: {ex}")
+    # Map raw journeys to frontend schema asynchronously in parallel
+    tasks = [_build_route_option(i, j) for i, j in enumerate(raw_journeys)]
+    route_options = await asyncio.gather(*tasks, return_exceptions=True)
+    routes = [r for r in route_options if isinstance(r, dict)]
+
+    # Filter out walking options that take longer than 30 minutes,
+    # unless it is the only option available (to ensure results are never empty)
+    has_transit = any(r.get("source") == "tfl" for r in routes)
+    if has_transit:
+        routes = [
+            r for r in routes
+            if not (r.get("source") == "google" and r.get("duration", 0) > 30)
+        ]
 
     if not routes:
         # If real API queries return absolutely nothing, we raise an empty response

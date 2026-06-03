@@ -2,12 +2,9 @@
 Route resolver — decides whether to use TfL, Google Maps, or both,
 based on the destination type and distance.
 """
-import httpx
 import os
 import math
-
-GMAPS_BASE = "https://maps.googleapis.com/maps/api"
-API_KEY    = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+from app.integrations.osm_client import geocode as _geocode
 
 # Destinations matching these keywords are likely off-road
 # and should use Google Maps instead of TfL
@@ -19,7 +16,7 @@ OFF_ROAD_KEYWORDS = [
 
 # If the straight-line distance is under this threshold,
 # it's probably walkable — skip TfL entirely
-WALKING_DISTANCE_THRESHOLD_M = 1500
+WALKING_DISTANCE_THRESHOLD_M = 600
 
 
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -38,18 +35,7 @@ def _looks_off_road(destination: str) -> bool:
     return any(keyword in dest_lower for keyword in OFF_ROAD_KEYWORDS)
 
 
-async def _geocode(place: str) -> tuple[float, float] | None:
-    """Convert a place name or postcode to lat/lon using Google Geocoding."""
-    params = {"address": place, "key": API_KEY, "region": "gb"}
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        res = await client.get(f"{GMAPS_BASE}/geocode/json", params=params)
-        res.raise_for_status()
-        data = res.json()
-
-    if data.get("status") == "OK" and data.get("results"):
-        loc = data["results"][0]["geometry"]["location"]
-        return loc["lat"], loc["lng"]
-    return None
+# _geocode is imported directly from osm_client
 
 
 async def resolve_source(

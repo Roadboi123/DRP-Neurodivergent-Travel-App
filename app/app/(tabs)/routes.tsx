@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Fonts } from '@/constants/theme';
+import { API_BASE_URL } from '@/constants/api';
 
 // Types for Route Suggestions
 type SensoryLevel = 1 | 2 | 3; // 1 = Low (Green), 2 = Med (Orange), 3 = High (Red)
@@ -25,6 +26,8 @@ interface LegOption {
   departure: string;
   arrival: string;
   instruction: string;
+  stops?: string[];
+  connection_waiting_mins?: number;
 }
 
 interface RouteOption {
@@ -45,6 +48,7 @@ interface RouteOption {
   sensory_description?: string;
   description: string;
   legs?: LegOption[];
+  features?: { type: string; label: string; icon: string; color: string }[];
 }
 
 interface WarningItem {
@@ -90,6 +94,7 @@ export default function RoutesScreen() {
   const [endLoc, setEndLoc] = useState('Imperial College London');
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const walkingSpeed = 'slow';
 
   // Sorting and filtering states
   const [sortBy, setSortBy] = useState<'speed' | 'sensory'>('speed');
@@ -98,6 +103,8 @@ export default function RoutesScreen() {
 
   // Routes state
   const [routes, setRoutes] = useState<RouteOption[]>([]);
+  const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
+  const [expandedLegStops, setExpandedLegStops] = useState<Record<string, boolean>>({});
 
   // Hydration fix
   const [mounted, setMounted] = useState(false);
@@ -110,7 +117,7 @@ export default function RoutesScreen() {
     let active = true;
 
     async function fetchRoutes() {
-      if (!startLoc.trim() || !endLoc.trim()) {
+      if (startLoc.trim().length < 3 || endLoc.trim().length < 3) {
         setRoutes([]);
         return;
       }
@@ -122,12 +129,11 @@ export default function RoutesScreen() {
         const endParam = encodeURIComponent(endLoc.trim());
         const userParam = username.trim() ? `&username=${encodeURIComponent(username.trim())}` : '';
 
-        // Fetch from Railway production backend - added trailing slash to prevent HTTP redirect
-        const url = `https://drp-neurodivergent-travel-app-production.up.railway.app/routes/?start=${startParam}&end=${endParam}${userParam}`;
+        const url = `${API_BASE_URL}/routes/?start=${startParam}&end=${endParam}${userParam}&walking_speed=${walkingSpeed}`;
         
         const res = await fetch(url);
         if (!res.ok) {
-          throw new Error('Railway backend response error');
+          throw new Error('Backend response error');
         }
 
         const data = await res.json();
@@ -135,29 +141,9 @@ export default function RoutesScreen() {
           setRoutes(data);
         }
       } catch (error) {
-        console.warn('Production backend unavailable, trying local backend...', error);
-        
-        try {
-          const startParam = encodeURIComponent(startLoc.trim());
-          const endParam = encodeURIComponent(endLoc.trim());
-          const userParam = username.trim() ? `&username=${encodeURIComponent(username.trim())}` : '';
-          
-          const localUrl = `http://localhost:8000/routes/?start=${startParam}&end=${endParam}${userParam}`;
-          const localRes = await fetch(localUrl);
-          
-          if (!localRes.ok) {
-            throw new Error('Local backend response error');
-          }
-
-          const localData = await localRes.json();
-          if (active) {
-            setRoutes(localData);
-          }
-        } catch (localError) {
-          console.warn('Local backend unavailable...', localError);
-          if (active) {
-            setRoutes([]);
-          }
+        console.warn('Failed to fetch routes from backend:', error);
+        if (active) {
+          setRoutes([]);
         }
       } finally {
         if (active) {
@@ -168,13 +154,13 @@ export default function RoutesScreen() {
 
     const timer = setTimeout(() => {
       fetchRoutes();
-    }, 400);
+    }, 1000); // Increased debounce to 1 second to allow user to finish typing and prevent API spam
 
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [startLoc, endLoc, username]);
+  }, [startLoc, endLoc, username, walkingSpeed]);
 
   // Apply sorting and filtering
   const getSortedRoutes = () => {
@@ -250,6 +236,37 @@ export default function RoutesScreen() {
     );
   };
 
+  // Find the pure walking route to dynamically update quick widgets
+  const walkingRoute = routes.find(
+    (r) =>
+      r.name.toLowerCase().includes('walk') &&
+      r.legs &&
+      r.legs.length === 1 &&
+      r.legs[0].mode.toLowerCase() === 'walking'
+  );
+  const actualWalkDur = walkingRoute ? walkingRoute.duration : null;
+
+  const getWidgetDuration = (mode: 'walk' | 'cycle' | 'scooter' | 'taxi') => {
+    if (!actualWalkDur) {
+      if (mode === 'walk') return '41 min';
+      if (mode === 'cycle') return '16 min';
+      if (mode === 'scooter') return '31 min';
+      return '23 min';
+    }
+    
+    if (mode === 'walk') return `${actualWalkDur} min`;
+    if (mode === 'cycle') return `${Math.max(1, Math.round(actualWalkDur / 3.0))} min`;
+    if (mode === 'scooter') return `${Math.max(1, Math.round(actualWalkDur / 2.2))} min`;
+    return `${Math.max(1, Math.round(actualWalkDur / 1.8))} min`;
+  };
+
+  const getTaxiPrice = () => {
+    if (!actualWalkDur) return '~£14';
+    const drivingMins = Math.max(5, Math.round(actualWalkDur / 1.8));
+    const estimatedPrice = 3.20 + drivingMins * 0.90;
+    return `~£${Math.round(estimatedPrice)}`;
+  };
+
   if (!mounted) {
     return null;
   }
@@ -260,17 +277,6 @@ export default function RoutesScreen() {
 
       {/* Inputs Header Spacer */}
       <View style={styles.headerSpacer}>
-        {/* Navigation Bar */}
-        <View style={styles.navBar}>
-          <TouchableOpacity style={styles.backButton} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={24} color={isDark ? '#FFF' : '#1A1A1A'} />
-          </TouchableOpacity>
-          <Text style={[styles.navTitle, { color: isDark ? '#FFF' : '#1A1A1A', fontFamily: Fonts?.rounded }]}>
-            My Planner 
-          </Text>
-          <View style={{ width: 24 }} />
-        </View>
-
         {/* Input Fields Card */}
         <View
           style={[
@@ -378,9 +384,9 @@ export default function RoutesScreen() {
               <Ionicons name="walk" size={20} color="#4CAF50" />
               <Text style={[styles.modeLabel, { color: isDark ? '#FFF' : '#333' }]}>Walk</Text>
             </View>
-            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>41 min</Text>
+            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>{getWidgetDuration('walk')}</Text>
           </TouchableOpacity>
-
+ 
           <TouchableOpacity
             style={[
               styles.modeCard,
@@ -394,9 +400,9 @@ export default function RoutesScreen() {
               <Ionicons name="bicycle" size={20} color="#2196F3" />
               <Text style={[styles.modeLabel, { color: isDark ? '#FFF' : '#333' }]}>Cycle</Text>
             </View>
-            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>16 min</Text>
+            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>{getWidgetDuration('cycle')}</Text>
           </TouchableOpacity>
-
+ 
           <TouchableOpacity
             style={[
               styles.modeCard,
@@ -410,9 +416,9 @@ export default function RoutesScreen() {
               <Ionicons name="flash" size={18} color="#FFEB3B" />
               <Text style={[styles.modeLabel, { color: isDark ? '#FFF' : '#333' }]}>Scooter</Text>
             </View>
-            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>31 min</Text>
+            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>{getWidgetDuration('scooter')}</Text>
           </TouchableOpacity>
-
+ 
           <TouchableOpacity
             style={[
               styles.modeCard,
@@ -426,8 +432,8 @@ export default function RoutesScreen() {
               <Ionicons name="car-sport" size={18} color="#E04F5F" />
               <Text style={[styles.modeLabel, { color: isDark ? '#FFF' : '#333' }]}>Taxi</Text>
             </View>
-            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>23 min</Text>
-            <Text style={styles.taxiPrice}>~£14</Text>
+            <Text style={[styles.modeValue, { color: isDark ? '#AAA' : '#666' }]}>{getWidgetDuration('taxi')}</Text>
+            <Text style={styles.taxiPrice}>{getTaxiPrice()}</Text>
           </TouchableOpacity>
         </View>
 
@@ -682,9 +688,9 @@ export default function RoutesScreen() {
                               legBadgeColor = isDark ? '#4D1D1D' : '#FFEBEE';
                               legTextColor = isDark ? '#EF5350' : '#C62828';
                               displayName = leg.line ? `Bus ${leg.line}` : 'Bus';
-                            } else if (mode === 'tube' || mode === 'subway' || mode === 'underground') {
+                            } else if (mode === 'tube' || mode === 'subway' || mode === 'underground' || mode.includes('elizabeth')) {
                               iconName = 'subway';
-                              displayName = leg.line || 'Tube';
+                              displayName = leg.line || 'Elizabeth line';
                               
                               if (line.includes('central')) {
                                 legBadgeColor = '#B71C1C';
@@ -751,6 +757,126 @@ export default function RoutesScreen() {
                       </View>
                     )}
 
+                    {/* Toggle Button for detailed vertical steps */}
+                    {route.legs && route.legs.length > 0 && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setExpandedRoutes(prev => ({
+                            ...prev,
+                            [route.id]: !prev[route.id]
+                          }));
+                        }}
+                        activeOpacity={0.8}
+                        style={[
+                          styles.toggleDetailsButton,
+                          {
+                            backgroundColor: isDark ? '#2E3543' : '#F5F5F3',
+                            borderColor: isDark ? '#3A4254' : '#E2E2E0',
+                            marginTop: 10,
+                          }
+                        ]}
+                      >
+                        <Text style={[styles.toggleDetailsText, { color: isDark ? '#FFF' : '#333' }]}>
+                          {expandedRoutes[route.id] ? 'Hide Detailed Steps' : 'View Detailed Journey Steps'}
+                        </Text>
+                        <Ionicons
+                          name={expandedRoutes[route.id] ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color={isDark ? '#FFF' : '#333'}
+                        />
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Vertical detailed steps panel */}
+                    {route.legs && route.legs.length > 0 && expandedRoutes[route.id] && (
+                      <View style={[styles.detailsPanel, { borderTopColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
+                        {route.legs?.map((leg, lIdx) => {
+                          const mode = leg.mode.toLowerCase();
+                          
+                          // Select icon & color for this vertical leg step
+                          let iconName = 'walk';
+                          let legColor = '#4CAF50';
+                          if (mode === 'bus') {
+                            iconName = 'bus';
+                            legColor = '#F44336';
+                          } else if (mode === 'tube' || mode === 'subway' || mode === 'underground' || mode.includes('elizabeth')) {
+                            iconName = 'subway';
+                            legColor = mode.includes('elizabeth') || (leg.line && leg.line.toLowerCase().includes('elizabeth')) ? '#4A148C' : '#00838F';
+                          } else if (mode === 'train' || mode === 'national-rail') {
+                            iconName = 'train';
+                            legColor = '#0D47A1';
+                          }
+
+                          return (
+                            <View key={lIdx} style={styles.detailStepContainer}>
+                              {/* Left Column: Icon node and vertical connection line */}
+                              <View style={styles.stepIndicatorCol}>
+                                <View style={[styles.stepNode, { backgroundColor: legColor }]}>
+                                  <Ionicons name={iconName as any} size={11} color="#FFF" />
+                                </View>
+                                {lIdx < (route.legs?.length ?? 0) - 1 && (
+                                  <View style={[styles.stepLine, { backgroundColor: isDark ? '#444' : '#DDD' }]} />
+                                )}
+                              </View>
+
+                              {/* Right Column: Leg details */}
+                              <View style={styles.stepContentCol}>
+                                <Text style={[styles.stationText, { color: isDark ? '#FFF' : '#1A1A1A' }]}>
+                                  Depart {leg.departure}
+                                </Text>
+
+                                <Text style={[styles.instructionText, { color: isDark ? '#AAA' : '#666' }]}>
+                                  {leg.instruction} ({leg.duration_mins} mins)
+                                </Text>
+
+                                {leg.stops && leg.stops.length > 0 && (
+                                  <View style={styles.stopsDropdown}>
+                                    <TouchableOpacity
+                                      onPress={() => {
+                                        const legKey = `${route.id}_leg_${lIdx}`;
+                                        setExpandedLegStops(prev => ({
+                                          ...prev,
+                                          [legKey]: !prev[legKey]
+                                        }));
+                                      }}
+                                      activeOpacity={0.7}
+                                      style={styles.stopsDropdownHeader}
+                                    >
+                                      <Text style={[styles.stopsHeader, { color: isDark ? '#768B9E' : '#2C5E8A' }]}>
+                                        ⬇️ Passes through {leg.stops.length} stop{leg.stops.length > 1 ? 's' : ''} {expandedLegStops[`${route.id}_leg_${lIdx}`] ? '▴' : '▾'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                    {expandedLegStops[`${route.id}_leg_${lIdx}`] && (
+                                      <View style={styles.stopsList}>
+                                        {leg.stops.map((stop, sIdx) => (
+                                          <Text key={sIdx} style={[styles.stopItemText, { color: isDark ? '#A0AAB2' : '#556673' }]}>
+                                            • {stop}
+                                          </Text>
+                                        ))}
+                                      </View>
+                                    )}
+                                  </View>
+                                )}
+
+                                <Text style={[styles.stationText, { color: isDark ? '#FFF' : '#1A1A1A', marginTop: 4 }]}>
+                                  Arrive {leg.arrival}
+                                </Text>
+
+                                {leg.connection_waiting_mins !== undefined && leg.connection_waiting_mins > 0 && (
+                                  <View style={[styles.waitWarningCard, { backgroundColor: isDark ? '#2B2118' : '#FFF3E0', borderColor: isDark ? '#593D22' : '#FFE0B2' }]}>
+                                    <Ionicons name="time-outline" size={15} color="#FF9800" />
+                                    <Text style={[styles.waitWarningText, { color: isDark ? '#FFB74D' : '#E65100' }]}>
+                                      ⌛ Connection platform wait: {leg.connection_waiting_mins} min{leg.connection_waiting_mins > 1 ? 's' : ''} on platform before next transit segment
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+
                     {/* Sensory Compatibility Score Explanation */}
                     {route.sensory_description && (
                       <Text
@@ -771,10 +897,44 @@ export default function RoutesScreen() {
                       </Text>
                     )}
 
-                    {/* Explanation */}
-                    <Text style={[styles.routeDescription, { color: isDark ? '#9BA1A6' : '#666', marginTop: 6 }]}>
-                      💡 {route.description}
-                    </Text>
+                    {/* Visual Feature Badges Row */}
+                    {route.features && route.features.length > 0 && (
+                      <View style={styles.featuresBadgeContainer}>
+                        {route.features.map((f, fIdx) => {
+                          let badgeBg = isDark ? '#1C3224' : '#E8F5E9';
+                          let badgeTextCol = isDark ? '#81C784' : '#2E7D32';
+                          let badgeBorder = isDark ? '#2E4C38' : '#C8E6C9';
+                          
+                          if (f.color === 'red') {
+                            badgeBg = isDark ? '#3D1F1F' : '#FFEBEE';
+                            badgeTextCol = isDark ? '#E57373' : '#C62828';
+                            badgeBorder = isDark ? '#592D2D' : '#FFCDD2';
+                          } else if (f.color === 'orange') {
+                            badgeBg = isDark ? '#3E2F1F' : '#FFF3E0';
+                            badgeTextCol = isDark ? '#FFB74D' : '#E65100';
+                            badgeBorder = isDark ? '#60462B' : '#FFE0B2';
+                          }
+
+                          return (
+                            <View
+                              key={fIdx}
+                              style={[
+                                styles.featureBadgeItem,
+                                {
+                                  backgroundColor: badgeBg,
+                                  borderColor: badgeBorder,
+                                }
+                              ]}
+                            >
+                              <Ionicons name={f.icon as any} size={11} color={badgeTextCol} style={{ marginRight: 3 }} />
+                              <Text style={[styles.featureBadgeText, { color: badgeTextCol }]}>
+                                {f.label}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 </View>
               );
@@ -1166,5 +1326,131 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     textAlign: 'center',
+  },
+  paceButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paceText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  toggleDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 6,
+    marginVertical: 4,
+  },
+  toggleDetailsText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  detailsPanel: {
+    borderTopWidth: 1,
+    paddingTop: 14,
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 12,
+  },
+  detailStepContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  stepIndicatorCol: {
+    alignItems: 'center',
+    width: 24,
+  },
+  stepNode: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  stepLine: {
+    width: 2.5,
+    flex: 1,
+    marginTop: -2,
+    marginBottom: -10,
+    zIndex: 1,
+  },
+  stepContentCol: {
+    flex: 1,
+    gap: 2,
+    paddingBottom: 10,
+  },
+  stationText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  instructionText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  stopsDropdown: {
+    marginTop: 4,
+    paddingLeft: 8,
+    borderLeftWidth: 1.5,
+    borderLeftColor: '#4A90E2',
+    gap: 3,
+  },
+  stopsDropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  stopsHeader: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  stopsList: {
+    gap: 2,
+    marginTop: 2,
+  },
+  stopItemText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  waitWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  waitWarningText: {
+    fontSize: 11,
+    fontWeight: '700',
+    flex: 1,
+  },
+  featuresBadgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  featureBadgeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  featureBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
   },
 });

@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Fonts } from '@/constants/theme';
 import { useRouter } from 'expo-router';
+import { API_BASE_URL } from '@/constants/api';
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -30,7 +31,7 @@ export default function HomeScreen() {
     async function checkBackend() {
       try {
         const response = await fetch(
-          'https://drp-neurodivergent-travel-app-production.up.railway.app/health'
+          `${API_BASE_URL}/health`
         );
         const data = await response.json();
         if (data.status === 'ok') {
