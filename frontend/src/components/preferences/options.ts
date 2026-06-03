@@ -4,9 +4,9 @@ import type { SensitivityLevel } from '@/types/preference';
 // forest green (a little) to red (very high) to signal increasing severity.
 export const OPTIONS: { value: SensitivityLevel; label: string }[] = [
   { value: 'little', label: 'A little' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'veryhigh', label: 'Very high' },
+  { value: 'medium', label: 'Somewhat' },
+  { value: 'high', label: 'A lot' },
+  { value: 'veryhigh', label: 'Too much' },
 ];
 
 type ChipColors = { bg: string; text: string; border: string };

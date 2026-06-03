@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
   SafeAreaView,
@@ -6,10 +7,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
+import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
 import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
@@ -34,6 +37,7 @@ export default function UserPreferencesScreen() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [guideVisible, setGuideVisible] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -111,11 +115,16 @@ export default function UserPreferencesScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: palette.textPrimary }]}>Your preferences</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: palette.textPrimary }]}>Your preferences</Text>
 
-          <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
-            Tell us what things affect you the most
-          </Text>
+            <TouchableOpacity
+              onPress={() => setGuideVisible(true)}
+              hitSlop={10}
+              accessibilityLabel="About your preferences">
+              <Ionicons name="information-circle-outline" size={26} color={palette.textSecondary} />
+            </TouchableOpacity>
+          </View>
 
           {/* Username Input */}
           <View style={styles.inputContainer}>
@@ -155,6 +164,11 @@ export default function UserPreferencesScreen() {
           </View>
         </View>
 
+        {/* Scale prompt */}
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+          How much does each of these affect you?
+        </Text>
+
         {/* Card */}
         <View style={[styles.card, { backgroundColor: palette.surface }]}>
           {preferences.map((pref, i) => (
@@ -168,6 +182,8 @@ export default function UserPreferencesScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <PreferencesGuideSheet visible={guideVisible} onClose={() => setGuideVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -188,16 +204,23 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
 
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
   title: {
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: -0.5,
-    marginBottom: 6,
   },
 
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 21,
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginBottom: 12,
   },
 
   // Input

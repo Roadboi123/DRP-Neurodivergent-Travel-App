@@ -38,7 +38,10 @@ export function OptionChip({
                 fontWeight: '700',
               }
             : (isDark ? styles.chipLabelUnselectedDark : styles.chipLabelUnselected),
-        ]}>
+        ]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}>
         {option.label}
       </Text>
     </TouchableOpacity>
@@ -51,7 +54,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     borderRadius: 10,
     borderWidth: 1.5,
   },
