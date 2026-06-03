@@ -13,13 +13,14 @@ import { getOptionColors, OPTIONS } from '@/components/preferences/options';
 import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-// Short gloss for each severity level, keyed by the contract value so it stays
-// aligned with OPTIONS even if the labels are reworded.
+// Spell out exactly what each level does to a route, keyed by the contract value
+// so it stays aligned with OPTIONS even if the labels are reworded. Being concrete
+// (rather than "affects you a bit") was direct user feedback.
 const LEVEL_GLOSS: Record<string, string> = {
-  little: 'you barely notice it',
-  medium: 'it affects you a bit',
-  high: 'it affects you a lot',
-  veryhigh: 'overwhelming — best avoided',
+  little: 'we do not avoid this',
+  medium: 'we avoid more than 30 mins of this on a route where possible',
+  high: 'we avoid more than 15 mins of this on a route where possible',
+  veryhigh: 'we avoid this entirely where possible',
 };
 
 export function PreferencesGuideSheet({
