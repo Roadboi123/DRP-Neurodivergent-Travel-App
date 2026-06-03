@@ -62,7 +62,7 @@ async def geocode(place: str) -> tuple[float, float] | None:
     params = {
         "q": place,
         "format": "json",
-        "limit": 1,
+        "limit": "1",
         "countrycodes": "gb",  # Bias search results to the UK
         "viewbox": "-0.60,51.75,0.35,51.25"  # Heavily bias search results to Greater London/Oyster zones!
     }

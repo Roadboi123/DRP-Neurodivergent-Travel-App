@@ -7,12 +7,12 @@ TFL_BASE = "https://api.tfl.gov.uk"
 APP_KEY  = os.environ.get("TFL_APP_KEY", "")
 
 # In-memory caches to prevent spamming the TfL API and restore sub-100ms response times
-_LIVE_DISRUPTION_CACHE = {}
-_LIVE_CROWDING_CACHE = {}
+_LIVE_DISRUPTION_CACHE: dict[str, tuple[bool, float]] = {}
+_LIVE_CROWDING_CACHE: dict[str, tuple[bool, float]] = {}
 CACHE_TTL_SECS = 300  # 5-minute cache lifespan
 
-_DISRUPTION_LOCKS = {}
-_CROWDING_LOCKS = {}
+_DISRUPTION_LOCKS: dict[str, asyncio.Lock] = {}
+_CROWDING_LOCKS: dict[str, asyncio.Lock] = {}
 
 
 def _parse_leg(leg: dict) -> dict:

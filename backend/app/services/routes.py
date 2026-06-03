@@ -225,8 +225,8 @@ async def _build_route_option(index: int, journey: dict) -> dict:
     
     # Calculate sensory levels per leg asynchronously with live API feeds, and use max-pooling for overall journey load
     tasks = [_calculate_leg_sensory_live(leg) for leg in legs]
-    leg_profiles = await asyncio.gather(*tasks, return_exceptions=True)
-    leg_profiles = [p for p in leg_profiles if isinstance(p, tuple)]
+    raw_profiles = await asyncio.gather(*tasks, return_exceptions=True)
+    leg_profiles: List[tuple[int, int, int, int, int]] = [p for p in raw_profiles if isinstance(p, tuple)]
     
     if leg_profiles:
         noise = max(p[0] for p in leg_profiles)
@@ -267,7 +267,7 @@ async def _build_route_option(index: int, journey: dict) -> dict:
 
     if transit_names:
         # De-duplicate adjacent duplicates
-        deduped = []
+        deduped: List[str] = []
         for name in transit_names:
             if not deduped or deduped[-1] != name:
                 deduped.append(name)
@@ -405,8 +405,9 @@ async def get_route_suggestions(
         strategy = "both"
 
     # 2. Query clients in parallel based on strategy
-    tfl_task = None
-    gmaps_task = None
+    from typing import Coroutine
+    tfl_task: Optional[Coroutine[Any, Any, List[Dict[str, Any]]]] = None
+    gmaps_task: Optional[Coroutine[Any, Any, List[Dict[str, Any]]]] = None
 
     # Geocode to coordinates to bypass TfL "300 Multiple Choices" ambiguity redirects (only for London/commuter belt queries)
     from app.integrations.osm_client import geocode
