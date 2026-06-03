@@ -159,26 +159,8 @@ export default function RoutesScreen() {
 
       <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* Warnings Banner + Options/Edit button */}
-        <View style={styles.warningsRow}>
-          <View style={{ flex: 1 }}>
-            <WarningsPanel />
-          </View>
-          <TouchableOpacity
-            onPress={() => router.push('/preferences')}
-            activeOpacity={0.8}
-            style={[
-              styles.editButton,
-              {
-                backgroundColor: isDark ? '#2E3543' : '#FFF5F0',
-                borderColor: '#FF7F50',
-              }
-            ]}
-          >
-            <Ionicons name="construct-outline" size={16} color="#FF7F50" />
-            <Text style={[styles.editButtonText, { color: isDark ? '#FF9E79' : '#D04E1F' }]}>Edit</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Warnings Banner */}
+        <WarningsPanel />
 
         {/* Sort tab (Preference | Speed) + Filters button */}
         <View style={styles.controlsRow}>
@@ -283,27 +265,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
-  },
-  warningsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginVertical: 4,
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    gap: 5,
-    height: 52,
-  },
-  editButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   controlsRow: {
     flexDirection: 'row',
