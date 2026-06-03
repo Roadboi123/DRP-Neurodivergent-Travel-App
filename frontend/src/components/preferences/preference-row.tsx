@@ -2,6 +2,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { OptionChip } from '@/components/preferences/option-chip';
 import { OPTIONS } from '@/components/preferences/options';
+import { getPalette } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
 export function PreferenceRow({
@@ -11,11 +13,13 @@ export function PreferenceRow({
   preference: Preference;
   onSelect: (id: string, value: SensitivityLevel) => void;
 }) {
+  const palette = getPalette(useColorScheme() === 'dark');
+
   return (
     <View style={styles.row}>
       <View style={styles.rowLabel}>
         <Text style={styles.rowEmoji}>{preference.emoji}</Text>
-        <Text style={styles.rowText}>{preference.label}</Text>
+        <Text style={[styles.rowText, { color: palette.textPrimary }]}>{preference.label}</Text>
       </View>
 
       <View style={styles.chipRow}>
@@ -48,7 +52,6 @@ const styles = StyleSheet.create({
   rowText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
     letterSpacing: -0.2,
   },
   chipRow: {

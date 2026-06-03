@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
+import { getPalette } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
@@ -32,6 +34,9 @@ export default function UserPreferencesScreen() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  const isDark = useColorScheme() === 'dark';
+  const palette = getPalette(isDark);
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -97,33 +102,49 @@ export default function UserPreferencesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAFAF8" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={palette.background}
+      />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Your preferences</Text>
+          <Text style={[styles.title, { color: palette.textPrimary }]}>Your preferences</Text>
 
-          <Text style={styles.subtitle}>Tell us what things affect you the most</Text>
+          <Text style={[styles.subtitle, { color: palette.textSecondary }]}>
+            Tell us what things affect you the most
+          </Text>
 
           {/* Username Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Username</Text>
+            <Text style={[styles.inputLabel, { color: palette.textPrimary }]}>Username</Text>
 
             <TextInput
               value={username}
               onChangeText={setUsername}
               placeholder="Enter your username"
-              placeholderTextColor="#999"
-              style={styles.input}
+              placeholderTextColor={palette.textMuted}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: palette.surface,
+                  borderColor: palette.border,
+                  color: palette.textPrimary,
+                },
+              ]}
               autoCapitalize="none"
               autoCorrect={false}
             />
 
-            {loading && <Text style={styles.statusText}>Loading preferences…</Text>}
+            {loading && (
+              <Text style={[styles.statusText, { color: palette.textMuted }]}>
+                Loading preferences…
+              </Text>
+            )}
             {!loading && saveStatus === 'saving' && (
-              <Text style={styles.statusText}>Saving…</Text>
+              <Text style={[styles.statusText, { color: palette.textMuted }]}>Saving…</Text>
             )}
             {!loading && saveStatus === 'saved' && (
               <Text style={[styles.statusText, styles.statusSaved]}>✓ Saved</Text>
@@ -135,12 +156,14 @@ export default function UserPreferencesScreen() {
         </View>
 
         {/* Card */}
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: palette.surface }]}>
           {preferences.map((pref, i) => (
             <View key={pref.id}>
               <PreferenceRow preference={pref} onSelect={handleSelect} />
 
-              {i < preferences.length - 1 && <View style={styles.rowDivider} />}
+              {i < preferences.length - 1 && (
+                <View style={[styles.rowDivider, { backgroundColor: palette.divider }]} />
+              )}
             </View>
           ))}
         </View>
@@ -152,7 +175,6 @@ export default function UserPreferencesScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#FAFAF8',
   },
 
   container: {
@@ -169,14 +191,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1A1A1A',
     letterSpacing: -0.5,
     marginBottom: 6,
   },
 
   subtitle: {
     fontSize: 15,
-    color: '#666666',
     lineHeight: 21,
   },
 
@@ -188,25 +208,20 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333333',
     marginBottom: 8,
   },
 
   input: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E5E5E5',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 15,
-    color: '#1A1A1A',
   },
 
   statusText: {
     marginTop: 8,
     fontSize: 13,
-    color: '#888888',
   },
 
   statusSaved: {
@@ -221,7 +236,6 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -239,6 +253,5 @@ const styles = StyleSheet.create({
 
   rowDivider: {
     height: 1,
-    backgroundColor: '#F5F5F3',
   },
 });
