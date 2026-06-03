@@ -44,7 +44,7 @@ async def geocode(place: str) -> tuple[float, float] | None:
         return _GEOCODE_CACHE[cache_key]
     
     # 1. Check if it's already a lat,lon pair
-    coord_match = re.match(r"^[-+]?([0-9]*\.[0-9]+|[0-9]+)\s*,\s*[-+]?([0-9]*\.[0-9]+|[0-9]+)$", place)
+    coord_match = re.match(r"^([-+]?(?:[0-9]*\.[0-9]+|[0-9]+))\s*,\s*([-+]?(?:[0-9]*\.[0-9]+|[0-9]+))$", place)
     if coord_match:
         try:
             coords = (float(coord_match.group(1)), float(coord_match.group(2)))

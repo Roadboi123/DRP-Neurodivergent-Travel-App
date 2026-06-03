@@ -2,27 +2,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI
-from app.api.routes import routes_router
-from app.api.health import health_router
-from app.api.database_health import dbrouter
-from app.api.preferences import pref_router
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import diagnostics, health, preferences, routes
+from app.config import settings
 
 app = FastAPI(
-    title="Calm Travel API",
-    version="0.1.0"
+    title=settings.API_TITLE,
+    version=settings.API_VERSION,
 )
-
-
-origins = [
-    "https://drp10-nd-travel-app.vercel.app",
-    "http://localhost:19006",
-    "http://localhost:8081",
-    "http://localhost:8082",
-    "http://localhost:3000",
-    "*",
-]
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,10 +20,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health_router)
-app.include_router(dbrouter)
-app.include_router(pref_router)
-app.include_router(routes_router)
+app.include_router(health.router)
+app.include_router(diagnostics.router)
+app.include_router(preferences.router)
+app.include_router(routes.router)
+
 
 @app.get("/")
 async def root():

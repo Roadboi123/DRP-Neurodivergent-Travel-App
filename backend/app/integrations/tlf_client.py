@@ -22,6 +22,10 @@ def _parse_leg(leg: dict) -> dict:
         "arrival":       leg.get("arrivalPoint", {}).get("commonName", ""),
         "departure_naptan": leg.get("departurePoint", {}).get("naptanId", ""),
         "arrival_naptan":   leg.get("arrivalPoint", {}).get("naptanId", ""),
+        "departure_lat":    leg.get("departurePoint", {}).get("lat"),
+        "departure_lon":    leg.get("departurePoint", {}).get("lon"),
+        "arrival_lat":      leg.get("arrivalPoint", {}).get("lat"),
+        "arrival_lon":      leg.get("arrivalPoint", {}).get("lon"),
         "departs_at":    leg.get("departureTime", ""),
         "arrives_at":    leg.get("arrivalTime", ""),
         "duration_mins": leg.get("duration", 0),
@@ -187,6 +191,7 @@ async def get_routes(
     params: dict = {
         "alternativeWalking": "true",
         "nationalSearch":     "true",
+        "maxWalkingMinutes":  "60",
     }
     if APP_KEY:
         params["app_key"] = APP_KEY
