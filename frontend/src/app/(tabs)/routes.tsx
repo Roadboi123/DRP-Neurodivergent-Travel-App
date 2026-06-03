@@ -10,8 +10,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 
+import { HeaderNav } from '@/components/ui/header-nav';
 import { RouteCard } from '@/components/routes/route-card';
 import { RouteFilterSheet } from '@/components/routes/route-filter-sheet';
 import {
@@ -138,14 +138,7 @@ export default function RoutesScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Navigation Icons */}
-      <View style={styles.headerNavRow}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.navIconBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
-          <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/')} style={[styles.navIconBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
-          <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      <HeaderNav />
 
       <RouteSearchInputs
         startLoc={startLoc}
@@ -247,20 +240,6 @@ export default function RoutesScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-  },
-  headerNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  navIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollContent: {
     paddingHorizontal: 16,
