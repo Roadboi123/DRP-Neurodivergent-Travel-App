@@ -29,17 +29,6 @@ export function RouteSearchInputs({
 
   return (
     <View style={styles.headerSpacer}>
-      {/* Navigation Bar */}
-      <View style={styles.navBar}>
-        <TouchableOpacity style={styles.backButton} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color={palette.textPrimary} />
-        </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
-          My Planner{' '}
-        </Text>
-        <View style={{ width: 24 }} />
-      </View>
-
       {/* Input Fields Card */}
       <View
         style={[

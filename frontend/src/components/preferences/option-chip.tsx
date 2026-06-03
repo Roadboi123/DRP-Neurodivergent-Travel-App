@@ -1,6 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 
-import { OPTION_COLORS } from '@/components/preferences/options';
+import { getOptionColors } from '@/components/preferences/options';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SensitivityLevel } from '@/types/preference';
 
 export function OptionChip({
@@ -12,7 +13,8 @@ export function OptionChip({
   selected: boolean;
   onPress: () => void;
 }) {
-  const colors = OPTION_COLORS[option.value];
+  const isDark = useColorScheme() === 'dark';
+  const colors = getOptionColors(option.value, isDark);
 
   return (
     <TouchableOpacity
@@ -25,7 +27,7 @@ export function OptionChip({
               backgroundColor: colors.bg,
               borderColor: colors.border,
             }
-          : styles.chipUnselected,
+          : (isDark ? styles.chipUnselectedDark : styles.chipUnselected),
       ]}>
       {option.value === 'dontcare' && (
         <Text style={[styles.chipX, selected && { color: colors.text }]}>✕ </Text>
@@ -39,7 +41,7 @@ export function OptionChip({
                 color: colors.text,
                 fontWeight: '600',
               }
-            : styles.chipLabelUnselected,
+            : (isDark ? styles.chipLabelUnselectedDark : styles.chipLabelUnselected),
         ]}>
         {option.label}
       </Text>
@@ -61,6 +63,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F7F5',
     borderColor: '#E8E8E6',
   },
+  chipUnselectedDark: {
+    backgroundColor: '#1C212A',
+    borderColor: '#2A313E',
+  },
   chipX: {
     fontSize: 10,
     color: '#AAAAAA',
@@ -74,5 +80,8 @@ const styles = StyleSheet.create({
   },
   chipLabelUnselected: {
     color: '#BBBBBB',
+  },
+  chipLabelUnselectedDark: {
+    color: '#555555',
   },
 });

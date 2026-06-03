@@ -1,1 +1,15 @@
 .env*
+
+# Python Cache & Compilation Artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.cache/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+.env.local/
