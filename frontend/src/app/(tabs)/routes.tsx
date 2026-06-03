@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -13,6 +13,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { RouteCard } from '@/components/routes/route-card';
+import { RouteFilterSheet } from '@/components/routes/route-filter-sheet';
+import {
+  applyAcFilter,
+  DEFAULT_FILTERS,
+  groupByChangeCount,
+  pickBest,
+  type BestByMode,
+  type RouteFilters,
+} from '@/components/routes/route-filtering';
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { getPalette } from '@/constants/theme';
@@ -20,20 +29,30 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
 
-type SortMode = 'classic' | 'speed' | 'cost' | 'noise' | 'crowds' | 'heat' | 'changes';
+/** A pinned summary card: a route plus the heading it's shown under. */
+interface PinnedCard {
+  route: RouteOption;
+  title: string;
+}
 
-const FILTER_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'classic', label: 'Classic' },
-  { value: 'speed', label: 'SPEED' },
-  { value: 'cost', label: 'COST' },
-  { value: 'noise', label: 'NOISE' },
-  { value: 'crowds', label: 'CROWD' },
-  { value: 'heat', label: 'HEAT' },
-  { value: 'changes', label: 'NO OF CHANGES' },
-];
-
-function sensoryScoreOf(route: RouteOption): number {
-  return route.sensory_score ?? route.noise + route.crowds + route.heat + route.light + route.smell;
+/** Active-filter status chips that mirror the filter sheet. */
+function statusChips(filters: RouteFilters): string[] {
+  const chips: string[] = [];
+  if (filters.bestBy.preference) {
+    chips.push('Preference');
+  }
+  if (filters.bestBy.speed) {
+    chips.push('Speed');
+  }
+  if (filters.ac === 'preferred') {
+    chips.push('A/C preferred');
+  } else if (filters.ac === 'every') {
+    chips.push('A/C every point');
+  }
+  if (filters.groupByChanges) {
+    chips.push('Grouped by changes');
+  }
+  return chips;
 }
 
 export default function RoutesScreen() {
@@ -47,8 +66,9 @@ export default function RoutesScreen() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Sorting states
-  const [sortBy, setSortBy] = useState<SortMode>('classic');
+  // Filter states
+  const [filters, setFilters] = useState<RouteFilters>(DEFAULT_FILTERS);
+  const [filtersVisible, setFiltersVisible] = useState(false);
 
   // Routes state
   const [routes, setRoutes] = useState<RouteOption[]>([]);
@@ -95,67 +115,39 @@ export default function RoutesScreen() {
     };
   }, [startLoc, endLoc, username, routesService]);
 
-  // Apply filtering and sorting
-  const getSortedRoutes = (): RouteOption[] => {
-    let list = [...routes];
+  // A/C filter applies to the whole pool before anything else.
+  const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
 
-    if (sortBy === 'speed') {
-      return list.sort((a, b) => a.duration - b.duration);
+  // The two pinned "best by" cards, de-duplicated if both resolve to one route.
+  const pinned = useMemo<PinnedCard[]>(() => {
+    const pref = filters.bestBy.preference ? pickBest(pool, 'preference') : undefined;
+    const speed = filters.bestBy.speed ? pickBest(pool, 'speed') : undefined;
+
+    if (pref && speed && pref.id === speed.id) {
+      return [{ route: pref, title: 'Best by Preference & Speed' }];
     }
-    if (sortBy === 'cost') {
-      return list.sort((a, b) => a.price - b.price);
+    const cards: PinnedCard[] = [];
+    if (pref) {
+      cards.push({ route: pref, title: 'Best by Preference' });
     }
-    if (sortBy === 'noise') {
-      return list.sort((a, b) => a.noise - b.noise);
+    if (speed) {
+      cards.push({ route: speed, title: 'Best by Speed' });
     }
-    if (sortBy === 'crowds') {
-      return list.sort((a, b) => a.crowds - b.crowds);
-    }
-    if (sortBy === 'heat') {
-      return list.sort((a, b) => a.heat - b.heat);
-    }
-    if (sortBy === 'changes') {
-      return list.sort((a, b) => {
-        const changesA = a.legs ? a.legs.filter(leg => leg.mode !== 'walking').length - 1 : 0;
-        const changesB = b.legs ? b.legs.filter(leg => leg.mode !== 'walking').length - 1 : 0;
-        return Math.max(0, changesA) - Math.max(0, changesB);
-      });
-    }
-    // 'classic': Sort by balanced sensory score.
-    return list.sort((a, b) => sensoryScoreOf(a) - sensoryScoreOf(b));
-  };
+    return cards;
+  }, [pool, filters.bestBy]);
+
+  // When grouping is on, order each group by the dominant best-by mode.
+  const groupMode: BestByMode = filters.bestBy.preference ? 'preference' : 'speed';
+  const groups = useMemo(
+    () => (filters.groupByChanges ? groupByChangeCount(pool, groupMode) : []),
+    [pool, filters.groupByChanges, groupMode]
+  );
 
   if (!mounted) {
     return null;
   }
 
-  const sortedRoutes = getSortedRoutes();
-
-  let classicBest: RouteOption | undefined;
-  let classicQuickest: RouteOption | undefined;
-  let classicAc: RouteOption | undefined;
-  let classicOthers: RouteOption[] = [];
-
-  if (sortBy === 'classic' && sortedRoutes.length > 0) {
-    classicBest = sortedRoutes.find((r) => r.type === 'best') || sortedRoutes[0];
-    let remaining = sortedRoutes.filter((r) => r.id !== classicBest?.id);
-
-    if (remaining.length > 0) {
-      classicQuickest = remaining.reduce((min, r) => r.duration < min.duration ? r : min, remaining[0]);
-      remaining = remaining.filter((r) => r.id !== classicQuickest?.id);
-    }
-
-    classicAc = remaining.find((r) =>
-      r.features?.some(
-        (f) => f.type === 'aircon' && (f.label === 'Air Conditioned' || f.label === 'Fresh Air')
-      )
-    );
-    if (classicAc) {
-      remaining = remaining.filter((r) => r.id !== classicAc?.id);
-    }
-
-    classicOthers = remaining;
-  }
+  const chips = statusChips(filters);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
@@ -204,6 +196,32 @@ export default function RoutesScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Filters button + active-filter status chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}
+          style={{ backgroundColor: palette.background }}>
+          <TouchableOpacity
+            onPress={() => setFiltersVisible(true)}
+            activeOpacity={0.85}
+            style={[styles.filtersButton, { borderColor: palette.borderStrong, backgroundColor: palette.surface }]}>
+            <Ionicons name="options-outline" size={16} color={palette.textPrimary} />
+            <Text style={[styles.filtersButtonText, { color: palette.textPrimary }]}>Filters</Text>
+            <Ionicons name="chevron-down" size={14} color={palette.textSecondary} />
+          </TouchableOpacity>
+
+          {chips.map((chip) => (
+            <TouchableOpacity
+              key={chip}
+              onPress={() => setFiltersVisible(true)}
+              activeOpacity={0.85}
+              style={[styles.statusChip, { backgroundColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
+              <Text style={[styles.statusChipText, { color: palette.textPrimary }]}>{chip}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         {loading ? (
           <View style={styles.loadingSpinner}>
             <ActivityIndicator size="large" color="#4A90E2" />
@@ -211,83 +229,43 @@ export default function RoutesScreen() {
               Calculating calmest routes...
             </Text>
           </View>
-        ) : sortedRoutes.length === 0 ? (
+        ) : pool.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="map" size={48} color={isDark ? '#333' : '#CCC'} />
             <Text style={[styles.emptyText, { color: '#888' }]}>
-              No routes found. Please check location inputs.
+              {routes.length === 0
+                ? 'No routes found. Please check location inputs.'
+                : 'No routes are air conditioned throughout. Try relaxing the A/C filter.'}
             </Text>
           </View>
         ) : (
           <View style={styles.routesList}>
-            {sortBy === 'classic' ? (
-              <>
-                {classicBest && (
-                  <RouteCard
-                    key={classicBest.id}
-                    route={classicBest}
-                    customTitle="Best by preference"
-                  />
-                )}
-                {classicQuickest && (
-                  <RouteCard
-                    key={classicQuickest.id}
-                    route={classicQuickest}
-                    customTitle="Quickest"
-                  />
-                )}
-                {classicAc && (
-                  <RouteCard
-                    key={classicAc.id}
-                    route={classicAc}
-                    customTitle="A/C only ❄️"
-                  />
-                )}
-                {classicOthers.map((route, idx) => (
-                  <RouteCard
-                    key={route.id}
-                    route={route}
-                    customTitle={idx === 0 ? "Others" : undefined}
-                    hideTitle={idx > 0}
-                  />
+            {/* Pinned "best by" summary cards */}
+            {pinned.map(({ route, title }) => (
+              <RouteCard key={`pinned-${route.id}`} route={route} customTitle={title} />
+            ))}
+
+            {/* Full list grouped by number of changes */}
+            {groups.map((group) => (
+              <View key={`group-${group.changes}`} style={styles.group}>
+                <Text style={[styles.groupHeading, { color: isDark ? '#AAA' : '#555' }]}>
+                  {group.changes} {group.changes === 1 ? 'change' : 'changes'}
+                </Text>
+                {group.routes.map((route) => (
+                  <RouteCard key={`g${group.changes}-${route.id}`} route={route} hideTitle />
                 ))}
-              </>
-            ) : (
-              sortedRoutes.map((route) => (
-                <RouteCard
-                  key={route.id}
-                  route={route}
-                  hideTitle={true}
-                />
-              ))
-            )}
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Bottom Filter Selector Bar */}
-      <View style={[styles.bottomBar, { borderTopColor: palette.divider, backgroundColor: palette.background }]}>
-        <ScrollView style={{ backgroundColor: palette.background }} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bottomBarScroll}>
-          {FILTER_OPTIONS.map(({ value, label }) => {
-            const active = sortBy === value;
-            return (
-              <TouchableOpacity
-                key={value}
-                onPress={() => setSortBy(value)}
-                style={[
-                  styles.filterPill,
-                  active && styles.filterPillActive,
-                  !active && { backgroundColor: isDark ? '#2E3543' : '#E5E7EB' }
-                ]}
-              >
-                <Text style={[styles.filterPillText, { color: active ? '#FFF' : palette.textPrimary }]}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+      <RouteFilterSheet
+        visible={filtersVisible}
+        filters={filters}
+        onChange={setFilters}
+        onClose={() => setFiltersVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -335,9 +313,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  filtersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  filtersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  filtersButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statusChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  statusChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   routesList: {
     gap: 16,
     marginTop: 10,
+  },
+  group: {
+    gap: 12,
+  },
+  groupHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
   },
   loadingSpinner: {
     paddingVertical: 40,
@@ -355,29 +369,5 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     textAlign: 'center',
-  },
-  bottomBar: {
-    borderTopWidth: 1.5,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  bottomBarScroll: {
-    gap: 8,
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  filterPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterPillActive: {
-    backgroundColor: '#E91E63',
-  },
-  filterPillText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
 });
