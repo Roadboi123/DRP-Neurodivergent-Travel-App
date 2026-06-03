@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ServicesProvider } from '@/services/services-context';
+import { Palette } from '@/constants/theme';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -12,10 +13,21 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  const customTheme = {
+    ...(isDark ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+      background: isDark ? Palette.dark.background : Palette.light.background,
+      card: isDark ? Palette.dark.surface : Palette.light.surface,
+      border: isDark ? Palette.dark.border : Palette.light.border,
+    },
+  };
 
   return (
     <ServicesProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={customTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
@@ -24,3 +36,4 @@ export default function RootLayout() {
     </ServicesProvider>
   );
 }
+
