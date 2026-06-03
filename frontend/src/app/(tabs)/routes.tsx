@@ -13,7 +13,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteCard } from '@/components/routes/route-card';
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SortToggle, type SortMode } from '@/components/routes/sort-toggle';
-import { TransportModes } from '@/components/routes/transport-modes';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -35,9 +34,8 @@ export default function RoutesScreen() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Sorting and filtering states
+  // Sorting states
   const [sortBy, setSortBy] = useState<SortMode>('speed');
-  const [walkSelected, setWalkSelected] = useState(false);
 
   // Routes state
   const [routes, setRoutes] = useState<RouteOption[]>([]);
@@ -76,7 +74,7 @@ export default function RoutesScreen() {
       }
     }
 
-    const timer = setTimeout(fetchRoutes, 400);
+    const timer = setTimeout(fetchRoutes, 800);
 
     return () => {
       active = false;
@@ -88,13 +86,7 @@ export default function RoutesScreen() {
   const getSortedRoutes = (): RouteOption[] => {
     let list = [...routes];
 
-    if (walkSelected) {
-      list = list.filter(
-        (r) =>
-          r.name.toLowerCase().includes('walk') ||
-          (r.subName && r.subName.toLowerCase().includes('walk'))
-      );
-    }
+    // No filtering by transport mode needed since widgets were removed
 
     if (sortBy === 'speed') {
       return list.sort((a, b) => a.duration - b.duration);
@@ -108,6 +100,10 @@ export default function RoutesScreen() {
   }
 
   const sortedRoutes = getSortedRoutes();
+  const bestRoute = sortedRoutes.find((r) => r.type === 'best');
+  const remainingRoutes = bestRoute
+    ? sortedRoutes.filter((r) => r.id !== bestRoute.id)
+    : sortedRoutes;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
@@ -124,10 +120,6 @@ export default function RoutesScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <TransportModes
-          walkSelected={walkSelected}
-          onToggleWalk={() => setWalkSelected((prev) => !prev)}
-        />
 
         <WarningsPanel />
 
@@ -155,7 +147,10 @@ export default function RoutesScreen() {
           </View>
         ) : (
           <View style={styles.routesList}>
-            {sortedRoutes.map((route) => (
+            {bestRoute && (
+              <RouteCard key={bestRoute.id} route={bestRoute} />
+            )}
+            {remainingRoutes.map((route) => (
               <RouteCard key={route.id} route={route} />
             ))}
           </View>

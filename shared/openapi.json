@@ -14,6 +14,71 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "LegOption": {
+        "description": "Details of an individual journey leg, transit or walking.",
+        "properties": {
+          "arrival": {
+            "title": "Arrival",
+            "type": "string"
+          },
+          "connection_waiting_mins": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0,
+            "title": "Connection Waiting Mins"
+          },
+          "departure": {
+            "title": "Departure",
+            "type": "string"
+          },
+          "duration_mins": {
+            "title": "Duration Mins",
+            "type": "integer"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "stops": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stops"
+          }
+        },
+        "required": [
+          "mode",
+          "line",
+          "duration_mins",
+          "departure",
+          "arrival",
+          "instruction"
+        ],
+        "title": "LegOption",
+        "type": "object"
+      },
       "PreferenceResponse": {
         "description": "Response body for ``GET /preferences/{username}``.\n\nSensitivity fields are always one of the ``SensitivityLevel`` labels (the\nservice maps stored integers back through ``REVERSE_SENSITIVITY_MAP``) or\n``None`` when a column is unset.",
         "properties": {
@@ -113,6 +178,35 @@
         "title": "PreferenceResponse",
         "type": "object"
       },
+      "RouteFeature": {
+        "description": "Color-coded sensory/efficiency feature badge for the route card.",
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "label",
+          "icon",
+          "color"
+        ],
+        "title": "RouteFeature",
+        "type": "object"
+      },
       "RouteOption": {
         "description": "A single route suggestion returned by ``GET /routes/``.\n\nField names mirror the contract the React Native client consumes exactly,\nincluding the camelCase ``subName`` alongside the snake_case sensory fields.\nThis model is the single source of truth for the route contract: the\nfrontend's TS types are generated from it (see ``shared/`` and\n``scripts/export_openapi.py``). Annotations are kept precise so the generated\ntypes are precise, but JSON serialization is unchanged (``SensoryLevel`` still\nserializes as the integers 1/2/3).",
         "properties": {
@@ -133,6 +227,20 @@
             "title": "Duration",
             "type": "integer"
           },
+          "features": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RouteFeature"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Features"
+          },
           "heat": {
             "enum": [
               1,
@@ -145,6 +253,20 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "legs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LegOption"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legs"
           },
           "light": {
             "enum": [
@@ -519,6 +641,23 @@
                 }
               ],
               "title": "Username"
+            }
+          },
+          {
+            "in": "query",
+            "name": "walking_speed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "slow",
+              "title": "Walking Speed"
             }
           }
         ],

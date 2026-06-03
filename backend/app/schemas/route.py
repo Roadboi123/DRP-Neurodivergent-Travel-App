@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
 from pydantic import BaseModel
 
@@ -7,6 +7,26 @@ SensoryLevel = Literal[1, 2, 3]
 
 # Route classification surfaced to the client.
 RouteType = Literal["best", "quickest", "suggested"]
+
+
+class LegOption(BaseModel):
+    """Details of an individual journey leg, transit or walking."""
+    mode: str
+    line: str
+    duration_mins: int
+    departure: str
+    arrival: str
+    instruction: str
+    stops: Optional[List[str]] = None
+    connection_waiting_mins: Optional[int] = 0
+
+
+class RouteFeature(BaseModel):
+    """Color-coded sensory/efficiency feature badge for the route card."""
+    type: str
+    label: str
+    icon: str
+    color: str
 
 
 class RouteOption(BaseModel):
@@ -35,5 +55,8 @@ class RouteOption(BaseModel):
     sensory_score: Optional[float] = None
     match_percentage: Optional[int] = None
     sensory_description: Optional[str] = None
+    legs: Optional[List[LegOption]] = None
+    features: Optional[List[RouteFeature]] = None
     # Always populated by the route service before the response is built.
     type: RouteType
+

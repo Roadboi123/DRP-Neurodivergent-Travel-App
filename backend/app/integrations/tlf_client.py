@@ -1,0 +1,243 @@
+import httpx
+import os
+import time
+import asyncio
+
+TFL_BASE = "https://api.tfl.gov.uk"
+APP_KEY  = os.environ.get("TFL_APP_KEY", "")
+
+# In-memory caches to prevent spamming the TfL API and restore sub-100ms response times
+_LIVE_DISRUPTION_CACHE: dict[str, tuple[bool, float]] = {}
+_LIVE_CROWDING_CACHE: dict[str, tuple[bool, float]] = {}
+CACHE_TTL_SECS = 300  # 5-minute cache lifespan
+
+_DISRUPTION_LOCKS: dict[str, asyncio.Lock] = {}
+_CROWDING_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _parse_leg(leg: dict) -> dict:
+    return {
+        "mode":          leg.get("mode", {}).get("name", "unknown"),
+        "departure":     leg.get("departurePoint", {}).get("commonName", ""),
+        "arrival":       leg.get("arrivalPoint", {}).get("commonName", ""),
+        "departure_naptan": leg.get("departurePoint", {}).get("naptanId", ""),
+        "arrival_naptan":   leg.get("arrivalPoint", {}).get("naptanId", ""),
+        "departure_lat":    leg.get("departurePoint", {}).get("lat"),
+        "departure_lon":    leg.get("departurePoint", {}).get("lon"),
+        "arrival_lat":      leg.get("arrivalPoint", {}).get("lat"),
+        "arrival_lon":      leg.get("arrivalPoint", {}).get("lon"),
+        "departs_at":    leg.get("departureTime", ""),
+        "arrives_at":    leg.get("arrivalTime", ""),
+        "duration_mins": leg.get("duration", 0),
+        "instruction":   leg.get("instruction", {}).get("summary", ""),
+        "line":          leg.get("routeOptions", [{}])[0]
+                            .get("lineIdentifier", {})
+                            .get("name", "") if leg.get("routeOptions") else "",
+        "stops":         [sp.get("name") for sp in leg.get("path", {}).get("stopPoints", [])],
+    }
+
+
+async def check_live_station_disruption(naptan_id: str) -> bool:
+    """
+    Query TfL's live StopPoint disruption feed to check for crowding or event alerts.
+    Utilizes an in-memory TTL cache and asyncio locking to prevent duplicate requests.
+    """
+    if not naptan_id:
+        return False
+        
+    now = time.time()
+    if naptan_id in _LIVE_DISRUPTION_CACHE:
+        val, expiry = _LIVE_DISRUPTION_CACHE[naptan_id]
+        if now < expiry:
+            return val
+            
+    if naptan_id not in _DISRUPTION_LOCKS:
+        _DISRUPTION_LOCKS[naptan_id] = asyncio.Lock()
+        
+    async with _DISRUPTION_LOCKS[naptan_id]:
+        # Double-check cache in case another task populated it while we waited
+        now = time.time()
+        if naptan_id in _LIVE_DISRUPTION_CACHE:
+            val, expiry = _LIVE_DISRUPTION_CACHE[naptan_id]
+            if now < expiry:
+                return val
+                
+        val = False
+        url = f"{TFL_BASE}/StopPoint/{naptan_id}/Disruption"
+        params = {}
+        if APP_KEY:
+            params["app_key"] = APP_KEY
+            
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                res = await client.get(url, params=params)
+                if res.status_code == 200:
+                    disruptions = res.json()
+                    for d in disruptions:
+                        desc = str(d.get("description", "")).lower()
+                        # Check for triggers indicating crowded/event states
+                        if any(word in desc for word in ("crowd", "busy", "congestion", "football", "match", "concert", "stadium", "event")):
+                            val = True
+                            break
+        except Exception as e:
+            print(f"Error checking live TfL disruption for {naptan_id}: {e}")
+            
+        _LIVE_DISRUPTION_CACHE[naptan_id] = (val, time.time() + CACHE_TTL_SECS)
+        return val
+
+
+async def check_live_station_crowding(naptan_id: str) -> bool:
+    """
+    Query TfL's live crowding API to check if the station is currently congested.
+    Utilizes an in-memory TTL cache and asyncio locking to prevent duplicate requests.
+    """
+    if not naptan_id:
+        return False
+        
+    now = time.time()
+    if naptan_id in _LIVE_CROWDING_CACHE:
+        val, expiry = _LIVE_CROWDING_CACHE[naptan_id]
+        if now < expiry:
+            return val
+            
+    if naptan_id not in _CROWDING_LOCKS:
+        _CROWDING_LOCKS[naptan_id] = asyncio.Lock()
+        
+    async with _CROWDING_LOCKS[naptan_id]:
+        # Double-check cache in case another task populated it while we waited
+        now = time.time()
+        if naptan_id in _LIVE_CROWDING_CACHE:
+            val, expiry = _LIVE_CROWDING_CACHE[naptan_id]
+            if now < expiry:
+                return val
+                
+        val = False
+        url = f"{TFL_BASE}/crowding/{naptan_id}"
+        params = {}
+        if APP_KEY:
+            params["app_key"] = APP_KEY
+            
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                res = await client.get(url, params=params)
+                if res.status_code == 200:
+                    data = res.json()
+                    live_pct = data.get("liveStatus", {}).get("congestionPercentage", 0.0)
+                    if live_pct > 0.70:  # 70% or more indicates high crowds
+                        val = True
+        except Exception:
+            # Fail silently as not all stations have active live crowding feeds
+            pass
+            
+        _LIVE_CROWDING_CACHE[naptan_id] = (val, time.time() + CACHE_TTL_SECS)
+        return val
+
+
+
+def _is_useless_bus_journey(journey: dict) -> bool:
+    for leg in journey.get("legs", []):
+        mode = leg.get("mode", "").lower()
+        duration = leg.get("duration_mins", 0)
+        if mode == "bus" and duration <= 2:
+            return True
+    return False
+
+
+def _parse_journey(journey: dict) -> dict:
+    legs  = journey.get("legs", [])
+    parsed_legs = [_parse_leg(leg) for leg in legs]
+    
+    # Calculate connection waiting times between adjacent legs
+    from datetime import datetime
+    for idx in range(len(parsed_legs) - 1):
+        leg_prev = parsed_legs[idx]
+        leg_next = parsed_legs[idx + 1]
+        try:
+            arr_str = leg_prev.get("arrives_at")
+            dep_str = leg_next.get("departs_at")
+            if arr_str and dep_str:
+                arr_dt = datetime.fromisoformat(arr_str)
+                dep_dt = datetime.fromisoformat(dep_str)
+                wait_seconds = (dep_dt - arr_dt).total_seconds()
+                wait_mins = max(0, int(wait_seconds // 60))
+                leg_prev["connection_waiting_mins"] = wait_mins
+            else:
+                leg_prev["connection_waiting_mins"] = 0
+        except Exception:
+            leg_prev["connection_waiting_mins"] = 0
+            
+    if parsed_legs:
+        parsed_legs[-1]["connection_waiting_mins"] = 0
+ 
+    modes = list({leg.get("mode", "") for leg in parsed_legs})
+    return {
+        "source":        "tfl",
+        "duration_mins": journey.get("duration", 0),
+        "departs_at":    journey.get("startDateTime", ""),
+        "arrives_at":    journey.get("arrivalDateTime", ""),
+        "changes":       max(len([leg for leg in parsed_legs if leg.get("mode") != "walking"]) - 1, 0),
+        "modes":         modes,
+        "legs":          parsed_legs,
+    }
+
+
+async def get_routes(
+    origin:       str,
+    destination:  str,
+    time:         str | None = None,
+    walking_only: bool = False,
+    walking_speed: str | None = None,
+) -> list[dict]:
+    params: dict = {
+        "alternativeWalking": "true",
+        "nationalSearch":     "true",
+        "maxWalkingMinutes":  "60",
+    }
+    if APP_KEY:
+        params["app_key"] = APP_KEY
+        
+    if walking_speed:
+        params["walkingSpeed"] = walking_speed.capitalize()
+        
+    if walking_only:
+        params["mode"]               = "walking"
+        params["walkingOptimization"] = "true"
+    if time:
+        params["time"] = time
+
+    async def fetch_preference(preference: str) -> list[dict]:
+        local_params = params.copy()
+        local_params["journeyPreference"] = preference
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.get(
+                    f"{TFL_BASE}/Journey/JourneyResults/{origin}/to/{destination}",
+                    params=local_params,
+                )
+                if res.status_code == 200:
+                    return [_parse_journey(j) for j in res.json().get("journeys", [])]
+        except Exception as e:
+            print(f"Error fetching TfL routes for preference {preference}: {e}")
+        return []
+
+    # Parallel queries for LeastTime and LeastInterchange for richer alternatives
+    results_least_time, results_least_interchange = await asyncio.gather(
+        fetch_preference("LeastTime"),
+        fetch_preference("LeastInterchange")
+    )
+    
+    # Combine and de-duplicate based on departs_at, arrives_at and leg signatures
+    combined = []
+    seen_keys = set()
+    
+    for j in results_least_time + results_least_interchange:
+        leg_sig = tuple((leg.get("mode"), leg.get("line"), leg.get("departure"), leg.get("arrival")) for leg in j.get("legs", []))
+        key = (j.get("departs_at"), j.get("arrives_at"), leg_sig)
+        
+        if key not in seen_keys:
+            seen_keys.add(key)
+            combined.append(j)
+            
+    # Filter out journeys with short/useless bus legs (<= 2 minutes)
+    filtered = [j for j in combined if not _is_useless_bus_journey(j)]
+    return filtered

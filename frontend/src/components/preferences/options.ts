@@ -9,10 +9,9 @@ export const OPTIONS: { value: SensitivityLevel; label: string }[] = [
   { value: 'veryhigh', label: 'Very high' },
 ];
 
-export const OPTION_COLORS: Record<
-  SensitivityLevel,
-  { bg: string; text: string; border: string }
-> = {
+type ChipColors = { bg: string; text: string; border: string };
+
+const LIGHT_COLORS: Record<SensitivityLevel, ChipColors> = {
   little: {
     bg: '#E3F2E6',
     text: '#1E7A3D',
@@ -34,3 +33,29 @@ export const OPTION_COLORS: Record<
     border: '#E07A6E',
   },
 };
+
+const DARK_COLORS: Record<SensitivityLevel, ChipColors> = {
+  little: {
+    bg: '#16301E',
+    text: '#5FD08A',
+    border: '#244A30',
+  },
+  medium: {
+    bg: '#332B12',
+    text: '#E8C24A',
+    border: '#4A3E1F',
+  },
+  high: {
+    bg: '#3A2415',
+    text: '#F0A35E',
+    border: '#4F351F',
+  },
+  veryhigh: {
+    bg: '#3A1F1C',
+    text: '#FF8A7A',
+    border: '#5C2D2D',
+  },
+};
+
+export const getOptionColors = (level: SensitivityLevel, isDark: boolean): ChipColors =>
+  (isDark ? DARK_COLORS : LIGHT_COLORS)[level];

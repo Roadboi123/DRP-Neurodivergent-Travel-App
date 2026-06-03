@@ -9,6 +9,11 @@ router = APIRouter(prefix="/routes", tags=["routes"])
 
 
 @router.get("/", response_model=List[RouteOption])
-def get_routes(start: str, end: str, username: Optional[str] = None):
+async def get_routes(
+    start: str,
+    end: str,
+    username: Optional[str] = None,
+    walking_speed: Optional[str] = "slow",
+):
     """Return route suggestions, optionally personalized to a user's sensitivities."""
-    return get_route_suggestions(start, end, username)
+    return await get_route_suggestions(start, end, username, walking_speed)
