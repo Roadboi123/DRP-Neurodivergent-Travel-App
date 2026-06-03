@@ -427,7 +427,9 @@ async def get_route_suggestions(
     if strategy in ("google", "both"):
         gmaps_task = osm_client.get_walking_routes(start, end)
 
-    raw_journeys = []
+    tfl_res: Any = None
+    gmaps_res: Any = None
+    raw_journeys: List[Dict[str, Any]] = []
 
     try:
         if tfl_task and gmaps_task:
