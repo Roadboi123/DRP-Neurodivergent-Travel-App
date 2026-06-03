@@ -9,12 +9,14 @@ from typing import Any, Dict, List, Optional
 from app.data.route_seed import ROUTES_DATABASE
 from app.integrations.supabase import supabase
 
-# Mapping Supabase integer sensitivities (1 = little/high sensitivity, 2 = manageable/med,
-# 3 = dontcare/none) to discomfort multiplier weights.
+# Mapping Supabase integer sensitivities (1 = little, 2 = medium, 3 = high,
+# 4 = very high) to discomfort multiplier weights. Higher sensitivity = more
+# strongly affected = larger weight.
 WEIGHTS_MAP = {
-    1: 3.0,
-    2: 1.5,
-    3: 0.0,
+    1: 0.0,
+    2: 1.0,
+    3: 2.0,
+    4: 3.0,
 }
 
 
@@ -95,16 +97,17 @@ def get_route_suggestions(
             )
             r["sensory_score"] = round(sensory_score, 2)
 
-            # Identify specific triggers causing discomfort (user has high sensitivity [1] and route trigger level >= 2)
-            if u_noise == 1 and r["noise"] >= 2:
+            # Identify specific triggers causing discomfort (user has high sensitivity
+            # [high=3 or very high=4] and route trigger level >= 2)
+            if u_noise >= 3 and r["noise"] >= 2:
                 mismatch_triggers.append("sound")
-            if u_crowds == 1 and r["crowds"] >= 2:
+            if u_crowds >= 3 and r["crowds"] >= 2:
                 mismatch_triggers.append("crowds")
-            if u_heat == 1 and r["heat"] >= 2:
+            if u_heat >= 3 and r["heat"] >= 2:
                 mismatch_triggers.append("heat")
-            if u_light == 1 and r["light"] >= 2:
+            if u_light >= 3 and r["light"] >= 2:
                 mismatch_triggers.append("bright light")
-            if u_smell == 1 and r["smell"] >= 2:
+            if u_smell >= 3 and r["smell"] >= 2:
                 mismatch_triggers.append("fumes/scents")
 
             # Max discomfort bound mapping

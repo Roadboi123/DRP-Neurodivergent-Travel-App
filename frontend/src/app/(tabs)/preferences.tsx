@@ -6,11 +6,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
-import { OPTIONS } from '@/components/preferences/options';
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { usePreferencesService } from '@/services/services-context';
 import type { Preference, SensitivityLevel } from '@/types/preference';
@@ -26,12 +24,14 @@ const INITIAL_PREFERENCES: Preference[] = [
 const valueFor = (prefs: Preference[], id: string): SensitivityLevel | null =>
   prefs.find((p) => p.id === id)?.value ?? null;
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 export default function UserPreferencesScreen() {
   const preferencesService = usePreferencesService();
   const [preferences, setPreferences] = useState<Preference[]>(INITIAL_PREFERENCES);
-  const [saved, setSaved] = useState(false);
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -67,32 +67,34 @@ export default function UserPreferencesScreen() {
     return () => clearTimeout(timeout);
   }, [username, preferencesService]);
 
-  const handleSelect = (id: string, value: SensitivityLevel) => {
-    setSaved(false);
-    setPreferences((prev) => prev.map((p) => (p.id === id ? { ...p, value } : p)));
-  };
-
-  const allSet = preferences.every((p) => p.value !== null) && username.trim().length > 0;
-
-  const handleSave = async () => {
-    if (!allSet) return;
+  // Persist immediately on input. The backend requires all five fields, so we
+  // only save once every item is set and a username is present.
+  const persist = async (prefs: Preference[]) => {
+    if (!username.trim()) return;
+    if (!prefs.every((p) => p.value !== null)) return;
 
     try {
+      setSaveStatus('saving');
       await preferencesService.savePreferences({
         username: username.trim(),
-        noise: valueFor(preferences, 'noise'),
-        crowds: valueFor(preferences, 'crowds'),
-        temperature: valueFor(preferences, 'temperature'),
-        smell: valueFor(preferences, 'smell'),
-        lights: valueFor(preferences, 'lights'),
+        noise: valueFor(prefs, 'noise'),
+        crowds: valueFor(prefs, 'crowds'),
+        temperature: valueFor(prefs, 'temperature'),
+        smell: valueFor(prefs, 'smell'),
+        lights: valueFor(prefs, 'lights'),
       });
-      setSaved(true);
+      setSaveStatus('saved');
     } catch (e) {
       console.error(e);
+      setSaveStatus('error');
     }
   };
 
-  const completedCount = preferences.filter((p) => p.value !== null).length;
+  const handleSelect = (id: string, value: SensitivityLevel) => {
+    const next = preferences.map((p) => (p.id === id ? { ...p, value } : p));
+    setPreferences(next);
+    void persist(next);
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -103,9 +105,7 @@ export default function UserPreferencesScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Your preferences</Text>
 
-          <Text style={styles.subtitle}>
-            Tell us what affects you most — we will find calmer routes for you.
-          </Text>
+          <Text style={styles.subtitle}>Tell us what things affect you the most</Text>
 
           {/* Username Input */}
           <View style={styles.inputContainer}>
@@ -113,10 +113,7 @@ export default function UserPreferencesScreen() {
 
             <TextInput
               value={username}
-              onChangeText={(text) => {
-                setSaved(false);
-                setUsername(text);
-              }}
+              onChangeText={setUsername}
               placeholder="Enter your username"
               placeholderTextColor="#999"
               style={styles.input}
@@ -124,41 +121,21 @@ export default function UserPreferencesScreen() {
               autoCorrect={false}
             />
 
-            {loading && <Text style={styles.loadingText}>Loading preferences...</Text>}
+            {loading && <Text style={styles.statusText}>Loading preferences…</Text>}
+            {!loading && saveStatus === 'saving' && (
+              <Text style={styles.statusText}>Saving…</Text>
+            )}
+            {!loading && saveStatus === 'saved' && (
+              <Text style={[styles.statusText, styles.statusSaved]}>✓ Saved</Text>
+            )}
+            {!loading && saveStatus === 'error' && (
+              <Text style={[styles.statusText, styles.statusError]}>Couldn’t save — try again</Text>
+            )}
           </View>
         </View>
-
-        {/* Progress bar */}
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${(completedCount / preferences.length) * 100}%` },
-            ]}
-          />
-        </View>
-
-        <Text style={styles.progressLabel}>
-          {completedCount} of {preferences.length} set
-        </Text>
 
         {/* Card */}
         <View style={styles.card}>
-          {/* Column headers */}
-          <View style={styles.columnHeaders}>
-            <View style={styles.labelSpacer} />
-
-            {OPTIONS.map((o) => (
-              <Text key={o.value} style={styles.columnHeader}>
-                {o.value === 'dontcare' ? 'Do not\ncare' : o.label}
-              </Text>
-            ))}
-          </View>
-
-          {/* Divider */}
-          <View style={styles.divider} />
-
-          {/* Rows */}
           {preferences.map((pref, i) => (
             <View key={pref.id}>
               <PreferenceRow preference={pref} onSelect={handleSelect} />
@@ -167,28 +144,6 @@ export default function UserPreferencesScreen() {
             </View>
           ))}
         </View>
-
-        {/* Info note */}
-        <View style={styles.note}>
-          <Text style={styles.noteText}>
-            💬 These preferences shape your route suggestions. You can update them anytime.
-          </Text>
-        </View>
-
-        {/* Save button */}
-        <TouchableOpacity
-          onPress={handleSave}
-          activeOpacity={0.85}
-          style={[
-            styles.saveBtn,
-            !allSet && styles.saveBtnDisabled,
-            saved && styles.saveBtnSaved,
-          ]}
-          disabled={!allSet}>
-          <Text style={[styles.saveBtnText, saved && styles.saveBtnTextSaved]}>
-            {saved ? '✓ Preferences saved' : 'Save preferences'}
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -248,31 +203,20 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
 
-  loadingText: {
+  statusText: {
     marginTop: 8,
     fontSize: 13,
     color: '#888888',
   },
 
-  // Progress
-  progressTrack: {
-    height: 4,
-    backgroundColor: '#EAEAEA',
-    borderRadius: 2,
-    marginBottom: 6,
-    overflow: 'hidden',
+  statusSaved: {
+    color: '#1D9E75',
+    fontWeight: '600',
   },
 
-  progressFill: {
-    height: 4,
-    backgroundColor: '#1D9E75',
-    borderRadius: 2,
-  },
-
-  progressLabel: {
-    fontSize: 12,
-    color: '#999999',
-    marginBottom: 20,
+  statusError: {
+    color: '#C0392B',
+    fontWeight: '600',
   },
 
   // Card
@@ -291,80 +235,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
-
-    marginBottom: 16,
-  },
-
-  // Column headers
-  columnHeaders: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-
-  labelSpacer: {
-    width: 88,
-  },
-
-  columnHeader: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#AAAAAA',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#F0F0EE',
-    marginBottom: 4,
   },
 
   rowDivider: {
     height: 1,
     backgroundColor: '#F5F5F3',
-  },
-
-  // Note
-  note: {
-    backgroundColor: '#F0F7FF',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
-  },
-
-  noteText: {
-    fontSize: 13,
-    color: '#4A7BAB',
-    lineHeight: 19,
-  },
-
-  // Save button
-  saveBtn: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-
-  saveBtnDisabled: {
-    backgroundColor: '#CCCCCC',
-  },
-
-  saveBtnSaved: {
-    backgroundColor: '#1D9E75',
-  },
-
-  saveBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-
-  saveBtnTextSaved: {
-    color: '#FFFFFF',
   },
 });
