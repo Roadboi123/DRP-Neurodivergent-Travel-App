@@ -1,44 +1,34 @@
+import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
+import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import type { AcFilter, RouteFilters } from '@/components/routes/route-filtering';
+import type { AcFilter, RouteFilters, SortMode } from '@/components/routes/route-filtering';
 
 const ACCENT = '#E91E63';
 
-/** One option button in a segmented row. */
-function Segment({
-  label,
-  active,
-  onPress,
-  isDark,
-  textColor,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  isDark: boolean;
-  textColor: string;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.8}
-      style={[
-        styles.segment,
-        { backgroundColor: active ? ACCENT : isDark ? '#2E3543' : '#EAEAEA' },
-      ]}>
-      <Text style={[styles.segmentText, { color: active ? '#FFF' : textColor }]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
+const SORT_OPTIONS: SegmentOption<SortMode>[] = [
+  { value: 'preference', label: 'Preference', icon: 'heart-outline' },
+  { value: 'speed', label: 'Speed', icon: 'flash-outline' },
+];
 
-const AC_OPTIONS: { value: AcFilter; label: string }[] = [
+const AC_OPTIONS: SegmentOption<AcFilter>[] = [
   { value: 'any', label: "Don't care" },
   { value: 'preferred', label: 'Preferred' },
-  { value: 'every', label: 'Present at every point' },
+  { value: 'every', label: 'Throughout' },
 ];
+
+/** Heading with a leading icon, used for each section of the sheet. */
+function SectionHeading({ icon, label, color }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; color: string }) {
+  return (
+    <View style={styles.sectionHeading}>
+      <Ionicons name={icon} size={16} color={color} />
+      <Text style={[styles.sectionHeadingText, { color }]}>{label}</Text>
+    </View>
+  );
+}
 
 export function RouteFilterSheet({
   visible,
@@ -54,15 +44,6 @@ export function RouteFilterSheet({
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
 
-  // Keep at least one best-by card on: ignore a tap that would clear the last one.
-  const toggleBestBy = (key: 'preference' | 'speed') => {
-    const next = { ...filters.bestBy, [key]: !filters.bestBy[key] };
-    if (!next.preference && !next.speed) {
-      return;
-    }
-    onChange({ ...filters, bestBy: next });
-  };
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -73,74 +54,49 @@ export function RouteFilterSheet({
           <View style={styles.handle} />
 
           <View style={styles.header}>
-            <Text style={[styles.title, { color: palette.textPrimary }]}>Filters</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel="Close filters">
+            <Text style={[styles.title, { color: palette.textPrimary }]}>Route options</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel="Close options">
               <Ionicons name="close" size={24} color={palette.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          {/* Number of changes */}
-          <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>
-            Number of changes
-          </Text>
-          <View style={styles.segmentRow}>
-            <Segment
-              label="Disable"
-              active={!filters.groupByChanges}
-              onPress={() => onChange({ ...filters, groupByChanges: false })}
-              isDark={isDark}
-              textColor={palette.textPrimary}
-            />
-            <Segment
-              label="Enable"
-              active={filters.groupByChanges}
-              onPress={() => onChange({ ...filters, groupByChanges: true })}
-              isDark={isDark}
-              textColor={palette.textPrimary}
-            />
-          </View>
+          {/* Sort by — stays in sync with the on-screen tab */}
+          <SectionHeading icon="swap-vertical-outline" label="Sort by" color={palette.textPrimary} />
+          <SegmentedControl
+            options={SORT_OPTIONS}
+            value={filters.sort}
+            onChange={(sort) => onChange({ ...filters, sort })}
+          />
 
-          {/* A/C */}
-          <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>A/C</Text>
-          <View style={styles.segmentRow}>
-            {AC_OPTIONS.map(({ value, label }) => (
-              <Segment
-                key={value}
-                label={label}
-                active={filters.ac === value}
-                onPress={() => onChange({ ...filters, ac: value })}
-                isDark={isDark}
-                textColor={palette.textPrimary}
-              />
-            ))}
-          </View>
+          {/* Air conditioning */}
+          <SectionHeading icon="snow-outline" label="Air conditioning" color={palette.textPrimary} />
+          <SegmentedControl
+            options={AC_OPTIONS}
+            value={filters.ac}
+            onChange={(ac) => onChange({ ...filters, ac })}
+          />
 
-          {/* Best by — both independently toggleable, default both on */}
-          <Text style={[styles.sectionHeading, { color: palette.textPrimary }]}>Best by</Text>
-          <View style={styles.segmentRow}>
-            <Segment
-              label="Preference"
-              active={filters.bestBy.preference}
-              onPress={() => toggleBestBy('preference')}
-              isDark={isDark}
-              textColor={palette.textPrimary}
-            />
-            <Segment
-              label="Speed"
-              active={filters.bestBy.speed}
-              onPress={() => toggleBestBy('speed')}
-              isDark={isDark}
-              textColor={palette.textPrimary}
+          {/* Group by changes */}
+          <View style={[styles.switchRow, { borderTopColor: palette.divider }]}>
+            <View style={styles.switchLabelGroup}>
+              <Ionicons name="git-branch-outline" size={16} color={palette.textPrimary} />
+              <Text style={[styles.switchLabel, { color: palette.textPrimary }]}>
+                Group by changes
+              </Text>
+            </View>
+            <Switch
+              value={filters.groupByChanges}
+              onValueChange={(groupByChanges) => onChange({ ...filters, groupByChanges })}
+              trackColor={{ false: isDark ? '#3A4150' : '#D1D5DB', true: ACCENT }}
+              thumbColor="#FFF"
+              ios_backgroundColor={isDark ? '#3A4150' : '#D1D5DB'}
             />
           </View>
-          <Text style={[styles.gloss, { color: palette.textSecondary }]}>
-            <Text style={styles.glossLabel}>Preference</Text> — sensory needs take priority in the
-            suggested journey.
-          </Text>
-          <Text style={[styles.gloss, { color: palette.textSecondary }]}>
-            <Text style={styles.glossLabel}>Speed</Text> — quickest journey; the stimuli to expect
-            are still shown.
-          </Text>
+          {filters.groupByChanges && (
+            <Text style={[styles.helperNote, { color: palette.textSecondary }]}>
+              Routes are grouped by number of changes, ranked by your sort.
+            </Text>
+          )}
 
           <TouchableOpacity
             onPress={onClose}
@@ -187,32 +143,37 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   sectionHeading: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 20,
     marginBottom: 10,
   },
-  segmentRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  segment: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-  },
-  segmentText: {
-    fontSize: 13,
+  sectionHeadingText: {
+    fontSize: 15,
     fontWeight: '700',
   },
-  gloss: {
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 22,
+    paddingTop: 18,
+    borderTopWidth: 1,
+  },
+  switchLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  switchLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  helperNote: {
     fontSize: 13,
     lineHeight: 18,
     marginTop: 8,
-  },
-  glossLabel: {
-    fontWeight: '700',
   },
   doneButton: {
     marginTop: 24,
