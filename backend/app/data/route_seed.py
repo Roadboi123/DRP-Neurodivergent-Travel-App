@@ -55,11 +55,11 @@ ROUTES_DATABASE: List[Dict[str, Any]] = [
         "subName": "Central Line + Walk",
         "duration": 55,
         "price": 4.85,
-        "noise": 3,      # Sound: High (deafening deep-tube rail screeching)
-        "crowds": 3,     # Crowds: High (rush hour congestion)
-        "heat": 3,       # Heat: High (deep level line, reaches 32°C)
+        "noise": 4,      # Sound: Extreme (deafening deep-tube rail screeching)
+        "crowds": 4,     # Crowds: Extreme (rush hour congestion)
+        "heat": 4,       # Heat: Extreme (deep level line, reaches 32°C)
         "light": 3,      # Light: High (fluorescent station bulbs)
-        "smell": 2,      # Smell: Moderate
+        "smell": 3,      # Smell: High
         "description": "Fast tube connection, but has screeching deep-level rails, packed crowds, extreme heat, and glaring station bulbs.",
     },
 ]

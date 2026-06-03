@@ -107,7 +107,8 @@ def mock_external_routing_apis():
          patch("app.services.routes.tlf_client.get_routes", new_callable=AsyncMock) as mock_tfl, \
          patch("app.services.routes.osm_client.get_walking_routes", new_callable=AsyncMock) as mock_osm, \
          patch("app.services.routes.tlf_client.check_live_station_disruption", new_callable=AsyncMock) as mock_disrupt, \
-         patch("app.services.routes.tlf_client.check_live_station_crowding", new_callable=AsyncMock) as mock_crowd:
+         patch("app.services.routes.tlf_client.check_live_station_crowding", new_callable=AsyncMock) as mock_crowd, \
+         patch("app.services.routes.get_current_london_temp", new_callable=AsyncMock) as mock_temp:
          
         mock_resolve.return_value = {"strategy": "both"}
         mock_geocode.return_value = (51.5074, -0.1278)
@@ -115,6 +116,7 @@ def mock_external_routing_apis():
         mock_osm.return_value = MOCK_WALKING_JOURNEYS
         mock_disrupt.return_value = False
         mock_crowd.return_value = False
+        mock_temp.return_value = 18.0
         
         yield
 

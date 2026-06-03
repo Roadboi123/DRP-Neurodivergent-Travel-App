@@ -6,12 +6,47 @@ API layer validates the result through the ``RouteOption`` response model.
 
 import asyncio
 import math
+import time
 from typing import Any, Dict, List, Optional
+import httpx
 
 from app.integrations.supabase import supabase
 from app.integrations import tlf_client
 from app.integrations import osm_client
 from app.integrations import route_resolver
+
+_WEATHER_CACHE: Dict[str, Any] = {}
+
+async def get_current_london_temp() -> float:
+    """
+    Fetch the current temperature in London using Open-Meteo's free API.
+    Caches the temperature for 15 minutes to avoid redundant network calls.
+    Failsafe defaults to a standard 18.0°C if the API is offline.
+    """
+    now = time.time()
+    if "temp" in _WEATHER_CACHE and now < _WEATHER_CACHE.get("expiry", 0):
+        return _WEATHER_CACHE["temp"]
+        
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": "51.5074",
+        "longitude": "-0.1278",
+        "current": "temperature_2m",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            res = await client.get(url, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                temp = float(data.get("current", {}).get("temperature_2m", 18.0))
+                # Cache for 15 minutes
+                _WEATHER_CACHE["temp"] = temp
+                _WEATHER_CACHE["expiry"] = now + 900
+                return temp
+    except Exception as e:
+        print(f"Error fetching current London temperature from Open-Meteo: {e}")
+        
+    return 18.0
 
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     # Radius of the Earth in meters
@@ -121,10 +156,11 @@ async def _create_walking_leg(
     }
 
 
-def _calculate_leg_sensory(leg: dict) -> tuple[int, int, int, int, int]:
+def _calculate_leg_sensory(leg: dict, temp: float) -> tuple[int, int, int, int, int]:
     """
     Determine the sensory profile (Sound, Crowds, Heat, Light, Smell)
-    on a 1-3 scale for a single transit/walking leg.
+    on a 1-4 scale for a single transit/walking leg, taking into account
+    the actual outdoor temperature for the heat metric.
     """
     mode = str(leg.get("mode", "")).lower()
     line = str(leg.get("line", "")).lower()
@@ -140,30 +176,57 @@ def _calculate_leg_sensory(leg: dict) -> tuple[int, int, int, int, int]:
         else:
             noise, crowds, heat, light, smell = 1, 1, 1, 1, 1
             
+        # Adjust outdoor walk discomfort based on outdoor temperature
+        if temp >= 25.0:
+            heat = 3
+        elif temp >= 20.0:
+            heat = 2
+        else:
+            heat = 1
+            
     elif mode == "bus":
         noise = 2   # Engine rumble
         crowds = 2  # Moderate congestion
-        heat = 2    # Standard bus ventilation
         light = 2   # Standard overhead bulbs + natural windows
         smell = 2   # Diesel exhaust fumes on street/boarding
+        
+        # Adjust bus discomfort based on outdoor temperature
+        if temp >= 25.0:
+            heat = 3
+        elif temp >= 18.0:
+            heat = 2
+        else:
+            heat = 1
         
     elif mode in ("tube", "subway", "underground"):
         # Deep level tube lines (Central, Northern, Victoria, Bakerloo, Jubilee, Piccadilly)
         deep_lines = ("central", "northern", "victoria", "bakerloo", "jubilee", "piccadilly")
         if any(dl in line for dl in deep_lines):
-            noise = 3   # Deafening rail squeal (can exceed 90dB)
+            noise = 4   # Deafening rail squeal (can exceed 90dB)
             crowds = 3  # High passenger density
-            heat = 3    # Sweltering heat (no air conditioning on deep tube, up to 32C)
             light = 3   # Glaring fluorescent tubes
             smell = 2   # Train dust and metallic air
+            
+            # Deep tubes trap heat significantly, becoming sweltering on warm days
+            if temp >= 24.0:
+                heat = 4
+            elif temp >= 15.0:
+                heat = 3
+            else:
+                heat = 2
         else:
             # Sub-surface lines (District, Circle, Hammersmith & City, Metropolitan)
             # Modern, spacious, air-conditioned
             noise = 2   # Moderate screech, wider tunnels
             crowds = 2  # Moderate
-            heat = 1    # Fully air-conditioned!
             light = 2   # Standard lighting
             smell = 2   # Mild train dust
+            
+            # Sub-surface lines are fully air-conditioned, so they remain comfortable
+            if temp >= 28.0:
+                heat = 2
+            else:
+                heat = 1
             
     elif mode in ("train", "dlr", "overground", "elizabeth-line", "national-rail"):
         if "elizabeth" in line or "elizabeth" in instruction:
@@ -172,13 +235,22 @@ def _calculate_leg_sensory(leg: dict) -> tuple[int, int, int, int, int]:
             heat = 1    # Air-conditioned
             light = 2   # Pleasant recessed soft white lighting
             smell = 1   # Clean, spacious
+            
+            if temp >= 28.0:
+                heat = 2
+            else:
+                heat = 1
         else:
-            # DLR / Overground / Standard rail
+            # DLR / Overground / Standard rail (mostly air-conditioned)
             noise = 2   # Rail noise
             crowds = 2  # Moderate
-            heat = 1    # Air-conditioned mostly
             light = 2
             smell = 1   # Better ventilation
+            
+            if temp >= 25.0:
+                heat = 2
+            else:
+                heat = 1
             
     else:
         # Unknown or generic transit fallback
@@ -187,12 +259,12 @@ def _calculate_leg_sensory(leg: dict) -> tuple[int, int, int, int, int]:
     return noise, crowds, heat, light, smell
 
 
-async def _calculate_leg_sensory_live(leg: dict) -> tuple[int, int, int, int, int]:
+async def _calculate_leg_sensory_live(leg: dict, temp: float) -> tuple[int, int, int, int, int]:
     """
     Determine sensory profile statically, and overlay live TfL crowding & disruption alerts.
     """
     # 1. Start with static baseline heuristics
-    noise, crowds, heat, light, smell = _calculate_leg_sensory(leg)
+    noise, crowds, heat, light, smell = _calculate_leg_sensory(leg, temp)
     
     # 2. Check live APIs for transit NaPTAN points
     dep_naptan = leg.get("departure_naptan", "")
@@ -209,24 +281,24 @@ async def _calculate_leg_sensory_live(leg: dict) -> tuple[int, int, int, int, in
     if tasks:
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            # If any live check returns True, escalate crowds and noise to High (3)
+            # If any live check returns True, escalate crowds and noise to Extreme (4)
             if any(r is True for r in results):
-                crowds = 3
-                noise = 3
+                crowds = 4
+                noise = 4
         except Exception:
             pass  # Fall back to static heuristics on any error
             
     return noise, crowds, heat, light, smell
 
 
-async def _build_route_option(index: int, journey: dict) -> dict:
+async def _build_route_option(index: int, journey: dict, temp: float) -> dict:
     """
     Format a fetched API journey route to match the frontend RouteOption model schema.
     """
     legs = journey.get("legs", [])
     
     # Calculate sensory levels per leg asynchronously with live API feeds, and use max-pooling for overall journey load
-    tasks = [_calculate_leg_sensory_live(leg) for leg in legs]
+    tasks = [_calculate_leg_sensory_live(leg, temp) for leg in legs]
     raw_profiles = await asyncio.gather(*tasks, return_exceptions=True)
     leg_profiles: List[tuple[int, int, int, int, int]] = [p for p in raw_profiles if isinstance(p, tuple)]
     
@@ -246,7 +318,9 @@ async def _build_route_option(index: int, journey: dict) -> dict:
         line = leg.get("line", "")
         is_bus_like = mode in ("bus", "coach", "national-coach", "replacement-bus")
         
-        if is_bus_like:
+        if mode == "walking":
+            transit_names.append("Walk")
+        elif is_bus_like:
             if line:
                 transit_names.append(f"Bus {line}")
             else:
@@ -273,7 +347,7 @@ async def _build_route_option(index: int, journey: dict) -> dict:
         for name in transit_names:
             if not deduped or deduped[-1] != name:
                 deduped.append(name)
-        route_name = " + ".join(deduped)
+        route_name = " ➔ ".join(deduped)
     else:
         route_name = "Walk"
 
@@ -585,8 +659,11 @@ async def get_route_suggestions(
                                 
         raw_journeys.extend(new_short_circuits)
 
+    # Fetch London current temperature
+    temp = await get_current_london_temp()
+
     # Map raw journeys to frontend schema asynchronously in parallel
-    tasks = [_build_route_option(i, j) for i, j in enumerate(raw_journeys)]
+    tasks = [_build_route_option(i, j, temp) for i, j in enumerate(raw_journeys)]
     route_options = await asyncio.gather(*tasks, return_exceptions=True)
     routes = [r for r in route_options if isinstance(r, dict)]
 
@@ -657,11 +734,11 @@ async def get_route_suggestions(
                 mismatch_triggers.append("fumes/scents")
 
             max_discomfort = (
-                w_noise * 3 +
-                w_crowds * 3 +
-                w_heat * 3 +
-                w_light * 3 +
-                w_smell * 3
+                w_noise * 4 +
+                w_crowds * 4 +
+                w_heat * 4 +
+                w_light * 4 +
+                w_smell * 4
             )
             
             if max_discomfort > 0:
@@ -679,7 +756,7 @@ async def get_route_suggestions(
             # Fallback score (simple sum of all 5 metrics)
             sensory_score = float(r["noise"] + r["crowds"] + r["heat"] + r["light"] + r["smell"])
             r["sensory_score"] = sensory_score
-            r["match_percentage"] = int(max(0, 100 - (sensory_score / 15) * 60))
+            r["match_percentage"] = int(max(0, 100 - (sensory_score / 20) * 60))
             r["sensory_description"] = "Enter a username to view personalized sensory alignment ratings."
 
     # 5. Determine types: safest/calmest vs. quickest
