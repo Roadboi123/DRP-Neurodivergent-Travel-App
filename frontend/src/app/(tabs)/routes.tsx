@@ -48,7 +48,7 @@ function statusChips(filters: RouteFilters): string[] {
     chips.push('A/C throughout');
   }
   if (filters.groupByChanges) {
-    chips.push('Grouped by changes');
+    chips.push('Grouped by number of changes');
   }
   return chips;
 }

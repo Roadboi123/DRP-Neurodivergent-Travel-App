@@ -81,7 +81,7 @@ export function RouteFilterSheet({
             <View style={styles.switchLabelGroup}>
               <Ionicons name="git-branch-outline" size={16} color={palette.textPrimary} />
               <Text style={[styles.switchLabel, { color: palette.textPrimary }]}>
-                Group by changes
+                Group by number of changes
               </Text>
             </View>
             <Switch
