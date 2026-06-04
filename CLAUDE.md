@@ -50,3 +50,5 @@ TestClient baseline diff.
 
 - Branch off `main`; never commit straight to it. Granular, scoped commits.
 - CI runs per-area (`.github/workflows/{backend,frontend}.yml`) on path triggers.
+- Dependabot (`.github/dependabot.yml`) opens grouped weekly dependency-update PRs
+  for pip, npm, and GitHub Actions.
