@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 2,
     borderRadius: 10,
-    borderWidth: 1.5,
+    borderWidth: 2.5,
   } as ViewStyle,
   chipLabel: {
     fontSize: 9.5,
