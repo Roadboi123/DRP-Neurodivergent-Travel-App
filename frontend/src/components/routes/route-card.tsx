@@ -87,16 +87,16 @@ function RouteCardBase({
                   const line = leg.line ? leg.line.toLowerCase() : '';
                   
                   let iconName: any = 'walk';
-                  let legBadgeColor = isDark ? '#2A2E35' : '#ECEFF1';
-                  let legTextColor = isDark ? '#CCC' : '#455A64';
+                  let legBadgeColor: string = BRAND.cyan;
+                  let legTextColor: string = BRAND.ink;
                   let displayName = 'Walk';
 
                   const isBusLike = mode === 'bus' || mode === 'coach' || mode === 'national-coach' || mode === 'replacement-bus';
 
                   if (isBusLike) {
                     iconName = 'bus';
-                    legBadgeColor = isDark ? '#4D1D1D' : '#FFEBEE';
-                    legTextColor = isDark ? '#EF5350' : '#C62828';
+                    legBadgeColor = BRAND.orange;
+                    legTextColor = BRAND.ink;
                     displayName = leg.line ? `Bus ${leg.line}` : (leg.instruction ? leg.instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '') : 'Bus');
                   } else if (mode === 'tube' || mode === 'subway' || mode === 'underground' || mode.includes('elizabeth')) {
                     iconName = 'subway';
@@ -148,8 +148,8 @@ function RouteCardBase({
                   } else if (mode === 'train' || mode === 'national-rail') {
                     iconName = 'train';
                     displayName = leg.line || 'Train';
-                    legBadgeColor = isDark ? '#1F344D' : '#E3F2FD';
-                    legTextColor = isDark ? '#64B5F6' : '#0D47A1';
+                    legBadgeColor = BRAND.green;
+                    legTextColor = BRAND.ink;
                   }
 
                   return (
@@ -379,20 +379,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 5,
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     borderRadius: 8,
     gap: 6,
     borderWidth: 1.5,
     borderColor: BRAND.ink,
+    ...hardShadow(2),
   },
   timelineBadgeText: {
     fontSize: 10,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   timelineDurText: {
     fontSize: 8,
-    fontWeight: '600',
-    opacity: 0.8,
+    fontFamily: Fonts?.display,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
     marginTop: 1,
   },
   toggleDetailsButton: {
