@@ -19,9 +19,11 @@ class Settings:
 
     SUPABASE_URL: str = os.getenv("SUPABASE_URL") or "https://placeholder.supabase.co"
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY") or "placeholder_key"
+    JWT_SECRET: str = os.getenv("JWT_SECRET") or "calm_travel_secret_key_88f0d8a7"
 
     API_TITLE: str = "Calm Travel API"
     API_VERSION: str = "0.1.0"
 
 
 settings = Settings()
+

@@ -19,6 +19,8 @@ import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
+import { useAuth } from '@/context/auth-context';
+import { ProfileModal } from '@/components/profile/profile-modal';
 
 type SortMode = 'classic' | 'speed' | 'cost' | 'noise' | 'crowds' | 'heat' | 'changes';
 
@@ -40,12 +42,13 @@ export default function RoutesScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const routesService = useRoutesService();
+  const { username, isLoggedIn } = useAuth();
 
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
   const [endLoc, setEndLoc] = useState('Imperial College London');
-  const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
 
   // Sorting states
   const [sortBy, setSortBy] = useState<SortMode>('classic');
@@ -166,20 +169,44 @@ export default function RoutesScreen() {
         <TouchableOpacity onPress={() => router.back()} style={[styles.navIconBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
           <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
         </TouchableOpacity>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity onPress={() => router.replace('/')} style={[styles.navIconBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
           <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setProfileVisible(true)} style={[styles.navIconBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
+          <Ionicons name={isLoggedIn ? "person" : "person-outline"} size={18} color={isLoggedIn ? "#E91E63" : palette.textPrimary} />
+          {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: palette.background }]} />}
         </TouchableOpacity>
       </View>
 
       <RouteSearchInputs
         startLoc={startLoc}
         endLoc={endLoc}
-        username={username}
         loading={loading}
         onStartChange={setStartLoc}
         onEndChange={setEndLoc}
-        onUsernameChange={setUsername}
       />
+
+      {/* Personalization warning bar */}
+      {!isLoggedIn && (
+        <TouchableOpacity
+          onPress={() => setProfileVisible(true)}
+          style={[
+            styles.loginWarningBanner,
+            {
+              backgroundColor: isDark ? '#2B2620' : '#FFF9F3',
+              borderColor: isDark ? '#5c4320' : '#FFE0B2',
+            }
+          ]}
+          activeOpacity={0.8}
+          accessibilityLabel="Click to log in and personalize routes"
+        >
+          <Ionicons name="warning" size={16} color="#FF9800" />
+          <Text style={[styles.loginWarningText, { color: isDark ? '#FFB74D' : '#E65100' }]}>
+            Viewing generic routes. <Text style={{ textDecorationLine: 'underline', fontWeight: 'bold' }}>Log in</Text> to personalize.
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
@@ -288,6 +315,8 @@ export default function RoutesScreen() {
           })}
         </ScrollView>
       </View>
+
+      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -309,6 +338,33 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  profileActiveDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2E7D32',
+    borderWidth: 1.5,
+  },
+  loginWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+  },
+  loginWarningText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 16,

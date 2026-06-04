@@ -6,16 +6,19 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
+  type TextStyle,
+  type ViewStyle,
 } from 'react-native';
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
-import { getPalette } from '@/constants/theme';
+import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
+import { useAuth } from '@/context/auth-context';
+import { ProfileModal } from '@/components/profile/profile-modal';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
 const INITIAL_PREFERENCES: Preference[] = [
@@ -33,25 +36,26 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function UserPreferencesScreen() {
   const preferencesService = usePreferencesService();
+  const { username: authUsername, isLoggedIn } = useAuth();
   const [preferences, setPreferences] = useState<Preference[]>(INITIAL_PREFERENCES);
-  const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [guideVisible, setGuideVisible] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
 
   useEffect(() => {
     const loadPreferences = async () => {
-      if (!username.trim()) {
+      if (!isLoggedIn) {
         setPreferences(INITIAL_PREFERENCES);
         return;
       }
 
       try {
         setLoading(true);
-        const data = await preferencesService.getPreferences(username);
+        const data = await preferencesService.getPreferences('me');
 
         if (!data) {
           setPreferences(INITIAL_PREFERENCES);
@@ -72,25 +76,24 @@ export default function UserPreferencesScreen() {
       }
     };
 
-    const timeout = setTimeout(loadPreferences, 500);
-    return () => clearTimeout(timeout);
-  }, [username, preferencesService]);
+    loadPreferences();
+  }, [isLoggedIn, authUsername, preferencesService]);
 
   // Persist immediately on input. The backend requires all five fields, so we
   // only save once every item is set and a username is present.
   const persist = async (prefs: Preference[]) => {
-    if (!username.trim()) return;
+    if (!isLoggedIn || !authUsername) return;
     if (!prefs.every((p) => p.value !== null)) return;
 
     try {
       setSaveStatus('saving');
       await preferencesService.savePreferences({
-        username: username.trim(),
-        noise: valueFor(prefs, 'noise'),
-        crowds: valueFor(prefs, 'crowds'),
-        temperature: valueFor(prefs, 'temperature'),
-        smell: valueFor(prefs, 'smell'),
-        lights: valueFor(prefs, 'lights'),
+        username: authUsername,
+        noise: valueFor(prefs, 'noise')!,
+        crowds: valueFor(prefs, 'crowds')!,
+        temperature: valueFor(prefs, 'temperature')!,
+        smell: valueFor(prefs, 'smell')!,
+        lights: valueFor(prefs, 'lights')!,
       });
       setSaveStatus('saved');
     } catch (e) {
@@ -116,7 +119,9 @@ export default function UserPreferencesScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: palette.textPrimary }]}>Your preferences</Text>
+            <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+              Your preferences
+            </Text>
 
             <TouchableOpacity
               onPress={() => setGuideVisible(true)}
@@ -125,65 +130,70 @@ export default function UserPreferencesScreen() {
               <Ionicons name="information-circle-outline" size={26} color={palette.textSecondary} />
             </TouchableOpacity>
           </View>
-
-          {/* Username Input */}
-          <View style={styles.inputContainer}>
-            <Text style={[styles.inputLabel, { color: palette.textPrimary }]}>Username</Text>
-
-            <TextInput
-              value={username}
-              onChangeText={setUsername}
-              placeholder="Enter your username"
-              placeholderTextColor={palette.textMuted}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: palette.surface,
-                  borderColor: palette.border,
-                  color: palette.textPrimary,
-                },
-              ]}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            {loading && (
-              <Text style={[styles.statusText, { color: palette.textMuted }]}>
-                Loading preferences…
-              </Text>
-            )}
-            {!loading && saveStatus === 'saving' && (
-              <Text style={[styles.statusText, { color: palette.textMuted }]}>Saving…</Text>
-            )}
-            {!loading && saveStatus === 'saved' && (
-              <Text style={[styles.statusText, styles.statusSaved]}>✓ Saved</Text>
-            )}
-            {!loading && saveStatus === 'error' && (
-              <Text style={[styles.statusText, styles.statusError]}>Couldn’t save — try again</Text>
-            )}
-          </View>
         </View>
 
-        {/* Scale prompt */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-          How much does each of these affect you?
-        </Text>
-
-        {/* Card */}
-        <View style={[styles.card, { backgroundColor: palette.surface }]}>
-          {preferences.map((pref, i) => (
-            <View key={pref.id}>
-              <PreferenceRow preference={pref} onSelect={handleSelect} />
-
-              {i < preferences.length - 1 && (
-                <View style={[styles.rowDivider, { backgroundColor: palette.divider }]} />
+        {!isLoggedIn ? (
+          <View style={[styles.splashContainer, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.iconCircle, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
+              <Ionicons name="options-outline" size={36} color="#E91E63" />
+            </View>
+            <Text style={[styles.splashTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+              Sign in to customize
+            </Text>
+            <Text style={[styles.splashDesc, { color: palette.textSecondary }]}>
+              Create an account or sign in to set your comfort levels for noise, crowds, temperature, and more. Your preferences will be saved to your profile and applied automatically to all planned routes.
+            </Text>
+            
+            <TouchableOpacity
+              style={[styles.loginBtn, { backgroundColor: '#E91E63' }]}
+              onPress={() => setProfileVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.loginBtnText}>Sign In / Register</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* Scale prompt */}
+            <View style={styles.loggedInHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+                How much does each of these affect you?
+              </Text>
+              
+              {loading && (
+                <Text style={[styles.statusText, { color: palette.textMuted }]}>
+                  Loading preferences…
+                </Text>
+              )}
+              {!loading && saveStatus === 'saving' && (
+                <Text style={[styles.statusText, { color: palette.textMuted }]}>Saving…</Text>
+              )}
+              {!loading && saveStatus === 'saved' && (
+                <Text style={[styles.statusText, styles.statusSaved]}>✓ Saved</Text>
+              )}
+              {!loading && saveStatus === 'error' && (
+                <Text style={[styles.statusText, styles.statusError]}>Couldn’t save — try again</Text>
               )}
             </View>
-          ))}
-        </View>
+
+            {/* Card */}
+            <View style={[styles.card, { backgroundColor: palette.surface }]}>
+              {preferences.map((pref, i) => (
+                <View key={pref.id}>
+                  <PreferenceRow preference={pref} onSelect={handleSelect} />
+
+                  {i < preferences.length - 1 && (
+                    <View style={[styles.rowDivider, { backgroundColor: palette.divider }]} />
+                  )}
+                </View>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <PreferencesGuideSheet visible={guideVisible} onClose={() => setGuideVisible(false)} />
+      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -191,71 +201,51 @@ export default function UserPreferencesScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-  },
+  } as ViewStyle,
 
   container: {
     paddingHorizontal: 20,
     paddingTop: 32,
     paddingBottom: 40,
-  },
+  } as ViewStyle,
 
   // Header
   header: {
     marginBottom: 20,
-  },
+  } as ViewStyle,
 
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
+  } as ViewStyle,
 
   title: {
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: -0.5,
-  },
+  } as TextStyle,
 
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: -0.2,
-    marginBottom: 12,
-  },
-
-  // Input
-  inputContainer: {
-    marginTop: 18,
-  },
-
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 15,
-  },
+    flex: 1,
+  } as TextStyle,
 
   statusText: {
-    marginTop: 8,
     fontSize: 13,
-  },
+  } as TextStyle,
 
   statusSaved: {
     color: '#1D9E75',
     fontWeight: '600',
-  },
+  } as TextStyle,
 
   statusError: {
     color: '#C0392B',
     fontWeight: '600',
-  },
+  } as TextStyle,
 
   // Card
   card: {
@@ -272,9 +262,76 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
-  },
+  } as ViewStyle,
 
   rowDivider: {
     height: 1,
-  },
+  } as ViewStyle,
+
+  // Splash styling
+  splashContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  } as ViewStyle,
+
+  iconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  } as ViewStyle,
+
+  splashTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 12,
+  } as TextStyle,
+
+  splashDesc: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 28,
+  } as TextStyle,
+
+  loginBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#E91E63',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  } as ViewStyle,
+
+  loginBtnText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+  } as TextStyle,
+
+  loggedInHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
+  } as ViewStyle,
 });
+

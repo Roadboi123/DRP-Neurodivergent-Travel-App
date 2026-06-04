@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 import { DailyTips } from '@/components/home/daily-tips';
 import { QuickActionCard } from '@/components/home/quick-action-card';
@@ -9,14 +10,18 @@ import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
 import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useHealthService } from '@/services/services-context';
+import { useAuth } from '@/context/auth-context';
+import { ProfileModal } from '@/components/profile/profile-modal';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const router = useRouter();
   const health = useHealthService();
+  const { username, isLoggedIn } = useAuth();
 
   const [backendState, setBackendState] = useState<BackendStatus>('Checking');
+  const [profileVisible, setProfileVisible] = useState(false);
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
@@ -50,13 +55,31 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.greetingText, { color: palette.textSecondary }]}>
-              Hello, Traveler 🥀
+              {isLoggedIn ? `Hello, ${username} 🥀` : 'Hello, Traveler 🥀'}
             </Text>
             <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
               My Planner
             </Text>
           </View>
-          <StatusBadge status={backendState} />
+          <View style={styles.headerRightActions}>
+            <StatusBadge status={backendState} />
+            <TouchableOpacity
+              onPress={() => setProfileVisible(true)}
+              style={[
+                styles.profileIconBtn,
+                { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }
+              ]}
+              activeOpacity={0.8}
+              accessibilityLabel="Open profile modal"
+            >
+              <Ionicons
+                name={isLoggedIn ? "person" : "person-outline"}
+                size={18}
+                color={isLoggedIn ? "#E91E63" : palette.textPrimary}
+              />
+              {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: palette.background }]} />}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Welcome Banner Card */}
@@ -91,6 +114,9 @@ export default function HomeScreen() {
         </Text>
         <DailyTips />
       </ScrollView>
+
+      {/* Global Profile/Login Modal */}
+      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -109,6 +135,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  profileIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  profileActiveDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2E7D32',
+    borderWidth: 1.5,
   },
   greetingText: {
     fontSize: 13,

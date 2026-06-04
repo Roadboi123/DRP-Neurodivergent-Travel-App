@@ -5,7 +5,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import diagnostics, health, preferences, routes
+from app.api import auth, diagnostics, health, preferences, routes
 from app.config import settings
 
 app = FastAPI(
@@ -21,6 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(health.router)
 app.include_router(diagnostics.router)
 app.include_router(preferences.router)
