@@ -48,5 +48,6 @@ in its own transaction (a session advisory lock serializes concurrent runners).
 
 ## Checks (match CI)
 
-`ruff check .`, `mypy .`, `pytest -q`. ruff/mypy/pytest are installed by CI, not
-pinned in `requirements.txt` — don't add them there.
+`ruff check .`, `mypy .`, `pytest -q`. These dev tools are pinned in
+`requirements-dev.txt` (CI installs them from there, and Dependabot bumps them) —
+keep them OUT of `requirements.txt` so the Railway runtime image stays lean.

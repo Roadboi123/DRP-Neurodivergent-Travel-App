@@ -7,6 +7,10 @@ on:
     paths:
       - Dockerfile.builder
 
+# Least privilege: build/push uses Docker Hub creds, not the GitHub token.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

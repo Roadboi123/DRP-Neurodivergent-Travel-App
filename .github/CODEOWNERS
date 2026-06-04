@@ -1,0 +1,12 @@
+# Code owners are auto-requested for review on PRs that touch matching paths.
+# With "Require review from Code Owners" branch protection, approval from any one
+# listed owner satisfies the rule. Adjust handles/paths as the team evolves.
+
+# Global owners — the whole team is requested by default.
+* @NikhilPremMehta @Roadboi123 @moosemorse @hassam-khan15
+
+# Per-area ownership — uncomment and tailor to route reviews more narrowly:
+# /backend/   @Roadboi123 @moosemorse
+# /frontend/  @NikhilPremMehta @hassam-khan15
+# /shared/    @Roadboi123
+# /.github/   @Roadboi123 @moosemorse
