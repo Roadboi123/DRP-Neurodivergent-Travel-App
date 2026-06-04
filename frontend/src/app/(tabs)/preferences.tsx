@@ -18,44 +18,37 @@ import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { HeaderNav } from '@/components/ui/header-nav';
 import { Fonts, getPalette, hardShadow } from '@/constants/theme';
-import { SENSORY_KEYS, type SensoryKey } from '@/constants/presets';
+import { SENSORY_KEYS, SENSORY_META, type SensoryKey } from '@/constants/presets';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePresets } from '@/context/presets-context';
 import { useAuth } from '@/context/auth-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
-// Static label/emoji for each sensory row; values come from the presets context.
-const PREFERENCE_META: Record<SensoryKey, { label: string; emoji: string }> = {
-  noise: { label: 'Noise', emoji: '🔊' },
-  crowds: { label: 'Crowds', emoji: '👥' },
-  temperature: { label: 'Temperature', emoji: '🌡️' },
-  smell: { label: 'Smell', emoji: '👃' },
-  lights: { label: 'Lights', emoji: '💡' },
-};
-
 export default function UserPreferencesScreen() {
   const { isLoggedIn } = useAuth();
-  const { values, loading, saveStatus, setValue } = usePresets();
+  const { values, activeId, loading, saveStatus, setPresetValue } = usePresets();
   const [guideVisible, setGuideVisible] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
 
+  // Rows reflect the currently-selected preset's values; editing one writes
+  // back to that preset.
   const preferences = useMemo<Preference[]>(
     () =>
       SENSORY_KEYS.map((key) => ({
         id: key,
-        label: PREFERENCE_META[key].label,
-        emoji: PREFERENCE_META[key].emoji,
+        label: SENSORY_META[key].label,
+        emoji: SENSORY_META[key].emoji,
         value: values[key],
       })),
     [values]
   );
 
   const handleSelect = (id: string, value: SensitivityLevel) => {
-    setValue(id as SensoryKey, value);
+    setPresetValue(activeId, id as SensoryKey, value);
   };
 
   return (
@@ -109,13 +102,13 @@ export default function UserPreferencesScreen() {
         ) : (
           <>
             <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-              How are you feeling today?
+              Select preset profile
             </Text>
-            <PresetSwitcher showDescription />
+            <PresetSwitcher />
 
             <View style={[styles.loggedInHeaderRow, styles.rowsHeader]}>
               <Text style={[styles.sectionTitle, { color: palette.textPrimary, marginBottom: 0 }]}>
-                Fine-tune
+                How much do these affect you?
               </Text>
               
               {loading && (

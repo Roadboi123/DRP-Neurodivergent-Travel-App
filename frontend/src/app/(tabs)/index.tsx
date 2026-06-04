@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { DailyTips } from '@/components/home/daily-tips';
 import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
+import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -89,13 +90,15 @@ export default function HomeScreen() {
           <StatusBadge status={backendState} />
         </View>
 
-        {/* Today's tolerance presets — quick way to re-tune routes per day */}
+        {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
+            active profile's sensory levels. */}
         {isLoggedIn && (
           <View style={styles.presetSection}>
             <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-              How are you feeling today?
+              Select preset profile
             </Text>
-            <PresetSwitcher showDescription />
+            <PresetSwitcher />
+            <PresetGlimpse />
           </View>
         )}
 
