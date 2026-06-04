@@ -892,11 +892,8 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
         elif len(suspended_lines) == 2:
             desc = f"{suspended_lines[0]} and {suspended_lines[1]} lines are suspended."
             title = "Line Suspensions"
-        elif len(suspended_lines) == 3:
-            desc = f"{suspended_lines[0]}, {suspended_lines[1]}, and {suspended_lines[2]} lines are suspended."
-            title = "Line Suspensions"
         else:
-            desc = "Multiple lines are suspended."
+            desc = f"{', '.join(suspended_lines[:-1])}, and {suspended_lines[-1]} lines are suspended."
             title = "Line Suspensions"
             
         warnings.append({
