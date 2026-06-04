@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { Fonts, getPalette } from '@/constants/theme';
@@ -96,7 +96,7 @@ function RouteCardBase({
         <View style={styles.leftContent}>
           <View style={styles.timelineWrapper}>
             {route.legs && route.legs.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineScroll} style={{ flex: 1 }}>
+              <View style={styles.timelineRow}>
                 {route.legs.map((leg, lIdx) => {
                   const mode = leg.mode.toLowerCase();
                   const line = leg.line ? leg.line.toLowerCase() : '';
@@ -194,13 +194,13 @@ function RouteCardBase({
                   );
                 })}
 
-                {/* Match Rating Pill inside ScrollView at the end */}
+                {/* Match Rating Pill at the end of the timeline */}
                 <View style={[styles.matchBadge, { backgroundColor: matchColors.bg }]}>
                   <Text style={[styles.matchBadgeText, { color: matchColors.text }]}>
                     {route.match_percentage ?? 100}% Match
                   </Text>
                 </View>
-              </ScrollView>
+              </View>
             )}
           </View>
 
@@ -247,9 +247,10 @@ function RouteCardBase({
 }
 
 // Memoized so re-ranking the list (e.g. Speed↔Preference) reorders already-painted
-// cards instead of re-rendering each one. Route object refs are stable across a
-// re-sort, so this turns a reorder into a pure node move — fixes the white repaint
-// flash from the nested timeline ScrollView remounting on react-native-web.
+// cards instead of re-rendering each one (route object refs are stable across a
+// re-sort). The legs timeline is a plain wrapping row rather than a horizontal
+// ScrollView — that scroll container was repainting a blank white frame on
+// react-native-web whenever the list updated.
 export const RouteCard = React.memo(RouteCardBase);
 
 const styles = StyleSheet.create({
@@ -367,8 +368,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  timelineScroll: {
+  timelineRow: {
+    flex: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
   },
