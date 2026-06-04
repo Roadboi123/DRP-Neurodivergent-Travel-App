@@ -849,23 +849,116 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
 
     # 3. Live line disruptions check from TfL Status API
     tfl_disruptions = []
-    if u_crowds >= 3 or u_noise >= 3:
+    if u_crowds >= 3 or u_noise >= 3 or generic:
         try:
             tfl_disruptions = await tlf_client.get_live_line_disruptions()
         except Exception as e:
             print(f"Error getting live line disruptions: {e}")
 
-    # Gather delayed lines and determine if any have high severity
+    # Categorize disruptions
+    suspended_lines = []
+    closed_lines = []
+    delayed_only_lines = []
+    
     delayed_lines = []
     severe_lines = []
+
     for d in tfl_disruptions:
         line_name = d["line"]
+        status_desc = str(d.get("status_desc", "")).lower()
+        
+        # Categorize
+        if "suspend" in status_desc:
+            if line_name not in suspended_lines:
+                suspended_lines.append(line_name)
+        elif "close" in status_desc or "block" in status_desc:
+            if line_name not in closed_lines:
+                closed_lines.append(line_name)
+        else:
+            if line_name not in delayed_only_lines:
+                delayed_only_lines.append(line_name)
+                
+        # Track for crowding/noise (which we do for personalized route warnings)
         if line_name not in delayed_lines:
             delayed_lines.append(line_name)
         if d["severity"] == "high" and line_name not in severe_lines:
             severe_lines.append(line_name)
 
-    if delayed_lines:
+    # 1. Suspensions (shown in both personalized and generic)
+    if suspended_lines:
+        if len(suspended_lines) == 1:
+            desc = f"{suspended_lines[0]} Line is suspended."
+            title = "Line Suspension"
+        elif len(suspended_lines) == 2:
+            desc = f"{suspended_lines[0]} and {suspended_lines[1]} lines are suspended."
+            title = "Line Suspensions"
+        elif len(suspended_lines) == 3:
+            desc = f"{suspended_lines[0]}, {suspended_lines[1]}, and {suspended_lines[2]} lines are suspended."
+            title = "Line Suspensions"
+        else:
+            desc = "Multiple lines are suspended."
+            title = "Line Suspensions"
+            
+        warnings.append({
+            "id": f"w_tfl_susp_{warning_id_counter}",
+            "title": title,
+            "desc": desc,
+            "severity": "high",
+            "icon": "alert-circle"
+        })
+        warning_id_counter += 1
+
+    # 2. Closures (shown in both personalized and generic)
+    if closed_lines:
+        if len(closed_lines) == 1:
+            desc = f"{closed_lines[0]} Line has closures."
+            title = "Line Closure"
+        elif len(closed_lines) == 2:
+            desc = f"{closed_lines[0]} and {closed_lines[1]} lines have closures."
+            title = "Line Closures"
+        elif len(closed_lines) == 3:
+            desc = f"{closed_lines[0]}, {closed_lines[1]}, and {closed_lines[2]} lines have closures."
+            title = "Line Closures"
+        else:
+            desc = "Multiple lines have closures."
+            title = "Line Closures"
+            
+        warnings.append({
+            "id": f"w_tfl_closure_{warning_id_counter}",
+            "title": title,
+            "desc": desc,
+            "severity": "high",
+            "icon": "alert-circle"
+        })
+        warning_id_counter += 1
+
+    # 3. Delays
+    # 3a. Generic Delays (only shown when generic=True)
+    if generic and delayed_only_lines:
+        if len(delayed_only_lines) == 1:
+            desc = f"{delayed_only_lines[0]} Line is experiencing delays."
+            title = "Line Delay"
+        elif len(delayed_only_lines) == 2:
+            desc = f"{delayed_only_lines[0]} and {delayed_only_lines[1]} lines are experiencing delays."
+            title = "Line Delays"
+        elif len(delayed_only_lines) == 3:
+            desc = f"{delayed_only_lines[0]}, {delayed_only_lines[1]}, and {delayed_only_lines[2]} lines are experiencing delays."
+            title = "Line Delays"
+        else:
+            desc = "Multiple lines are experiencing delays."
+            title = "Line Delays"
+            
+        warnings.append({
+            "id": f"w_tfl_delays_{warning_id_counter}",
+            "title": title,
+            "desc": desc,
+            "severity": "medium",
+            "icon": "alert-circle"
+        })
+        warning_id_counter += 1
+
+    # 3b. Sensory warnings for platform/station (only shown when generic=False)
+    if not generic and delayed_lines:
         if len(delayed_lines) == 1:
             lines_str = f"{delayed_lines[0]} Line"
         elif len(delayed_lines) == 2:
