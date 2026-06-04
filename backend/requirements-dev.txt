@@ -1,0 +1,6 @@
+# Dev/CI-only tools (linter, type checker, test runner). Pinned so CI is
+# reproducible; kept OUT of requirements.txt so the Railway runtime image stays
+# lean. Dependabot (pip ecosystem) bumps these.
+ruff==0.15.16
+mypy==2.1.0
+pytest==9.0.3
