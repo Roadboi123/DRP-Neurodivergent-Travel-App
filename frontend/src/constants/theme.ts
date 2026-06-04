@@ -28,9 +28,51 @@ export const Colors = {
 };
 
 /**
- * Semantic surface/text palette used across the app screens. Values mirror the
- * exact hex codes previously inlined as `isDark ? '#x' : '#y'` ternaries so the
- * rendered UI is unchanged — `getPalette(isDark)` is the single source for them.
+ * Wero brand palette — the neo-brutalist style: ink outlines, bright fills,
+ * hard offset shadows. These are the raw brand colours; screens consume the
+ * semantic `ThemePalette` below (via `getPalette`) for surface/text tokens.
+ */
+export const BRAND = {
+  ink: '#1d1c1c',
+  yellow: '#fff48d',
+  pink: '#ff158a',
+  pinkSoft: '#fd74fd',
+  green: '#83f582',
+  cyan: '#7af7f7',
+  orange: '#fdad70',
+  white: '#ffffff',
+} as const;
+
+/** Linear-gradient presets (consumed by expo-linear-gradient). */
+export const GRADIENTS = {
+  // Static page background — pink → yellow at ~121deg (start/end approximate it).
+  background: {
+    colors: [BRAND.pink, BRAND.yellow] as [string, string],
+    start: { x: 0, y: 0 },
+    end: { x: 1, y: 1 },
+  },
+  // Card fills lifted from the Wero cards.
+  cyanGreen: { colors: [BRAND.cyan, BRAND.green] as [string, string] },
+  pinkOrange: { colors: [BRAND.pinkSoft, BRAND.orange] as [string, string] },
+};
+
+/**
+ * The signature Wero shadow: a hard, un-blurred offset block in ink. On web
+ * (react-native-web) this maps to `box-shadow: 0 {offset}px 0 #1d1c1c`. Use a
+ * smaller offset (e.g. 2) for the pressed state.
+ */
+export const hardShadow = (offset = 6) => ({
+  shadowColor: BRAND.ink,
+  shadowOffset: { width: 0, height: offset },
+  shadowOpacity: 1,
+  shadowRadius: 0,
+  elevation: offset,
+});
+
+/**
+ * Semantic surface/text palette used across the app screens. Token names are
+ * unchanged so components keep working; values are now the light-only Wero
+ * palette (`getPalette(isDark)` ignores `isDark` — the app is light-only).
  */
 export type ThemePalette = {
   background: string;
@@ -43,53 +85,60 @@ export type ThemePalette = {
   textMuted: string;
 };
 
-export const Palette: { light: ThemePalette; dark: ThemePalette } = {
-  light: {
-    background: '#FAF9F6',
-    surface: '#FFFFFF',
-    border: '#EAEAEA',
-    borderStrong: '#E5E7EB',
-    divider: '#F0F0EE',
-    textPrimary: '#1A1A1A',
-    textSecondary: '#666',
-    textMuted: '#888',
-  },
-  dark: {
-    background: '#121517',
-    surface: '#1E2229',
-    border: '#2E3543',
-    borderStrong: '#2A303C',
-    divider: '#2E3543',
-    textPrimary: '#FFF',
-    textSecondary: '#AAA',
-    textMuted: '#AAA',
-  },
+// Light-only Wero palette. `background` is transparent so the fixed gradient
+// (mounted once behind the navigator) shows through every screen.
+const weroPalette: ThemePalette = {
+  background: 'transparent',
+  surface: BRAND.white,
+  border: BRAND.ink,
+  borderStrong: BRAND.ink,
+  divider: '#bbbaba',
+  textPrimary: BRAND.ink,
+  textSecondary: BRAND.ink,
+  textMuted: '#5b5b5b',
 };
 
-export const getPalette = (isDark: boolean): ThemePalette =>
-  isDark ? Palette.dark : Palette.light;
+export const Palette: { light: ThemePalette; dark: ThemePalette } = {
+  light: weroPalette,
+  dark: weroPalette,
+};
+
+// App is light-only (Wero); the param is kept for call-site compatibility.
+export const getPalette = (_isDark: boolean): ThemePalette => weroPalette;
+
+// Archivo family names as loaded by @expo-google-fonts/archivo (see root
+// _layout.tsx). `display` is the heavy grotesk for big Wero headings; `body`
+// is the medium weight for everything else.
+export const WeroFonts = {
+  display: 'Archivo_800ExtraBold',
+  displayBlack: 'Archivo_900Black',
+  body: 'Archivo_500Medium',
+  bodyBold: 'Archivo_700Bold',
+} as const;
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
+    display: WeroFonts.display,
+    body: WeroFonts.body,
   },
   default: {
     sans: 'normal',
     serif: 'serif',
     rounded: 'normal',
     mono: 'monospace',
+    display: WeroFonts.display,
+    body: WeroFonts.body,
   },
   web: {
     sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    display: WeroFonts.display,
+    body: WeroFonts.body,
   },
 });

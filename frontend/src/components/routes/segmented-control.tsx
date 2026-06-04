@@ -2,10 +2,10 @@ import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-const ACCENT = '#E91E63';
+const ACCENT = BRAND.pink;
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -35,14 +35,12 @@ export function SegmentedControl<T extends string>({
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const isTab = variant === 'tab';
-  const trackBg = isDark ? '#2E3543' : '#EAEAEA';
 
   return (
-    <View style={[isTab ? styles.tabTrack : styles.chipRow, isTab && { backgroundColor: trackBg }]}>
+    <View style={isTab ? styles.tabTrack : styles.chipRow}>
       {options.map((option) => {
         const active = option.value === value;
-        const bg = active ? ACCENT : isTab ? 'transparent' : trackBg;
-        const fg = active ? '#FFF' : palette.textPrimary;
+        const fg = active ? BRAND.white : palette.textPrimary;
         return (
           <TouchableOpacity
             key={option.value}
@@ -50,7 +48,7 @@ export function SegmentedControl<T extends string>({
             activeOpacity={0.85}
             style={[
               isTab ? styles.tabSegment : styles.chip,
-              { backgroundColor: bg },
+              active && styles.segmentActive,
             ]}>
             {option.icon && <Ionicons name={option.icon} size={15} color={fg} />}
             <Text style={[styles.label, { color: fg }]}>{option.label}</Text>
@@ -64,8 +62,12 @@ export function SegmentedControl<T extends string>({
 const styles = StyleSheet.create({
   tabTrack: {
     flexDirection: 'row',
-    borderRadius: 12,
-    padding: 3,
+    borderRadius: 30,
+    padding: 4,
+    backgroundColor: BRAND.white,
+    borderWidth: 2,
+    borderColor: BRAND.ink,
+    ...hardShadow(4),
   },
   tabSegment: {
     flex: 1,
@@ -73,13 +75,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 9,
-    borderRadius: 10,
+    paddingVertical: 10,
+    borderRadius: 24,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   chip: {
     flexDirection: 'row',
@@ -87,10 +89,20 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 30,
+    backgroundColor: BRAND.white,
+    borderWidth: 2,
+    borderColor: BRAND.ink,
+    ...hardShadow(3),
+  },
+  segmentActive: {
+    backgroundColor: ACCENT,
   },
   label: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
 });
