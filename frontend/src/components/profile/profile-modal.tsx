@@ -192,7 +192,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
       <Pressable style={styles.backdrop} onPress={handleClose}>
         <TouchableOpacity
           activeOpacity={1}
-          style={[styles.sheet, { backgroundColor: palette.surface }]}
+          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
           onPress={(e) => e.stopPropagation()}
         >
           <View style={styles.handle} />
@@ -383,7 +383,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   } as ViewStyle,
   sheet: {
@@ -393,6 +393,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
+    borderWidth: 2,
   } as ViewStyle,
   handle: {
     alignSelf: 'center',
