@@ -10,10 +10,12 @@ import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { BRAND, Fonts, getAccents, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useHealthService } from '@/services/services-context';
+import { useHealthService, useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
 import { SensorySandbox } from '@/components/home/sensory-sandbox';
+import type { WarningItem } from '@/types/route';
+import { useIsFocused } from '@react-navigation/native';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
@@ -23,9 +25,13 @@ export default function HomeScreen() {
   const health = useHealthService();
   const { username, isLoggedIn } = useAuth();
 
+  const routesService = useRoutesService();
+  const isFocused = useIsFocused();
+
   const [backendState, setBackendState] = useState<BackendStatus>('Checking');
   const [profileVisible, setProfileVisible] = useState(false);
   const [sandboxVisible, setSandboxVisible] = useState(false);
+  const [warnings, setWarnings] = useState<WarningItem[]>([]);
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
@@ -45,6 +51,28 @@ export default function HomeScreen() {
     }
     checkBackend();
   }, [health]);
+
+  useEffect(() => {
+    let active = true;
+    async function fetchWarnings() {
+      if (!isFocused) return;
+      try {
+        const data = await routesService.getWarnings('', true);
+        if (active) {
+          setWarnings(data);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch warnings on home screen:', error);
+        if (active) {
+          setWarnings([]);
+        }
+      }
+    }
+    fetchWarnings();
+    return () => {
+      active = false;
+    };
+  }, [username, routesService, isFocused]);
 
   if (!mounted) {
     return null;
@@ -133,7 +161,7 @@ export default function HomeScreen() {
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Daily Travel Tips
         </Text>
-        <DailyTips />
+        <DailyTips warnings={warnings} />
       </ScrollView>
 
       {/* Global Profile/Login Modal */}

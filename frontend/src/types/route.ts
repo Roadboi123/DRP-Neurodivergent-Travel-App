@@ -15,11 +15,5 @@ export type SensoryLevel = RouteOption['noise'];
 // Route classification surfaced in the UI.
 export type RouteType = RouteOption['type'];
 
-// Frontend-only: static data for the client-side warnings panel (not an API type).
-export interface WarningItem {
-  id: string;
-  title: string;
-  desc: string;
-  severity: 'high' | 'medium' | 'info';
-  icon: string;
-}
+// Regenerated from the backend Pydantic schema
+export type WarningItem = components['schemas']['WarningItemSchema'];

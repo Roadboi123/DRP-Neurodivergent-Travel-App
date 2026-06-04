@@ -244,3 +244,41 @@ async def get_routes(
     # Filter out journeys with short/useless bus legs (<= 2 minutes)
     filtered = [j for j in combined if not _is_useless_bus_journey(j)]
     return filtered
+
+
+async def get_live_line_disruptions() -> list[dict]:
+    """
+    Fetch active status disruptions from TfL's Line status feed.
+    """
+    url = f"{TFL_BASE}/Line/Mode/tube,dlr,overground,elizabeth-line/Status"
+    params = {}
+    if APP_KEY:
+        params["app_key"] = APP_KEY
+        
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get(url, params=params)
+            if res.status_code == 200:
+                lines = res.json()
+                disruptions = []
+                for line in lines:
+                    line_name = line.get("name", "")
+                    for status in line.get("lineStatuses", []):
+                        severity = status.get("statusSeverity", 10)
+                        # TfL severity: 10 is Good Service, less than 10 indicates delays/suspensions/etc.
+                        if severity < 10:
+                            desc = status.get("reason", "")
+                            if not desc:
+                                desc = f"{line_name} Line: {status.get('statusSeverityDescription', 'Disruption')}"
+                            
+                            disruptions.append({
+                                "line": line_name,
+                                "severity": "high" if severity <= 5 else "medium", # 1-5 closures/suspensions, 6-9 delays
+                                "description": desc,
+                                "status_desc": status.get("statusSeverityDescription", "")
+                            })
+                return disruptions
+    except Exception as e:
+        print(f"Error fetching live line disruptions from TfL: {e}")
+        
+    return []

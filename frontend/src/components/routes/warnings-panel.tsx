@@ -14,36 +14,15 @@ const SEVERITY_COLORS: Record<WarningItem['severity'], string> = {
   info: '#4DA6FF',
 };
 
-// Default mock warnings shown above the route list.
-const DEFAULT_WARNINGS: WarningItem[] = [
-  {
-    id: 'w1',
-    title: 'District Line Delays',
-    desc: 'Moderate delays are causing platform crowding at South Kensington.',
-    severity: 'medium',
-    icon: 'alert-circle',
-  },
-  {
-    id: 'w2',
-    title: 'High Vehicle Heat Reports',
-    desc: 'Bus 170 and Central Line are running 4°C above normal temperatures.',
-    severity: 'high',
-    icon: 'thermometer',
-  },
-  {
-    id: 'w3',
-    title: 'Entrance Drilling Noise',
-    desc: 'Heavy street construction near Gloucester Road station (90dB+).',
-    severity: 'info',
-    icon: 'volume-high',
-  },
-];
-
-export function WarningsPanel({ warnings = DEFAULT_WARNINGS }: { warnings?: WarningItem[] }) {
+export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
   const [expanded, setExpanded] = useState(false);
+
+  if (!warnings || warnings.length === 0) {
+    return null;
+  }
 
   return (
     <View style={styles.warningContainer}>
