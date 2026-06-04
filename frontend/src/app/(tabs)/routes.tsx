@@ -27,6 +27,7 @@ import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
@@ -62,6 +63,7 @@ export default function RoutesScreen() {
   const routesService = useRoutesService();
   const { username, isLoggedIn } = useAuth();
   const { values: prefValues } = usePresets();
+  const isFocused = useIsFocused();
 
   // Backend route scoring reads the user's saved sensitivities, so re-fetch
   // whenever the active preset changes (it's already been persisted by then).
@@ -91,6 +93,7 @@ export default function RoutesScreen() {
     let active = true;
 
     async function fetchRoutes() {
+      if (!isFocused) return;
       if (!startLoc.trim() || !endLoc.trim()) {
         setRoutes([]);
         return;
@@ -120,7 +123,7 @@ export default function RoutesScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [startLoc, endLoc, username, routesService, prefKey]);
+  }, [startLoc, endLoc, username, routesService, prefKey, isFocused]);
 
   // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
