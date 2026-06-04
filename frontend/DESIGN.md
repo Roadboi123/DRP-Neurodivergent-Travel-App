@@ -46,6 +46,13 @@ heavy uppercase type, pill controls). All tokens live in `src/constants/theme.ts
 - **Colour:** `BRAND` (`ink #1d1c1c`, `yellow`, `pink #ff158a`, `pinkSoft`, `green`, `cyan`,
   `orange`, `white`) and the semantic `getPalette()` (light-only: ink-on-white). Don't scatter
   raw hex — add a token if needed.
+- **Light-only — enforced.** `src/hooks/use-color-scheme.ts` + `.web.ts` are hard-forced to return
+  `'light'`, and `getPalette(isDark)` ignores its argument. **Don't reintroduce device dark-mode
+  branching** — on a dark-mode phone it made selected preference chips render with the old dark
+  palette. (The hook's return type stays `'light' | 'dark'` so existing `=== 'dark'` checks still
+  typecheck; they just evaluate false.)
+- **Bottom sheets have no scrim.** `RouteFilterSheet` / `PreferencesGuideSheet` use a
+  **transparent** backdrop — the 2px ink border defines them; a dark scrim clashes with the gradient.
 - **Shadows:** the signature `hardShadow(offset)` helper — a hard, un-blurred ink offset block
   (`shadowRadius: 0`). Use offset 6 for cards, 3–4 for pills/buttons, 2 for the pressed state.
   **No soft/blurred shadows.**
@@ -81,6 +88,8 @@ heavy uppercase type, pill controls). All tokens live in `src/constants/theme.ts
   when the surrounding list updates (the route-card timeline is a wrapping row for this reason).
 - **Memoize list cards** (`React.memo`) so re-sorting reorders already-painted nodes instead of
   re-rendering/remounting each one.
+- **`BRAND` tokens are `as const`** (literal types). A `let` initialised from one (e.g. a leg
+  badge colour) narrows to that literal — annotate it `: string` if it gets reassigned to other values.
 
 ## Hard rules
 
