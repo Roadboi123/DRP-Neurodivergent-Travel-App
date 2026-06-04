@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { getOptionColors, OPTIONS } from '@/components/preferences/options';
-import { getPalette } from '@/constants/theme';
+import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Spell out exactly what each level does to a route, keyed by the contract value
@@ -38,7 +38,7 @@ export function PreferencesGuideSheet({
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Stop backdrop taps from closing when they land on the sheet itself */}
         <Pressable
-          style={[styles.sheet, { backgroundColor: palette.surface }]}
+          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
           onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
 
@@ -104,8 +104,10 @@ export function PreferencesGuideSheet({
 
 const styles = StyleSheet.create({
   backdrop: {
+    // No dark scrim (clashes with the bright gradient); the ink-bordered sheet
+    // defines itself. Still full-screen so tapping outside dismisses.
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheet: {
@@ -115,6 +117,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
+    borderWidth: 2,
   },
   handle: {
     alignSelf: 'center',
@@ -131,13 +134,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
     letterSpacing: -0.3,
   },
   sectionHeading: {
     fontSize: 15,
-    fontWeight: '700',
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
     marginTop: 18,
     marginBottom: 8,
   },
@@ -152,16 +159,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   levelChip: {
-    minWidth: 84,
+    minWidth: 92,
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 30,
+    borderWidth: 2,
   },
   levelChipText: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   levelGloss: {
     flex: 1,

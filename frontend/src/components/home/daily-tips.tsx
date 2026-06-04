@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { getPalette } from '@/constants/theme';
+import { getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export function DailyTips() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const tipColor = isDark ? '#FFF' : '#333';
+  const tipColor = palette.textPrimary;
 
   return (
     <View style={[styles.tipsContainer, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -30,10 +30,11 @@ export function DailyTips() {
 
 const styles = StyleSheet.create({
   tipsContainer: {
-    borderRadius: 18,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 2,
     padding: 16,
     gap: 12,
+    ...hardShadow(5),
   },
   tipRow: {
     flexDirection: 'row',

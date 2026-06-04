@@ -3,7 +3,15 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { SensoryMeter } from '@/components/routes/sensory-meter';
-import { Fonts, getPalette } from '@/constants/theme';
+import {
+  BRAND,
+  Fonts,
+  getAccents,
+  getPalette,
+  hardShadow,
+  type Accents,
+  type ThemePalette,
+} from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { RouteOption } from '@/types/route';
 
@@ -30,29 +38,23 @@ function getGroupStyling(type: RouteOption['type'], isDark: boolean) {
   };
 }
 
-function matchBadgeColors(matchPercentage: number | null | undefined, isDark: boolean) {
+// Wero "word-bg" highlight: scheme-aware fill with on-surface text + a palette border.
+function matchBadgeColors(
+  matchPercentage: number | null | undefined,
+  accents: Accents,
+  palette: ThemePalette
+) {
+  const text = palette.textPrimary;
   if (matchPercentage == null) {
-    return {
-      bg: isDark ? '#2E3543' : '#F0EEED',
-      text: isDark ? '#CCC' : '#666',
-    };
+    return { bg: palette.surface, text };
   }
   if (matchPercentage >= 80) {
-    return {
-      bg: isDark ? '#1C3224' : '#E8F5E9',
-      text: isDark ? '#81C784' : '#2E7D32',
-    };
+    return { bg: accents.green, text };
   }
   if (matchPercentage >= 50) {
-    return {
-      bg: isDark ? '#3E2F1F' : '#FFF3E0',
-      text: isDark ? '#FFB74D' : '#E65100',
-    };
+    return { bg: accents.yellow, text };
   }
-  return {
-    bg: isDark ? '#351C1C' : '#FFEBEE',
-    text: isDark ? '#E57373' : '#C62828',
-  };
+  return { bg: accents.pinkSoft, text };
 }
 
 function RouteCardBase({
@@ -66,20 +68,17 @@ function RouteCardBase({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const group = getGroupStyling(route.type, isDark);
-  const matchColors = matchBadgeColors(route.match_percentage, isDark);
+  const matchColors = matchBadgeColors(route.match_percentage, accents, palette);
 
   return (
     <View style={styles.routeGroupWrapper}>
       {!hideTitle && (
-        <Text
-          style={[
-            styles.groupHeaderLabel,
-            { color: isDark ? '#AAA' : '#555', fontFamily: Fonts?.rounded },
-          ]}>
+        <Text style={[styles.groupHeaderLabel, { color: palette.textPrimary }]}>
           {customTitle || group.title}
           {route.sensory_score != null && (
-            <Text style={{ fontSize: 11, fontWeight: '400', color: '#999' }}>
+            <Text style={{ fontSize: 11, fontWeight: '400', color: palette.textMuted }}>
               {' '}
               (Sensory Score: {route.sensory_score})
             </Text>
@@ -102,16 +101,16 @@ function RouteCardBase({
                   const line = leg.line ? leg.line.toLowerCase() : '';
                   
                   let iconName: any = 'walk';
-                  let legBadgeColor = isDark ? '#2A2E35' : '#ECEFF1';
-                  let legTextColor = isDark ? '#CCC' : '#455A64';
+                  let legBadgeColor: string = accents.cyan;
+                  let legTextColor: string = BRAND.ink;
                   let displayName = 'Walk';
 
                   const isBusLike = mode === 'bus' || mode === 'coach' || mode === 'national-coach' || mode === 'replacement-bus';
 
                   if (isBusLike) {
                     iconName = 'bus';
-                    legBadgeColor = isDark ? '#4D1D1D' : '#FFEBEE';
-                    legTextColor = isDark ? '#EF5350' : '#C62828';
+                    legBadgeColor = accents.orange;
+                    legTextColor = BRAND.ink;
                     displayName = leg.line ? `Bus ${leg.line}` : (leg.instruction ? leg.instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '') : 'Bus');
                   } else if (mode === 'tube' || mode === 'subway' || mode === 'underground' || mode.includes('elizabeth')) {
                     iconName = 'subway';
@@ -163,8 +162,8 @@ function RouteCardBase({
                   } else if (mode === 'train' || mode === 'national-rail') {
                     iconName = 'train';
                     displayName = leg.line || 'Train';
-                    legBadgeColor = isDark ? '#1F344D' : '#E3F2FD';
-                    legTextColor = isDark ? '#64B5F6' : '#0D47A1';
+                    legBadgeColor = accents.green;
+                    legTextColor = BRAND.ink;
                   }
 
                   return (
@@ -177,7 +176,11 @@ function RouteCardBase({
                           style={styles.timelineArrow}
                         />
                       )}
-                      <View style={[styles.timelineBadge, { backgroundColor: legBadgeColor }]}>
+                      <View
+                        style={[
+                          styles.timelineBadge,
+                          { backgroundColor: legBadgeColor, borderColor: palette.border },
+                        ]}>
                         <Ionicons name={iconName} size={13} color={legTextColor} />
                         <View>
                           <Text style={[styles.timelineBadgeText, { color: legTextColor }]}>
@@ -195,7 +198,11 @@ function RouteCardBase({
                 })}
 
                 {/* Match Rating Pill at the end of the timeline */}
-                <View style={[styles.matchBadge, { backgroundColor: matchColors.bg }]}>
+                <View
+                  style={[
+                    styles.matchBadge,
+                    { backgroundColor: matchColors.bg, borderColor: palette.border },
+                  ]}>
                   <Text style={[styles.matchBadgeText, { color: matchColors.text }]}>
                     {route.match_percentage ?? 100}% Match
                   </Text>
@@ -234,10 +241,14 @@ function RouteCardBase({
         </View>
 
         {/* Right: big duration over tiny cost, full-height boxed widget */}
-        <View style={[styles.statsWidget, { backgroundColor: isDark ? '#2A2E35' : '#F4F4F2' }]}>
+        <View
+          style={[
+            styles.statsWidget,
+            { backgroundColor: accents.green, borderColor: palette.border },
+          ]}>
           <Text style={[styles.statsTime, { color: palette.textPrimary }]}>{route.duration}</Text>
-          <Text style={[styles.statsUnit, { color: palette.textSecondary }]}>min</Text>
-          <Text style={[styles.statsCost, { color: palette.textSecondary }]}>
+          <Text style={[styles.statsUnit, { color: palette.textPrimary }]}>min</Text>
+          <Text style={[styles.statsCost, { color: palette.textPrimary }]}>
             £{route.price.toFixed(2)}
           </Text>
         </View>
@@ -259,22 +270,20 @@ const styles = StyleSheet.create({
   },
   groupHeaderLabel: {
     fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 6,
-    textTransform: 'capitalize',
-    letterSpacing: -0.1,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    marginBottom: 8,
+    marginLeft: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   routeCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    borderRadius: 16,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 2,
     padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    ...hardShadow(6),
   },
   leftContent: {
     flex: 1,
@@ -309,39 +318,43 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 64,
+    minWidth: 68,
     paddingHorizontal: 12,
-    borderRadius: 14,
+    borderRadius: 10,
+    borderWidth: 2,
   },
   statsTime: {
-    fontSize: 22,
+    fontSize: 24,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
-    lineHeight: 24,
+    lineHeight: 26,
   },
   statsUnit: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
     marginTop: -1,
   },
   statsCost: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     marginTop: 6,
   },
   sensoryRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     borderTopWidth: 1,
     paddingTop: 10,
-    rowGap: 10,
-    columnGap: 4,
+    columnGap: 3,
     justifyContent: 'space-between',
     marginBottom: 10,
   },
   matchBadge: {
     paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     borderRadius: 8,
+    borderWidth: 1.5,
   },
   matchBadgeText: {
     fontSize: 10,
@@ -387,18 +400,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 5,
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     borderRadius: 8,
     gap: 6,
+    borderWidth: 1.5,
+    ...hardShadow(2),
   },
   timelineBadgeText: {
     fontSize: 10,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   timelineDurText: {
     fontSize: 8,
-    fontWeight: '600',
-    opacity: 0.8,
+    fontFamily: Fonts?.display,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
     marginTop: 1,
   },
   toggleDetailsButton: {

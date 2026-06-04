@@ -3,11 +3,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AcFilter, RouteFilters, SortMode } from '@/components/routes/route-filtering';
-
-const ACCENT = '#E91E63';
 
 const SORT_OPTIONS: SegmentOption<SortMode>[] = [
   { value: 'preference', label: 'Preference', icon: 'heart-outline' },
@@ -43,13 +41,14 @@ export function RouteFilterSheet({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Stop backdrop taps from closing when they land on the sheet itself */}
         <Pressable
-          style={[styles.sheet, { backgroundColor: palette.surface }]}
+          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
           onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
 
@@ -81,27 +80,26 @@ export function RouteFilterSheet({
             <View style={styles.switchLabelGroup}>
               <Ionicons name="git-branch-outline" size={16} color={palette.textPrimary} />
               <Text style={[styles.switchLabel, { color: palette.textPrimary }]}>
-                Group by changes
+                Group by number of changes
               </Text>
             </View>
             <Switch
               value={filters.groupByChanges}
               onValueChange={(groupByChanges) => onChange({ ...filters, groupByChanges })}
-              trackColor={{ false: isDark ? '#3A4150' : '#D1D5DB', true: ACCENT }}
+              trackColor={{ false: isDark ? '#3A4150' : '#D1D5DB', true: accents.pink }}
               thumbColor="#FFF"
               ios_backgroundColor={isDark ? '#3A4150' : '#D1D5DB'}
             />
           </View>
-          {filters.groupByChanges && (
-            <Text style={[styles.helperNote, { color: palette.textSecondary }]}>
-              Routes are grouped by number of changes, ranked by your sort.
-            </Text>
-          )}
+          <Text style={[styles.helperNote, { color: palette.textSecondary }]}>
+            Groups routes by how many changes (interchanges) each one takes — 0 changes, 1 change,
+            and so on — with each group still ranked by your sort.
+          </Text>
 
           <TouchableOpacity
             onPress={onClose}
             activeOpacity={0.85}
-            style={[styles.doneButton, { backgroundColor: ACCENT }]}>
+            style={[styles.doneButton, { backgroundColor: accents.pink, borderColor: palette.border }]}>
             <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
         </Pressable>
@@ -112,8 +110,10 @@ export function RouteFilterSheet({
 
 const styles = StyleSheet.create({
   backdrop: {
+    // No dark scrim (clashes with the bright gradient); the ink-bordered sheet
+    // defines itself. Still full-screen so tapping outside dismisses.
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheet: {
@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
+    borderWidth: 2,
   },
   handle: {
     alignSelf: 'center',
@@ -138,8 +139,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
     letterSpacing: -0.3,
   },
   sectionHeading: {
@@ -150,8 +153,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionHeadingText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   switchRow: {
     flexDirection: 'row',
@@ -176,14 +182,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   doneButton: {
-    marginTop: 24,
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginTop: 26,
+    paddingVertical: 15,
+    borderRadius: 30,
     alignItems: 'center',
+    borderWidth: 2,
+    ...hardShadow(5),
   },
   doneButtonText: {
-    color: '#FFF',
+    color: BRAND.white,
+    fontFamily: Fonts?.display,
     fontSize: 15,
     fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

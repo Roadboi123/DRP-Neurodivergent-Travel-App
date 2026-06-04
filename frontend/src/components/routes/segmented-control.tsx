@@ -2,10 +2,8 @@ import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-const ACCENT = '#E91E63';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -34,26 +32,31 @@ export function SegmentedControl<T extends string>({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const isTab = variant === 'tab';
-  const trackBg = isDark ? '#2E3543' : '#EAEAEA';
+  const surfaceStyle = { backgroundColor: palette.surface, borderColor: palette.border };
 
   return (
-    <View style={[isTab ? styles.tabTrack : styles.chipRow, isTab && { backgroundColor: trackBg }]}>
+    <View style={isTab ? [styles.tabTrack, surfaceStyle] : styles.chipRow}>
       {options.map((option) => {
         const active = option.value === value;
-        const bg = active ? ACCENT : isTab ? 'transparent' : trackBg;
-        const fg = active ? '#FFF' : palette.textPrimary;
+        const fg = active ? BRAND.white : palette.textPrimary;
         return (
           <TouchableOpacity
             key={option.value}
             onPress={() => onChange(option.value)}
             activeOpacity={0.85}
             style={[
-              isTab ? styles.tabSegment : styles.chip,
-              { backgroundColor: bg },
+              isTab ? styles.tabSegment : [styles.chip, surfaceStyle],
+              active && { backgroundColor: accents.pink },
             ]}>
-            {option.icon && <Ionicons name={option.icon} size={15} color={fg} />}
-            <Text style={[styles.label, { color: fg }]}>{option.label}</Text>
+            {option.icon && <Ionicons name={option.icon} size={isTab ? 13 : 15} color={fg} />}
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[styles.label, isTab && styles.tabLabel, { color: fg }]}>
+              {option.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -64,22 +67,25 @@ export function SegmentedControl<T extends string>({
 const styles = StyleSheet.create({
   tabTrack: {
     flexDirection: 'row',
-    borderRadius: 12,
-    padding: 3,
+    borderRadius: 30,
+    padding: 4,
+    borderWidth: 2,
+    ...hardShadow(4),
   },
   tabSegment: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 10,
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderRadius: 24,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   chip: {
     flexDirection: 'row',
@@ -87,10 +93,20 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 30,
+    borderWidth: 2,
+    ...hardShadow(3),
   },
   label: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  // Tabs share the row 50/50, so "Preference" + icon must stay compact.
+  tabLabel: {
+    fontSize: 11.5,
+    letterSpacing: 0,
   },
 });

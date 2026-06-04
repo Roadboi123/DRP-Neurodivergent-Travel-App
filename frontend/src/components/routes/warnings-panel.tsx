@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { getPalette } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
 
@@ -42,6 +42,7 @@ const DEFAULT_WARNINGS: WarningItem[] = [
 export function WarningsPanel({ warnings = DEFAULT_WARNINGS }: { warnings?: WarningItem[] }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -51,18 +52,18 @@ export function WarningsPanel({ warnings = DEFAULT_WARNINGS }: { warnings?: Warn
         activeOpacity={0.85}
         style={[
           styles.warningHeader,
-          { backgroundColor: isDark ? '#2D221C' : '#FFF5F0', borderColor: '#FF7F50' },
+          { backgroundColor: accents.orange, borderColor: palette.border },
         ]}>
         <View style={styles.warningTitleGroup}>
-          <Ionicons name="warning" size={22} color="#FF7F50" />
-          <Text style={[styles.warningHeaderText, { color: isDark ? '#FF9E79' : '#D04E1F' }]}>
+          <Ionicons name="warning" size={22} color={palette.textPrimary} />
+          <Text style={[styles.warningHeaderText, { color: palette.textPrimary }]}>
             Sensory Warnings [{warnings.length}]
           </Text>
         </View>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={20}
-          color={isDark ? '#FF9E79' : '#D04E1F'}
+          color={palette.textPrimary}
         />
       </TouchableOpacity>
 
@@ -70,7 +71,7 @@ export function WarningsPanel({ warnings = DEFAULT_WARNINGS }: { warnings?: Warn
         <View
           style={[
             styles.warningDropdown,
-            { backgroundColor: palette.surface, borderColor: isDark ? '#2E3543' : '#F0EEED' },
+            { backgroundColor: palette.surface, borderColor: palette.border },
           ]}>
           {warnings.map((w, index) => (
             <View key={w.id}>
@@ -109,12 +110,13 @@ const styles = StyleSheet.create({
   },
   warningHeader: {
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 16,
+    ...hardShadow(4),
   },
   warningTitleGroup: {
     flexDirection: 'row',
@@ -123,13 +125,17 @@ const styles = StyleSheet.create({
   },
   warningHeaderText: {
     fontSize: 14,
-    fontWeight: '700',
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   warningDropdown: {
-    marginTop: 6,
+    marginTop: 8,
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 2,
     padding: 14,
+    ...hardShadow(4),
   },
   warningItemRow: {
     flexDirection: 'row',

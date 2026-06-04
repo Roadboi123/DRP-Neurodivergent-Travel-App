@@ -3,42 +3,64 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { Colors } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const isDark = useColorScheme() === 'dark';
+  const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarActiveTintColor: accents.pink,
+        tabBarInactiveTintColor: palette.textMuted,
+        tabBarLabelStyle: {
+          fontFamily: Fonts?.display,
+          fontSize: 10,
+          fontWeight: '800',
+          textTransform: 'uppercase',
+          letterSpacing: 0.3,
+        },
+        // Floating Wero pill: outlined surface with a hard offset shadow.
+        tabBarStyle: {
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: 16,
+          height: 66,
+          borderRadius: 33,
+          backgroundColor: palette.surface,
+          borderWidth: 2,
+          borderTopWidth: 2,
+          borderColor: palette.border,
+          paddingTop: 8,
+          paddingBottom: 8,
+          ...hardShadow(6),
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="home" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="routes"
         options={{
           title: 'Routes',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="navigate-outline" size={24} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <Ionicons name="navigate" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="preferences"
         options={{
           title: 'Preferences',
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="settings-outline" size={24} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <Ionicons name="settings-sharp" size={22} color={color} />,
         }}
       />
     </Tabs>

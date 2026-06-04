@@ -13,8 +13,9 @@ import {
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
+import { GradientBackground } from '@/components/ui/gradient-background';
 import { HeaderNav } from '@/components/ui/header-nav';
-import { getPalette } from '@/constants/theme';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
 import type { Preference, SensitivityLevel } from '@/types/preference';
@@ -108,6 +109,7 @@ export default function UserPreferencesScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <GradientBackground />
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={palette.background}
@@ -124,6 +126,7 @@ export default function UserPreferencesScreen() {
             <TouchableOpacity
               onPress={() => setGuideVisible(true)}
               hitSlop={10}
+              style={styles.infoButton}
               accessibilityLabel="About your preferences">
               <Ionicons name="information-circle-outline" size={26} color={palette.textSecondary} />
             </TouchableOpacity>
@@ -173,7 +176,7 @@ export default function UserPreferencesScreen() {
         </Text>
 
         {/* Card */}
-        <View style={[styles.card, { backgroundColor: palette.surface }]}>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           {preferences.map((pref, i) => (
             <View key={pref.id}>
               <PreferenceRow preference={pref} onSelect={handleSelect} />
@@ -199,7 +202,7 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
 
   // Header
@@ -209,20 +212,30 @@ const styles = StyleSheet.create({
 
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: 12,
   },
 
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    flex: 1,
+    fontSize: 34,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: -1,
+  },
+
+  infoButton: {
+    marginTop: 6,
   },
 
   sectionTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
     marginBottom: 12,
   },
 
@@ -232,17 +245,21 @@ const styles = StyleSheet.create({
   },
 
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
     marginBottom: 8,
   },
 
   input: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 15,
+    ...hardShadow(3),
   },
 
   statusText: {
@@ -262,19 +279,11 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    borderRadius: 20,
+    borderRadius: 14,
+    borderWidth: 2,
     paddingVertical: 8,
     paddingHorizontal: 16,
-
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    ...hardShadow(6),
   },
 
   rowDivider: {
