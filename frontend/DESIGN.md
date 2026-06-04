@@ -19,6 +19,9 @@ Vercel stay green), so fetch a browser once: `npx puppeteer browsers install chr
 1. Start the web dev server in the background: `npm run web` (`expo start --web`) → serves on
    **http://localhost:8081**. Wait until it responds before shooting. Always use localhost,
    never a `file://` URL (react-native-web needs the bundler).
+   - **Port gotcha:** if 8081 is already in use, Expo silently bumps to **8082 / 8083 …**. Kill
+     stale `expo start` processes first (or shoot the printed port) so you're not screenshotting
+     an old instance — a frequent "the screenshot didn't update" cause.
 2. Capture: `npm run screenshot -- <url> [label]`, e.g.
    `npm run screenshot -- http://localhost:8081/routes routes`.
    PNGs land in `frontend/screenshots/screenshot-N.png` (auto-incremented, never overwritten;
@@ -36,17 +39,23 @@ Vercel stay green), so fetch a browser once: `npx puppeteer browsers install chr
   typography and colour **exactly**. Do not "improve" it, add sections, or invent content.
 - **If none:** design from scratch with high craft, following the guardrails below.
 
-## Design system (use what exists — don't reinvent)
+## Design system — the Wero language (use the tokens, don't reinvent)
 
-- **Colour:** only via `getPalette(isDark)` (`src/constants/theme.ts`). The accent is `#E91E63`.
-  Don't scatter raw hex through components; if a new token is genuinely needed, add it to the
-  palette. Sensory level colours come from `SensoryMeter`.
-- **Type:** `Fonts` from the theme (system stack today). A display face for headings can be added
-  via `expo-font` — pair it with the body sans, don't reuse one font for both.
-- **Radius:** cards 14–16, pills/segments 12–20 — match neighbours.
-- **Shadows:** soft, low-opacity, slightly tinted (RN `shadow*` / `elevation`), never harsh.
+The app uses a neo-brutalist "Wero" style (ink outlines, bright fills, hard offset shadows,
+heavy uppercase type, pill controls). All tokens live in `src/constants/theme.ts`:
+- **Colour:** `BRAND` (`ink #1d1c1c`, `yellow`, `pink #ff158a`, `pinkSoft`, `green`, `cyan`,
+  `orange`, `white`) and the semantic `getPalette()` (light-only: ink-on-white). Don't scatter
+  raw hex — add a token if needed.
+- **Shadows:** the signature `hardShadow(offset)` helper — a hard, un-blurred ink offset block
+  (`shadowRadius: 0`). Use offset 6 for cards, 3–4 for pills/buttons, 2 for the pressed state.
+  **No soft/blurred shadows.**
+- **Type:** `Fonts.display` = Archivo (loaded in the root layout). Headings are **uppercase,
+  weight 800–900, tight tracking**; body is weight 500. Build big, confident headings.
+- **Background:** the pink→yellow `GradientBackground` (static). **Each screen mounts its own**
+  (see the RN-web gotchas) — don't rely on a single shared one.
+- **Borders/radius:** 2px ink borders; cards radius ~14, pills/segments 30.
 - **Reuse primitives:** `SensoryMeter`, `SegmentedControl`, `HeaderNav`, `RouteCard`,
-  `RouteFilterSheet` before building new ones.
+  `RouteFilterSheet`, `GradientBackground` before building new ones.
 
 ## Anti-generic guardrails (translated to React Native)
 
@@ -59,6 +68,19 @@ Vercel stay green), so fetch a browser once: `npx puppeteer browsers install chr
 - **Interactive states:** every touchable needs a pressed state (and hover/focus on web).
 - **Gradients:** use `expo-linear-gradient` (not yet a dependency — add it if you need one).
   CSS radial gradients, `mix-blend`, and SVG-noise grain are **not native to RN** — avoid them.
+
+## React Native Web gotchas (learned the hard way)
+
+- **Every screen needs its OWN opaque background.** The bottom-tab navigator does **not** detach
+  inactive screens on web, so transparent screen backgrounds over a single shared background let
+  screens **stack and bleed through each other** on navigation. Each screen mounts its own
+  `GradientBackground`; the navigator base is a solid colour, never `transparent`.
+- **`adjustsFontSizeToFit` / auto-shrink is a no-op on web** — text just truncates (`SOMEW…`).
+  Size text to fit explicitly instead of relying on shrink.
+- **Avoid nested horizontal `ScrollView`s inside list rows** — they repaint a blank/white frame
+  when the surrounding list updates (the route-card timeline is a wrapping row for this reason).
+- **Memoize list cards** (`React.memo`) so re-sorting reorders already-painted nodes instead of
+  re-rendering/remounting each one.
 
 ## Hard rules
 
