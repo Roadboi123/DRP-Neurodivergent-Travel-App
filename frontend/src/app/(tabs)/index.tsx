@@ -153,13 +153,6 @@ export default function HomeScreen() {
             onPress={() => router.push('/routes')}
             style={styles.gridCard}
           />
-        </View>
-          
-          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-            Set preferences
-          </Text>
-        <View style={styles.gridRow}>
-          
           <QuickActionCard
             iconName="settings-sharp"
             iconColor={BRAND.ink}
@@ -171,19 +164,7 @@ export default function HomeScreen() {
           />
         </ScrollView>
 
-        {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
-            active profile's sensory levels. */}
-        {isLoggedIn && (
-          <View style={styles.presetSection}>
-            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-              Select preset profile
-            </Text>
-            <PresetSwitcher />
-            <PresetGlimpse />
-          </View>
-        )}
-
-        {/* Daily Travel Tips
+        {/* Daily Travel Tips */}
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Daily Travel Tips
         </Text>
