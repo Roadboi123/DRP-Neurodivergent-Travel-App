@@ -55,11 +55,11 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.white,
   },
   chipLabel: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontFamily: Fonts?.display,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: 0,
     textAlign: 'center',
   },
   chipLabelUnselected: {
