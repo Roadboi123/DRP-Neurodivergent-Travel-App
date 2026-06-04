@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface RouteSearchInputsProps {
@@ -42,7 +42,7 @@ export function RouteSearchInputs({
             <View style={styles.dotLine} />
           </View>
           <View style={styles.inputTextContainer}>
-            <Text style={styles.fieldLabel}>Start Location</Text>
+            <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>Start Location</Text>
             <TextInput
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={startLoc}
@@ -63,7 +63,7 @@ export function RouteSearchInputs({
             <Ionicons name="location" size={20} color="#E04F5F" />
           </View>
           <View style={styles.inputTextContainer}>
-            <Text style={styles.fieldLabel}>End Destination</Text>
+            <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>End Destination</Text>
             <TextInput
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={endLoc}
@@ -87,7 +87,7 @@ export function RouteSearchInputs({
             <Ionicons name="person-circle-outline" size={22} color="#1D9E75" />
           </View>
           <View style={styles.inputTextContainer}>
-            <Text style={styles.fieldLabel}>Apply Username Sensitivities</Text>
+            <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>Apply Username Sensitivities</Text>
             <TextInput
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={username}
@@ -175,7 +175,6 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 10,
-    color: BRAND.ink,
     fontFamily: Fonts?.display,
     fontWeight: '800',
     textTransform: 'uppercase',

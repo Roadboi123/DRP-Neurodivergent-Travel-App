@@ -3,16 +3,21 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { BRAND, Fonts, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
+  const isDark = useColorScheme() === 'dark';
+  const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarActiveTintColor: BRAND.pink,
-        tabBarInactiveTintColor: BRAND.ink,
+        tabBarActiveTintColor: accents.pink,
+        tabBarInactiveTintColor: palette.textMuted,
         tabBarLabelStyle: {
           fontFamily: Fonts?.display,
           fontSize: 10,
@@ -20,7 +25,7 @@ export default function TabLayout() {
           textTransform: 'uppercase',
           letterSpacing: 0.3,
         },
-        // Floating Wero pill: white, ink-outlined, hard offset shadow.
+        // Floating Wero pill: outlined surface with a hard offset shadow.
         tabBarStyle: {
           position: 'absolute',
           left: 16,
@@ -28,10 +33,10 @@ export default function TabLayout() {
           bottom: 16,
           height: 66,
           borderRadius: 33,
-          backgroundColor: BRAND.white,
+          backgroundColor: palette.surface,
           borderWidth: 2,
           borderTopWidth: 2,
-          borderColor: BRAND.ink,
+          borderColor: palette.border,
           paddingTop: 8,
           paddingBottom: 8,
           ...hardShadow(6),

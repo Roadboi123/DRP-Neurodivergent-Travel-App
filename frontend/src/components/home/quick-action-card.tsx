@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface QuickActionCardProps {
@@ -29,7 +29,11 @@ export function QuickActionCard({
     <TouchableOpacity
       onPress={onPress}
       style={[styles.gridCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <View style={[styles.iconContainer, { backgroundColor: iconBackground }]}>
+      <View
+        style={[
+          styles.iconContainer,
+          { backgroundColor: iconBackground, borderColor: palette.border },
+        ]}>
         <Ionicons name={iconName} size={24} color={iconColor} />
       </View>
       <Text style={[styles.cardTitleText, { color: palette.textPrimary }]}>{title}</Text>
@@ -55,7 +59,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
     borderWidth: 2,
-    borderColor: BRAND.ink,
   },
   cardTitleText: {
     fontSize: 15,

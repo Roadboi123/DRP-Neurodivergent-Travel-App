@@ -15,7 +15,7 @@ import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { HeaderNav } from '@/components/ui/header-nav';
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
 import type { Preference, SensitivityLevel } from '@/types/preference';
@@ -176,7 +176,7 @@ export default function UserPreferencesScreen() {
         </Text>
 
         {/* Card */}
-        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: BRAND.ink }]}>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           {preferences.map((pref, i) => (
             <View key={pref.id}>
               <PreferenceRow preference={pref} onSelect={handleSelect} />
@@ -255,7 +255,6 @@ const styles = StyleSheet.create({
 
   input: {
     borderWidth: 2,
-    borderColor: BRAND.ink,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,

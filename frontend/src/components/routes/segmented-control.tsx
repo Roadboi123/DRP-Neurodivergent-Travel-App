@@ -2,10 +2,8 @@ import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-const ACCENT = BRAND.pink;
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -34,10 +32,12 @@ export function SegmentedControl<T extends string>({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const isTab = variant === 'tab';
+  const surfaceStyle = { backgroundColor: palette.surface, borderColor: palette.border };
 
   return (
-    <View style={isTab ? styles.tabTrack : styles.chipRow}>
+    <View style={isTab ? [styles.tabTrack, surfaceStyle] : styles.chipRow}>
       {options.map((option) => {
         const active = option.value === value;
         const fg = active ? BRAND.white : palette.textPrimary;
@@ -47,8 +47,8 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(option.value)}
             activeOpacity={0.85}
             style={[
-              isTab ? styles.tabSegment : styles.chip,
-              active && styles.segmentActive,
+              isTab ? styles.tabSegment : [styles.chip, surfaceStyle],
+              active && { backgroundColor: accents.pink },
             ]}>
             {option.icon && <Ionicons name={option.icon} size={isTab ? 13 : 15} color={fg} />}
             <Text
@@ -69,9 +69,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 30,
     padding: 4,
-    backgroundColor: BRAND.white,
     borderWidth: 2,
-    borderColor: BRAND.ink,
     ...hardShadow(4),
   },
   tabSegment: {
@@ -96,13 +94,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 30,
-    backgroundColor: BRAND.white,
     borderWidth: 2,
-    borderColor: BRAND.ink,
     ...hardShadow(3),
-  },
-  segmentActive: {
-    backgroundColor: ACCENT,
   },
   label: {
     fontSize: 13,

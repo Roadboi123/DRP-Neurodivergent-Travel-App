@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
 
@@ -42,6 +42,7 @@ const DEFAULT_WARNINGS: WarningItem[] = [
 export function WarningsPanel({ warnings = DEFAULT_WARNINGS }: { warnings?: WarningItem[] }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -51,18 +52,18 @@ export function WarningsPanel({ warnings = DEFAULT_WARNINGS }: { warnings?: Warn
         activeOpacity={0.85}
         style={[
           styles.warningHeader,
-          { backgroundColor: BRAND.orange, borderColor: BRAND.ink },
+          { backgroundColor: accents.orange, borderColor: palette.border },
         ]}>
         <View style={styles.warningTitleGroup}>
-          <Ionicons name="warning" size={22} color={BRAND.ink} />
-          <Text style={[styles.warningHeaderText, { color: BRAND.ink }]}>
+          <Ionicons name="warning" size={22} color={palette.textPrimary} />
+          <Text style={[styles.warningHeaderText, { color: palette.textPrimary }]}>
             Sensory Warnings [{warnings.length}]
           </Text>
         </View>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
           size={20}
-          color={BRAND.ink}
+          color={palette.textPrimary}
         />
       </TouchableOpacity>
 
@@ -70,7 +71,7 @@ export function WarningsPanel({ warnings = DEFAULT_WARNINGS }: { warnings?: Warn
         <View
           style={[
             styles.warningDropdown,
-            { backgroundColor: palette.surface, borderColor: BRAND.ink },
+            { backgroundColor: palette.surface, borderColor: palette.border },
           ]}>
           {warnings.map((w, index) => (
             <View key={w.id}>

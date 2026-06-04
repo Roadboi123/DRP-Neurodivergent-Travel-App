@@ -4,16 +4,17 @@ import { useRouter } from 'expo-router';
 
 import { DailyTips } from '@/components/home/daily-tips';
 import { QuickActionCard } from '@/components/home/quick-action-card';
-import { WelcomeBanner } from '@/components/home/welcome-banner';
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
-import { BRAND, Fonts, getPalette } from '@/constants/theme';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { BRAND, Fonts, getAccents, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useHealthService } from '@/services/services-context';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const router = useRouter();
   const health = useHealthService();
 
@@ -56,11 +57,13 @@ export default function HomeScreen() {
             </Text>
             <Text style={[styles.title, { color: palette.textPrimary }]}>My Planner</Text>
           </View>
-          <StatusBadge status={backendState} />
+          <ThemeToggle />
         </View>
 
-        {/* Welcome Banner Card */}
-        <WelcomeBanner />
+        {/* Backend status (sits where the welcome banner used to) */}
+        <View style={styles.statusRow}>
+          <StatusBadge status={backendState} />
+        </View>
 
         {/* Quick Actions Grid */}
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
@@ -70,7 +73,7 @@ export default function HomeScreen() {
           <QuickActionCard
             iconName="navigate"
             iconColor={BRAND.ink}
-            iconBackground={BRAND.cyan}
+            iconBackground={accents.cyan}
             title="Plan Calm Route"
             description="Find sensory friendly paths"
             onPress={() => router.push('/routes')}
@@ -78,7 +81,7 @@ export default function HomeScreen() {
           <QuickActionCard
             iconName="settings-sharp"
             iconColor={BRAND.ink}
-            iconBackground={BRAND.green}
+            iconBackground={accents.green}
             title="Sensory Sensitivities"
             description="Update comfort thresholds"
             onPress={() => router.push('/preferences')}
@@ -109,6 +112,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    marginBottom: 24,
   },
   greetingText: {
     fontSize: 13,

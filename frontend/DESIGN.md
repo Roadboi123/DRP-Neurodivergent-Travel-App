@@ -44,13 +44,18 @@ Vercel stay green), so fetch a browser once: `npx puppeteer browsers install chr
 The app uses a neo-brutalist "Wero" style (ink outlines, bright fills, hard offset shadows,
 heavy uppercase type, pill controls). All tokens live in `src/constants/theme.ts`:
 - **Colour:** `BRAND` (`ink #1d1c1c`, `yellow`, `pink #ff158a`, `pinkSoft`, `green`, `cyan`,
-  `orange`, `white`) and the semantic `getPalette()` (light-only: ink-on-white). Don't scatter
-  raw hex — add a token if needed.
-- **Light-only — enforced.** `src/hooks/use-color-scheme.ts` + `.web.ts` are hard-forced to return
-  `'light'`, and `getPalette(isDark)` ignores its argument. **Don't reintroduce device dark-mode
-  branching** — on a dark-mode phone it made selected preference chips render with the old dark
-  palette. (The hook's return type stays `'light' | 'dark'` so existing `=== 'dark'` checks still
-  typecheck; they just evaluate false.)
+  `orange`, `white`) and the semantic `getPalette(isDark)` (light: ink-on-white; dark: off-white on
+  charcoal). Bright BRAND fills used **as accents** must go through `getAccents(isDark)` (a muted,
+  desaturated ramp in dark) — not `BRAND.*` directly. Don't scatter raw hex — add a token if needed.
+- **Two themes, in-app toggle (not the device setting).** The scheme is an in-app, persisted choice
+  owned by `ThemeProvider` (`src/contexts/theme-context.tsx`, AsyncStorage); `useColorScheme()` returns
+  it, so `getPalette(useColorScheme() === 'dark')` flows everywhere and re-renders on toggle. The
+  `ThemeToggle` (`components/ui/theme-toggle.tsx`) sits top-right of every screen (in `HeaderNav`, and
+  the home header). **Dark mode must read from the in-app context, never the device `Appearance`** —
+  device dark mode used to leak the old palette into selected preference chips. Surfaces/borders that
+  hardcoded `BRAND.white`/`BRAND.ink` must be driven by `palette.surface`/`palette.border` (inline, not
+  in static `StyleSheet`), or they break in dark. **Animate with RN core `Animated`** (transform/opacity
+  only) — reanimated has no worklets/babel plugin configured here, so its animated styles silently no-op.
 - **Bottom sheets have no scrim.** `RouteFilterSheet` / `PreferencesGuideSheet` use a
   **transparent** backdrop — the 2px ink border defines them; a dark scrim clashes with the gradient.
 - **Shadows:** the signature `hardShadow(offset)` helper — a hard, un-blurred ink offset block

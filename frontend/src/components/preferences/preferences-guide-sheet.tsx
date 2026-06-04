@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { getOptionColors, OPTIONS } from '@/components/preferences/options';
-import { BRAND, Fonts, getPalette } from '@/constants/theme';
+import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Spell out exactly what each level does to a route, keyed by the contract value
@@ -38,7 +38,7 @@ export function PreferencesGuideSheet({
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Stop backdrop taps from closing when they land on the sheet itself */}
         <Pressable
-          style={[styles.sheet, { backgroundColor: palette.surface }]}
+          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
           onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
 
@@ -118,7 +118,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 32,
     borderWidth: 2,
-    borderColor: BRAND.ink,
   },
   handle: {
     alignSelf: 'center',

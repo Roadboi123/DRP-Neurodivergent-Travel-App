@@ -3,11 +3,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AcFilter, RouteFilters, SortMode } from '@/components/routes/route-filtering';
-
-const ACCENT = BRAND.pink;
 
 const SORT_OPTIONS: SegmentOption<SortMode>[] = [
   { value: 'preference', label: 'Preference', icon: 'heart-outline' },
@@ -43,13 +41,14 @@ export function RouteFilterSheet({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Stop backdrop taps from closing when they land on the sheet itself */}
         <Pressable
-          style={[styles.sheet, { backgroundColor: palette.surface }]}
+          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
           onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
 
@@ -87,7 +86,7 @@ export function RouteFilterSheet({
             <Switch
               value={filters.groupByChanges}
               onValueChange={(groupByChanges) => onChange({ ...filters, groupByChanges })}
-              trackColor={{ false: isDark ? '#3A4150' : '#D1D5DB', true: ACCENT }}
+              trackColor={{ false: isDark ? '#3A4150' : '#D1D5DB', true: accents.pink }}
               thumbColor="#FFF"
               ios_backgroundColor={isDark ? '#3A4150' : '#D1D5DB'}
             />
@@ -100,7 +99,7 @@ export function RouteFilterSheet({
           <TouchableOpacity
             onPress={onClose}
             activeOpacity={0.85}
-            style={[styles.doneButton, { backgroundColor: ACCENT }]}>
+            style={[styles.doneButton, { backgroundColor: accents.pink, borderColor: palette.border }]}>
             <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
         </Pressable>
@@ -124,7 +123,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 32,
     borderWidth: 2,
-    borderColor: BRAND.ink,
   },
   handle: {
     alignSelf: 'center',
@@ -189,7 +187,6 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: BRAND.ink,
     ...hardShadow(5),
   },
   doneButtonText: {

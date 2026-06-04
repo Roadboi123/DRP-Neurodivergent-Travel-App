@@ -1,16 +1,24 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { BRAND, Fonts, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export type BackendStatus = 'Online' | 'Offline' | 'Checking';
 
 export function StatusBadge({ status }: { status: BackendStatus }) {
+  const isDark = useColorScheme() === 'dark';
+  const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const online = status === 'Online';
 
   return (
-    <View style={[styles.statusBadge, { backgroundColor: online ? BRAND.green : BRAND.pinkSoft }]}>
-      <View style={styles.statusDot} />
-      <Text style={styles.statusText}>API: {status}</Text>
+    <View
+      style={[
+        styles.statusBadge,
+        { backgroundColor: online ? accents.green : accents.pinkSoft, borderColor: palette.border },
+      ]}>
+      <View style={[styles.statusDot, { backgroundColor: palette.textPrimary }]} />
+      <Text style={[styles.statusText, { color: palette.textPrimary }]}>API: {status}</Text>
     </View>
   );
 }
@@ -24,14 +32,12 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     gap: 6,
     borderWidth: 2,
-    borderColor: BRAND.ink,
     ...hardShadow(3),
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: BRAND.ink,
   },
   statusText: {
     fontSize: 11,
@@ -39,6 +45,5 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
-    color: BRAND.ink,
   },
 });

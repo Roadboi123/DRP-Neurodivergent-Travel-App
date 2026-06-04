@@ -26,7 +26,7 @@ import {
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
@@ -184,7 +184,10 @@ export default function RoutesScreen() {
                 key={chip}
                 onPress={() => setFiltersVisible(true)}
                 activeOpacity={0.85}
-                style={styles.statusChip}>
+                style={[
+                  styles.statusChip,
+                  { backgroundColor: palette.surface, borderColor: palette.border },
+                ]}>
                 <Text style={[styles.statusChipText, { color: palette.textPrimary }]}>{chip}</Text>
               </TouchableOpacity>
             ))}
@@ -200,7 +203,7 @@ export default function RoutesScreen() {
           </View>
         ) : pool.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="map" size={48} color={BRAND.ink} />
+            <Ionicons name="map" size={48} color={palette.textPrimary} />
             <Text style={[styles.emptyText, { color: palette.textPrimary }]}>
               {routes.length === 0
                 ? 'No routes found. Please check location inputs.'
@@ -281,9 +284,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 30,
-    backgroundColor: BRAND.white,
     borderWidth: 2,
-    borderColor: BRAND.ink,
     ...hardShadow(3),
   },
   statusChipText: {

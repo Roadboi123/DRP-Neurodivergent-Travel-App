@@ -1,4 +1,4 @@
-import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
 import {
   Archivo_500Medium,
   Archivo_700Bold,
@@ -13,6 +13,8 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { BRAND } from '@/constants/theme';
+import { ThemeProvider } from '@/contexts/theme-context';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ServicesProvider } from '@/services/services-context';
 
 export const unstable_settings = {
@@ -21,13 +23,30 @@ export const unstable_settings = {
 
 SplashScreen.preventAutoHideAsync();
 
-// Light-only Wero theme. Each screen paints its own opaque gradient (see
-// GradientBackground), so the navigator base is just a solid on-brand fallback
-// — NOT transparent, which let inactive screens bleed through on react-native-web.
-const navTheme = {
+// Each screen paints its own gradient (see GradientBackground), so the
+// navigator base is just a solid fallback — NOT transparent, which let inactive
+// screens bleed through on react-native-web. Pick an on-brand fallback per scheme.
+const navThemeLight = {
   ...DefaultTheme,
   colors: { ...DefaultTheme.colors, background: BRAND.yellow },
 };
+const navThemeDark = {
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: '#15151a' },
+};
+
+// Inner tree so it can read the in-app theme context for the nav base + status bar.
+function ThemedApp() {
+  const isDark = useColorScheme() === 'dark';
+  return (
+    <NavThemeProvider value={isDark ? navThemeDark : navThemeLight}>
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      </Stack>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+    </NavThemeProvider>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -49,11 +68,8 @@ export default function RootLayout() {
 
   return (
     <ServicesProvider>
-      <ThemeProvider value={navTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        </Stack>
-        <StatusBar style="dark" />
+      <ThemeProvider>
+        <ThemedApp />
       </ThemeProvider>
     </ServicesProvider>
   );

@@ -53,10 +53,54 @@ export const GRADIENTS = {
     start: { x: 0, y: 0 },
     end: { x: 1, y: 1 },
   },
+  // Calm dark variant of the page background — a muted charcoal/plum echo of
+  // the pink→yellow sweep, low-saturation so it reads as restful, not vivid.
+  backgroundDark: {
+    colors: ['#241d24', '#15151a'] as [string, string],
+    locations: [0, 0.45] as [number, number],
+    start: { x: 0, y: 0 },
+    end: { x: 1, y: 1 },
+  },
   // Card fills lifted from the Wero cards.
   cyanGreen: { colors: [BRAND.cyan, BRAND.green] as [string, string] },
   pinkOrange: { colors: [BRAND.pinkSoft, BRAND.orange] as [string, string] },
 };
+
+/**
+ * Scheme-aware accent ramp. The Wero brand fills are neon by design; some
+ * neurodivergent users find them over-stimulating, so dark mode swaps them for
+ * desaturated, dimmed equivalents. Components that use a BRAND colour *as an
+ * accent* (status badge, chips, action tiles, sensory blocks…) should read it
+ * from here instead of `BRAND` directly so it mutes in dark mode.
+ */
+export type Accents = {
+  green: string;
+  yellow: string;
+  orange: string;
+  pink: string;
+  pinkSoft: string;
+  cyan: string;
+};
+
+const LIGHT_ACCENTS: Accents = {
+  green: BRAND.green,
+  yellow: BRAND.yellow,
+  orange: BRAND.orange,
+  pink: BRAND.pink,
+  pinkSoft: BRAND.pinkSoft,
+  cyan: BRAND.cyan,
+};
+
+const DARK_ACCENTS: Accents = {
+  green: '#4f7a5b',
+  yellow: '#8a8259',
+  orange: '#9c7a5a',
+  pink: '#a85478',
+  pinkSoft: '#8a6a9c',
+  cyan: '#4d8a8a',
+};
+
+export const getAccents = (isDark: boolean): Accents => (isDark ? DARK_ACCENTS : LIGHT_ACCENTS);
 
 /**
  * The signature Wero shadow: a hard, un-blurred offset block in ink. On web
@@ -87,8 +131,8 @@ export type ThemePalette = {
   textMuted: string;
 };
 
-// Light-only Wero palette. `background` is transparent so the fixed gradient
-// (mounted once behind the navigator) shows through every screen.
+// Light Wero palette. `background` is transparent so the fixed gradient
+// (mounted once per screen) shows through.
 const weroPalette: ThemePalette = {
   background: 'transparent',
   surface: BRAND.white,
@@ -100,13 +144,28 @@ const weroPalette: ThemePalette = {
   textMuted: '#5b5b5b',
 };
 
-export const Palette: { light: ThemePalette; dark: ThemePalette } = {
-  light: weroPalette,
-  dark: weroPalette,
+// Calm dark palette: charcoal surfaces, soft (not pure-black) borders and
+// off-white text. `background` stays transparent so the dark gradient shows
+// through. Hard ink shadows naturally recede on these surfaces — the 2px
+// borders carry the Wero structure instead.
+const darkPalette: ThemePalette = {
+  background: 'transparent',
+  surface: '#26262b',
+  border: '#3d3d45',
+  borderStrong: '#52525c',
+  divider: '#3d3d45',
+  textPrimary: '#ececf0',
+  textSecondary: '#c2c2cc',
+  textMuted: '#8a8a94',
 };
 
-// App is light-only (Wero); the param is kept for call-site compatibility.
-export const getPalette = (_isDark: boolean): ThemePalette => weroPalette;
+export const Palette: { light: ThemePalette; dark: ThemePalette } = {
+  light: weroPalette,
+  dark: darkPalette,
+};
+
+export const getPalette = (isDark: boolean): ThemePalette =>
+  isDark ? darkPalette : weroPalette;
 
 // Archivo family names as loaded by @expo-google-fonts/archivo (see root
 // _layout.tsx). `display` is the heavy grotesk for big Wero headings; `body`

@@ -1,7 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 import { getOptionColors } from '@/components/preferences/options';
-import { BRAND, Fonts, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SensitivityLevel } from '@/types/preference';
 
@@ -15,6 +15,7 @@ export function OptionChip({
   onPress: () => void;
 }) {
   const isDark = useColorScheme() === 'dark';
+  const palette = getPalette(isDark);
   const colors = getOptionColors(option.value, isDark);
 
   return (
@@ -23,12 +24,14 @@ export function OptionChip({
       activeOpacity={0.75}
       style={[
         styles.chip,
-        selected ? { backgroundColor: colors.bg } : styles.chipUnselected,
+        selected
+          ? { backgroundColor: colors.bg, borderColor: colors.border }
+          : { backgroundColor: palette.surface, borderColor: palette.border },
       ]}>
       <Text
         style={[
           styles.chipLabel,
-          selected ? { color: colors.text } : styles.chipLabelUnselected,
+          { color: selected ? colors.text : palette.textPrimary },
         ]}
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -48,11 +51,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     borderRadius: 30,
     borderWidth: 2,
-    borderColor: BRAND.ink,
     ...hardShadow(3),
-  },
-  chipUnselected: {
-    backgroundColor: BRAND.white,
   },
   chipLabel: {
     fontSize: 9.5,
@@ -61,8 +60,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0,
     textAlign: 'center',
-  },
-  chipLabelUnselected: {
-    color: BRAND.ink,
   },
 });

@@ -3,7 +3,15 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { SensoryMeter } from '@/components/routes/sensory-meter';
-import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
+import {
+  BRAND,
+  Fonts,
+  getAccents,
+  getPalette,
+  hardShadow,
+  type Accents,
+  type ThemePalette,
+} from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { RouteOption } from '@/types/route';
 
@@ -30,18 +38,23 @@ function getGroupStyling(type: RouteOption['type'], isDark: boolean) {
   };
 }
 
-// Wero "word-bg" highlight: bright fill, ink text + ink border (added in styles).
-function matchBadgeColors(matchPercentage: number | null | undefined) {
+// Wero "word-bg" highlight: scheme-aware fill with on-surface text + a palette border.
+function matchBadgeColors(
+  matchPercentage: number | null | undefined,
+  accents: Accents,
+  palette: ThemePalette
+) {
+  const text = palette.textPrimary;
   if (matchPercentage == null) {
-    return { bg: BRAND.white, text: BRAND.ink };
+    return { bg: palette.surface, text };
   }
   if (matchPercentage >= 80) {
-    return { bg: BRAND.green, text: BRAND.ink };
+    return { bg: accents.green, text };
   }
   if (matchPercentage >= 50) {
-    return { bg: BRAND.yellow, text: BRAND.ink };
+    return { bg: accents.yellow, text };
   }
-  return { bg: BRAND.pinkSoft, text: BRAND.ink };
+  return { bg: accents.pinkSoft, text };
 }
 
 function RouteCardBase({
@@ -55,8 +68,9 @@ function RouteCardBase({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const group = getGroupStyling(route.type, isDark);
-  const matchColors = matchBadgeColors(route.match_percentage);
+  const matchColors = matchBadgeColors(route.match_percentage, accents, palette);
 
   return (
     <View style={styles.routeGroupWrapper}>
@@ -87,7 +101,7 @@ function RouteCardBase({
                   const line = leg.line ? leg.line.toLowerCase() : '';
                   
                   let iconName: any = 'walk';
-                  let legBadgeColor: string = BRAND.cyan;
+                  let legBadgeColor: string = accents.cyan;
                   let legTextColor: string = BRAND.ink;
                   let displayName = 'Walk';
 
@@ -95,7 +109,7 @@ function RouteCardBase({
 
                   if (isBusLike) {
                     iconName = 'bus';
-                    legBadgeColor = BRAND.orange;
+                    legBadgeColor = accents.orange;
                     legTextColor = BRAND.ink;
                     displayName = leg.line ? `Bus ${leg.line}` : (leg.instruction ? leg.instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '') : 'Bus');
                   } else if (mode === 'tube' || mode === 'subway' || mode === 'underground' || mode.includes('elizabeth')) {
@@ -148,7 +162,7 @@ function RouteCardBase({
                   } else if (mode === 'train' || mode === 'national-rail') {
                     iconName = 'train';
                     displayName = leg.line || 'Train';
-                    legBadgeColor = BRAND.green;
+                    legBadgeColor = accents.green;
                     legTextColor = BRAND.ink;
                   }
 
@@ -162,7 +176,11 @@ function RouteCardBase({
                           style={styles.timelineArrow}
                         />
                       )}
-                      <View style={[styles.timelineBadge, { backgroundColor: legBadgeColor }]}>
+                      <View
+                        style={[
+                          styles.timelineBadge,
+                          { backgroundColor: legBadgeColor, borderColor: palette.border },
+                        ]}>
                         <Ionicons name={iconName} size={13} color={legTextColor} />
                         <View>
                           <Text style={[styles.timelineBadgeText, { color: legTextColor }]}>
@@ -180,7 +198,11 @@ function RouteCardBase({
                 })}
 
                 {/* Match Rating Pill at the end of the timeline */}
-                <View style={[styles.matchBadge, { backgroundColor: matchColors.bg }]}>
+                <View
+                  style={[
+                    styles.matchBadge,
+                    { backgroundColor: matchColors.bg, borderColor: palette.border },
+                  ]}>
                   <Text style={[styles.matchBadgeText, { color: matchColors.text }]}>
                     {route.match_percentage ?? 100}% Match
                   </Text>
@@ -219,10 +241,16 @@ function RouteCardBase({
         </View>
 
         {/* Right: big duration over tiny cost, full-height boxed widget */}
-        <View style={styles.statsWidget}>
-          <Text style={styles.statsTime}>{route.duration}</Text>
-          <Text style={styles.statsUnit}>min</Text>
-          <Text style={styles.statsCost}>£{route.price.toFixed(2)}</Text>
+        <View
+          style={[
+            styles.statsWidget,
+            { backgroundColor: accents.green, borderColor: palette.border },
+          ]}>
+          <Text style={[styles.statsTime, { color: palette.textPrimary }]}>{route.duration}</Text>
+          <Text style={[styles.statsUnit, { color: palette.textPrimary }]}>min</Text>
+          <Text style={[styles.statsCost, { color: palette.textPrimary }]}>
+            £{route.price.toFixed(2)}
+          </Text>
         </View>
       </View>
     </View>
@@ -293,16 +321,13 @@ const styles = StyleSheet.create({
     minWidth: 68,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: BRAND.green,
     borderWidth: 2,
-    borderColor: BRAND.ink,
   },
   statsTime: {
     fontSize: 24,
     fontFamily: Fonts?.display,
     fontWeight: '800',
     lineHeight: 26,
-    color: BRAND.ink,
   },
   statsUnit: {
     fontSize: 10,
@@ -310,13 +335,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     marginTop: -1,
-    color: BRAND.ink,
   },
   statsCost: {
     fontSize: 11,
     fontWeight: '700',
     marginTop: 6,
-    color: BRAND.ink,
   },
   sensoryRow: {
     flexDirection: 'row',
@@ -332,7 +355,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: BRAND.ink,
   },
   matchBadgeText: {
     fontSize: 10,
@@ -382,7 +404,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
     borderWidth: 1.5,
-    borderColor: BRAND.ink,
     ...hardShadow(2),
   },
   timelineBadgeText: {
