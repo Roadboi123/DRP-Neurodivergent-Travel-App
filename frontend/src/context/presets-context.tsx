@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
   useCallback,
@@ -11,70 +10,79 @@ import {
 } from 'react';
 
 import {
+  DEFAULT_PRESETS,
   EMPTY_VALUES,
-  getPreset,
-  matchPresetId,
-  PRESETS,
-  SENSORY_KEYS,
+  normalizePresets,
+  presetValues,
   type ActiveValues,
-  type Preset,
-  type PresetId,
   type SensoryKey,
 } from '@/constants/presets';
 import { useAuth } from '@/context/auth-context';
-import { usePreferencesService } from '@/services/services-context';
+import { usePresetsService } from '@/services/services-context';
 import type { SensitivityLevel } from '@/types/preference';
+import type { Preset, PresetId } from '@/types/preset';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-interface PersistedState {
-  activeId: PresetId | null;
-  values: ActiveValues;
-}
-
 interface PresetsContextValue {
-  /** The built-in presets, in display order. */
+  /** The three preset profiles, in slot order, each with its own values. */
   presets: Preset[];
-  /** Which preset the current sensitivities match, or `null` for a custom mix. */
-  activeId: PresetId | null;
-  /** The current working sensitivities (what gets saved to the backend). */
+  /** Which preset is currently selected/active (used for route scoring). */
+  activeId: PresetId;
+  /** The active preset's sensitivities (what route scoring reads). */
   values: ActiveValues;
   /** True while the initial per-user load is in flight. */
   loading: boolean;
   /** Status of the most recent backend save. */
   saveStatus: SaveStatus;
-  /** Switch to a preset: loads its values and persists them (local + backend). */
-  applyPreset: (id: PresetId) => void;
-  /** Edit a single sensory dimension; recomputes the active preset / custom state. */
-  setValue: (key: SensoryKey, level: SensitivityLevel) => void;
+  /** Select a preset: makes it active and persists (mirrors it for route scoring). */
+  selectPreset: (id: PresetId) => void;
+  /** Edit one sensory dimension of a specific preset and persist. */
+  setPresetValue: (id: PresetId, key: SensoryKey, level: SensitivityLevel) => void;
 }
 
 const PresetsContext = createContext<PresetsContextValue | null>(null);
 
-const storageKey = (username: string) => `@presets:${username}`;
-
-const allSet = (values: ActiveValues): boolean =>
-  SENSORY_KEYS.every((k) => values[k] !== null);
-
 export function PresetsProvider({ children }: { children: ReactNode }) {
   const { username, isLoggedIn } = useAuth();
-  const preferencesService = usePreferencesService();
+  const presetsService = usePresetsService();
 
-  const [values, setValues] = useState<ActiveValues>(EMPTY_VALUES);
-  const [activeId, setActiveId] = useState<PresetId | null>(null);
+  const [presets, setPresets] = useState<Preset[]>(DEFAULT_PRESETS);
+  const [activeId, setActiveId] = useState<PresetId>('p1');
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   // Guards a load against a username change / unmount that happened mid-flight.
   const loadToken = useRef(0);
 
-  // Load (or migrate) this user's presets whenever the signed-in user changes.
+  // Persist the full set + active selection. The backend mirrors the active
+  // preset into user_sensitivities so route scoring stays in sync.
+  const persist = useCallback(
+    async (nextPresets: Preset[], nextActiveId: PresetId) => {
+      if (!isLoggedIn || !username) return;
+      try {
+        setSaveStatus('saving');
+        await presetsService.savePresets({
+          username,
+          active_id: nextActiveId,
+          presets: nextPresets,
+        });
+        setSaveStatus('saved');
+      } catch (e) {
+        console.error('Failed to save presets', e);
+        setSaveStatus('error');
+      }
+    },
+    [isLoggedIn, username, presetsService]
+  );
+
+  // Load (or seed) this user's presets whenever the signed-in user changes.
   useEffect(() => {
     const token = ++loadToken.current;
 
     if (!isLoggedIn || !username) {
-      setValues(EMPTY_VALUES);
-      setActiveId(null);
+      setPresets(DEFAULT_PRESETS);
+      setActiveId('p1');
       setSaveStatus('idle');
       setLoading(false);
       return;
@@ -83,41 +91,24 @@ export function PresetsProvider({ children }: { children: ReactNode }) {
     const load = async () => {
       setLoading(true);
       try {
-        const raw = await AsyncStorage.getItem(storageKey(username));
+        const data = await presetsService.getPresets('me');
         if (token !== loadToken.current) return;
 
-        if (raw) {
-          const parsed = JSON.parse(raw) as PersistedState;
-          const restored: ActiveValues = { ...EMPTY_VALUES, ...parsed.values };
-          setValues(restored);
-          setActiveId(matchPresetId(restored));
-          return;
-        }
-
-        // First run for this user: seed from any preferences they saved before
-        // presets existed, so the screen and route scoring stay consistent.
-        const existing = await preferencesService.getPreferences('me');
-        if (token !== loadToken.current) return;
-
-        if (existing) {
-          const migrated: ActiveValues = {
-            noise: existing.noise ?? null,
-            crowds: existing.crowds ?? null,
-            temperature: existing.temperature ?? null,
-            smell: existing.smell ?? null,
-            lights: existing.lights ?? null,
-          };
-          setValues(migrated);
-          setActiveId(matchPresetId(migrated));
+        if (data) {
+          setPresets(normalizePresets(data.presets));
+          setActiveId(data.active_id);
         } else {
-          setValues(EMPTY_VALUES);
-          setActiveId(null);
+          // First run for this user: seed defaults and persist once (this also
+          // seeds user_sensitivities via the active-preset mirror).
+          setPresets(DEFAULT_PRESETS);
+          setActiveId('p1');
+          void persist(DEFAULT_PRESETS, 'p1');
         }
       } catch (e) {
         console.warn('Failed to load presets', e);
         if (token === loadToken.current) {
-          setValues(EMPTY_VALUES);
-          setActiveId(null);
+          setPresets(DEFAULT_PRESETS);
+          setActiveId('p1');
         }
       } finally {
         if (token === loadToken.current) {
@@ -127,77 +118,49 @@ export function PresetsProvider({ children }: { children: ReactNode }) {
     };
 
     void load();
-  }, [isLoggedIn, username, preferencesService]);
+  }, [isLoggedIn, username, presetsService, persist]);
 
-  const persistLocal = useCallback(
-    (next: PersistedState) => {
-      if (!username) return;
-      AsyncStorage.setItem(storageKey(username), JSON.stringify(next)).catch(() => {
-        // Persistence is best-effort; the in-memory choice still applies.
-      });
-    },
-    [username]
-  );
-
-  // Push a complete set of sensitivities to the backend so route scoring updates.
-  const saveToBackend = useCallback(
-    async (next: ActiveValues) => {
-      if (!isLoggedIn || !username || !allSet(next)) return;
-      try {
-        setSaveStatus('saving');
-        await preferencesService.savePreferences({
-          username,
-          noise: next.noise,
-          crowds: next.crowds,
-          temperature: next.temperature,
-          smell: next.smell,
-          lights: next.lights,
-        });
-        setSaveStatus('saved');
-      } catch (e) {
-        console.error('Failed to save preferences', e);
-        setSaveStatus('error');
-      }
-    },
-    [isLoggedIn, username, preferencesService]
-  );
-
-  const applyPreset = useCallback(
+  const selectPreset = useCallback(
     (id: PresetId) => {
-      const next = { ...getPreset(id).values };
-      setValues(next);
       setActiveId(id);
-      persistLocal({ activeId: id, values: next });
-      void saveToBackend(next);
+      void persist(presets, id);
     },
-    [persistLocal, saveToBackend]
+    [presets, persist]
   );
 
-  const setValue = useCallback(
-    (key: SensoryKey, level: SensitivityLevel) => {
-      setValues((prev) => {
-        const next = { ...prev, [key]: level };
-        const matched = matchPresetId(next);
-        setActiveId(matched);
-        persistLocal({ activeId: matched, values: next });
-        void saveToBackend(next);
+  const setPresetValue = useCallback(
+    (id: PresetId, key: SensoryKey, level: SensitivityLevel) => {
+      setPresets((prev) => {
+        const next = prev.map((p) => (p.id === id ? { ...p, [key]: level } : p));
+        void persist(next, activeId);
         return next;
       });
     },
-    [persistLocal, saveToBackend]
+    [activeId, persist]
+  );
+
+  const activePreset = useMemo(
+    () => presets.find((p) => p.id === activeId) ?? presets[0],
+    [presets, activeId]
+  );
+
+  // Active values feed route scoring; suppress when logged out.
+  const values = useMemo<ActiveValues>(
+    () => (isLoggedIn ? presetValues(activePreset) : EMPTY_VALUES),
+    [isLoggedIn, activePreset]
   );
 
   const value = useMemo<PresetsContextValue>(
     () => ({
-      presets: PRESETS,
+      presets,
       activeId,
       values,
       loading,
       saveStatus,
-      applyPreset,
-      setValue,
+      selectPreset,
+      setPresetValue,
     }),
-    [activeId, values, loading, saveStatus, applyPreset, setValue]
+    [presets, activeId, values, loading, saveStatus, selectPreset, setPresetValue]
   );
 
   return <PresetsContext.Provider value={value}>{children}</PresetsContext.Provider>;
@@ -210,13 +173,13 @@ export function PresetsProvider({ children }: { children: ReactNode }) {
 export function usePresets(): PresetsContextValue {
   return (
     useContext(PresetsContext) ?? {
-      presets: PRESETS,
-      activeId: null,
+      presets: DEFAULT_PRESETS,
+      activeId: 'p1',
       values: EMPTY_VALUES,
       loading: false,
       saveStatus: 'idle',
-      applyPreset: () => {},
-      setValue: () => {},
+      selectPreset: () => {},
+      setPresetValue: () => {},
     }
   );
 }
