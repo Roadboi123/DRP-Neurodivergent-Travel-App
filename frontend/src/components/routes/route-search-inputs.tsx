@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { getPalette } from '@/constants/theme';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface RouteSearchInputsProps {
@@ -38,7 +38,7 @@ export function RouteSearchInputs({
             <View style={styles.dotLine} />
           </View>
           <View style={styles.inputTextContainer}>
-            <Text style={styles.fieldLabel}>Start Location</Text>
+            <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>Start Location</Text>
             <TextInput
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={startLoc}
@@ -59,7 +59,7 @@ export function RouteSearchInputs({
             <Ionicons name="location" size={20} color="#E04F5F" />
           </View>
           <View style={styles.inputTextContainer}>
-            <Text style={styles.fieldLabel}>End Destination</Text>
+            <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>End Destination</Text>
             <TextInput
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={endLoc}
@@ -71,6 +71,7 @@ export function RouteSearchInputs({
           </View>
         </View>
       </View>
+
 
     </View>
   );
@@ -98,26 +99,18 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   inputCard: {
-    borderRadius: 18,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 2,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
+    ...hardShadow(5),
   },
   usernameCard: {
-    borderRadius: 18,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 2,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
+    ...hardShadow(5),
   },
   inputRow: {
     flexDirection: 'row',
@@ -146,14 +139,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fieldLabel: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '600',
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    marginBottom: 2,
+    letterSpacing: 0.3,
+    marginBottom: 3,
   },
   textInput: {
     fontSize: 15,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
     padding: 0,
   },

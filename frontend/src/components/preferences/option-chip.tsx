@@ -1,6 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 import { getOptionColors } from '@/components/preferences/options';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SensitivityLevel } from '@/types/preference';
 
@@ -14,6 +15,7 @@ export function OptionChip({
   onPress: () => void;
 }) {
   const isDark = useColorScheme() === 'dark';
+  const palette = getPalette(isDark);
   const colors = getOptionColors(option.value, isDark);
 
   return (
@@ -23,21 +25,13 @@ export function OptionChip({
       style={[
         styles.chip,
         selected
-          ? {
-              backgroundColor: colors.bg,
-              borderColor: colors.border,
-            }
-          : (isDark ? styles.chipUnselectedDark : styles.chipUnselected),
+          ? { backgroundColor: colors.bg, borderColor: colors.border }
+          : { backgroundColor: palette.surface, borderColor: palette.border },
       ]}>
       <Text
         style={[
           styles.chipLabel,
-          selected
-            ? {
-                color: colors.text,
-                fontWeight: '700',
-              }
-            : (isDark ? styles.chipLabelUnselectedDark : styles.chipLabelUnselected),
+          { color: selected ? colors.text : palette.textPrimary },
         ]}
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -53,34 +47,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 2,
-    borderRadius: 10,
-    borderWidth: 1.5,
-  },
-  chipUnselected: {
-    backgroundColor: '#F7F7F5',
-    borderColor: '#E8E8E6',
-  },
-  chipUnselectedDark: {
-    backgroundColor: '#1C212A',
-    borderColor: '#2A313E',
-  },
-  chipX: {
-    fontSize: 10,
-    color: '#AAAAAA',
-    fontWeight: '700',
+    borderRadius: 30,
+    borderWidth: 2,
+    ...hardShadow(3),
   },
   chipLabel: {
-    fontSize: 12,
-    color: '#888888',
-    fontWeight: '600',
+    fontSize: 9.5,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0,
     textAlign: 'center',
-  },
-  chipLabelUnselected: {
-    color: '#999999',
-  },
-  chipLabelUnselectedDark: {
-    color: '#555555',
   },
 });

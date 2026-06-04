@@ -7,12 +7,15 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "screenshot": "node screenshot.mjs",
     "lint": "expo lint",
     "gen:api": "openapi-typescript ../shared/openapi.json -o src/types/generated/api.ts",
     "prepare": "npm run gen:api"
   },
   "dependencies": {
+    "@expo-google-fonts/archivo": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
@@ -22,6 +25,7 @@
     "expo-font": "~14.0.12",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
+    "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.11",
     "expo-router": "~6.0.24",
     "expo-splash-screen": "~31.0.13",
@@ -42,6 +46,7 @@
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "openapi-typescript": "^7.13.0",
+    "puppeteer": "^25.1.0",
     "typescript": "~5.9.2"
   },
   "private": true

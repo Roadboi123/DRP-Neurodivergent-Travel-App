@@ -39,6 +39,9 @@ yarn-error.*
 # generated API types (regenerated from ../shared/openapi.json on install/build)
 src/types/generated/
 
+# local design screenshots (from screenshot.mjs)
+screenshots/
+
 app-example
 
 # generated native folders

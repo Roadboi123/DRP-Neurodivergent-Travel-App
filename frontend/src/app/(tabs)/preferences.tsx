@@ -14,7 +14,9 @@ import {
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
-import { Fonts, getPalette } from '@/constants/theme';
+import { GradientBackground } from '@/components/ui/gradient-background';
+import { HeaderNav } from '@/components/ui/header-nav';
+import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
@@ -110,10 +112,13 @@ export default function UserPreferencesScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <GradientBackground />
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={palette.background}
       />
+
+      <HeaderNav />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
@@ -126,6 +131,7 @@ export default function UserPreferencesScreen() {
             <TouchableOpacity
               onPress={() => setGuideVisible(true)}
               hitSlop={10}
+              style={styles.infoButton}
               accessibilityLabel="About your preferences">
               <Ionicons name="information-circle-outline" size={26} color={palette.textSecondary} />
             </TouchableOpacity>
@@ -137,7 +143,7 @@ export default function UserPreferencesScreen() {
             <View style={[styles.iconCircle, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
               <Ionicons name="options-outline" size={36} color="#E91E63" />
             </View>
-            <Text style={[styles.splashTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+            <Text style={[styles.splashTitle, { color: palette.textPrimary }]}>
               Sign in to customize
             </Text>
             <Text style={[styles.splashDesc, { color: palette.textSecondary }]}>
@@ -154,9 +160,8 @@ export default function UserPreferencesScreen() {
           </View>
         ) : (
           <>
-            {/* Scale prompt */}
             <View style={styles.loggedInHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+              <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
                 How much does each of these affect you?
               </Text>
               
@@ -176,8 +181,7 @@ export default function UserPreferencesScreen() {
               )}
             </View>
 
-            {/* Card */}
-            <View style={[styles.card, { backgroundColor: palette.surface }]}>
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               {preferences.map((pref, i) => (
                 <View key={pref.id}>
                   <PreferenceRow preference={pref} onSelect={handleSelect} />
@@ -205,9 +209,9 @@ const styles = StyleSheet.create({
 
   container: {
     paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 40,
-  } as ViewStyle,
+    paddingTop: 12,
+    paddingBottom: 100,
+  },
 
   // Header
   header: {
@@ -216,22 +220,32 @@ const styles = StyleSheet.create({
 
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-  } as ViewStyle,
+    gap: 12,
+  },
 
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  } as TextStyle,
+    flex: 1,
+    fontSize: 34,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: -1,
+  },
+
+  infoButton: {
+    marginTop: 6,
+  },
 
   sectionTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    flex: 1,
-  } as TextStyle,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+    marginBottom: 12,
+  },
 
   statusText: {
     fontSize: 13,
@@ -249,20 +263,12 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    borderRadius: 20,
+    borderRadius: 14,
+    borderWidth: 2,
     paddingVertical: 8,
     paddingHorizontal: 16,
-
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  } as ViewStyle,
+    ...hardShadow(6),
+  },
 
   rowDivider: {
     height: 1,

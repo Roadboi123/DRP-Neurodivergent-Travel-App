@@ -1,5 +1,24 @@
 # DRP Neurodivergent Travel App
 
+## Project overview
+
+A journey planner for **neurodivergent travellers**. Instead of optimising only for time/cost,
+it scores each route by **sensory load** — noise, crowds, heat, light, smell — and matches routes
+to a user's saved sensitivities so they can pick the calmest viable option. Users set their
+sensitivities once (per username); the routes screen then ranks/labels journeys against them.
+Sensory comfort and a low-friction, predictable UI are the product, not afterthoughts.
+
+## Tech stack
+
+- **Frontend:** Expo / React Native (`react-native-web` for web), expo-router, `StyleSheet` +
+  a `getPalette()` theme. Deployed on Vercel. **No Tailwind, no HTML/CSS.**
+- **Backend:** FastAPI (Python 3.12), Supabase storage. Deployed on Railway.
+- **Contract:** OpenAPI (`shared/openapi.json`), generated from the backend Pydantic schemas.
+- **Do not introduce:** Tailwind or a second styling system; raw `fetch` in the app (use the
+  injected services); changes to the frozen `GET /routes/` contract.
+
+## Layout
+
 Monorepo with three areas, each with its own `CLAUDE.md`:
 
 - `frontend/` — Expo / React Native client (deployed on Vercel). See `frontend/CLAUDE.md`.
