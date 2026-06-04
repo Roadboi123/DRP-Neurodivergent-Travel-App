@@ -55,7 +55,7 @@ function matchBadgeColors(matchPercentage: number | null | undefined, isDark: bo
   };
 }
 
-export function RouteCard({
+function RouteCardBase({
   route,
   customTitle,
   hideTitle,
@@ -245,6 +245,12 @@ export function RouteCard({
     </View>
   );
 }
+
+// Memoized so re-ranking the list (e.g. Speed↔Preference) reorders already-painted
+// cards instead of re-rendering each one. Route object refs are stable across a
+// re-sort, so this turns a reorder into a pure node move — fixes the white repaint
+// flash from the nested timeline ScrollView remounting on react-native-web.
+export const RouteCard = React.memo(RouteCardBase);
 
 const styles = StyleSheet.create({
   routeGroupWrapper: {
