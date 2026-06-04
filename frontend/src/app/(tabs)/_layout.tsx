@@ -26,7 +26,11 @@ export default function TabLayout() {
           letterSpacing: 0.3,
         },
         // Floating Wero pill: outlined surface with a hard offset shadow.
+        // Currently hidden from display (navigation flows through the header
+        // home/back buttons and the home Quick Actions). To bring the tab bar
+        // back, remove the `display: 'none'` line below — the styling is intact.
         tabBarStyle: {
+          display: 'none',
           position: 'absolute',
           left: 16,
           right: 16,
