@@ -751,7 +751,7 @@ async def get_route_suggestions(
             if len(mismatch_triggers) > 0:
                 r["sensory_description"] = f"⚠️ High sensory load: includes triggers ({', '.join(mismatch_triggers)}) that affect you."
             else:
-                r["sensory_description"] = "✅ Excellent match: completely aligned with your sensory profile."
+                r["sensory_description"] = None
         else:
             # Fallback score (simple sum of all 5 metrics)
             sensory_score = float(r["noise"] + r["crowds"] + r["heat"] + r["light"] + r["smell"])

@@ -118,7 +118,7 @@ export default function UserPreferencesScreen() {
         backgroundColor={palette.background}
       />
 
-      <HeaderNav />
+      <HeaderNav onProfilePress={() => setProfileVisible(true)} />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}

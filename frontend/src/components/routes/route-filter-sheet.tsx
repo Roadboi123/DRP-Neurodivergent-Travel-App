@@ -47,7 +47,8 @@ export function RouteFilterSheet({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Stop backdrop taps from closing when they land on the sheet itself */}
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={1}
           style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
           onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
@@ -102,7 +103,7 @@ export function RouteFilterSheet({
             style={[styles.doneButton, { backgroundColor: accents.pink, borderColor: palette.border }]}>
             <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
-        </Pressable>
+        </TouchableOpacity>
       </Pressable>
     </Modal>
   );

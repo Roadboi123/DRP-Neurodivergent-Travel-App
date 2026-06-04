@@ -190,7 +190,8 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <Pressable style={styles.backdrop} onPress={handleClose}>
-        <Pressable
+        <TouchableOpacity
+          activeOpacity={1}
           style={[styles.sheet, { backgroundColor: palette.surface }]}
           onPress={(e) => e.stopPropagation()}
         >
@@ -373,7 +374,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
               </View>
             )}
           </ScrollView>
-        </Pressable>
+        </TouchableOpacity>
       </Pressable>
     </Modal>
   );
