@@ -60,7 +60,7 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.greetingText, { color: palette.textSecondary }]}>
-              {isLoggedIn ? `Hello, ${username} 🥀` : 'Hello, Traveler 🥀'}
+              {isLoggedIn ? `Hello, ${username}!` : 'Hello!'}
             </Text>
             <Text style={[styles.title, { color: palette.textPrimary }]}>My Planner</Text>
           </View>
@@ -85,9 +85,40 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Backend status (sits where the welcome banner used to) */}
+        {/* Backend status (sits where the welcome banner used to)
         <View style={styles.statusRow}>
           <StatusBadge status={backendState} />
+        </View> */}
+        
+          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+            Plan a route
+          </Text>
+
+        <View style={styles.gridRow}>
+        
+          <QuickActionCard
+            iconName="navigate"
+            iconColor={BRAND.ink}
+            iconBackground={accents.cyan}
+            title="Plan Calm Route"
+            description="Find sensory friendly paths"
+            onPress={() => router.push('/routes')}
+          />
+        </View>
+          
+          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+            Set preferences
+          </Text>
+        <View style={styles.gridRow}>
+          
+          <QuickActionCard
+            iconName="settings-sharp"
+            iconColor={BRAND.ink}
+            iconBackground={accents.green}
+            title="Sensory Sensitivities"
+            description="Update comfort thresholds"
+            onPress={() => router.push('/preferences')}
+          />
         </View>
 
         {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
@@ -102,34 +133,11 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Quick Actions Grid */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-          Quick Actions
-        </Text>
-        <View style={styles.gridRow}>
-          <QuickActionCard
-            iconName="navigate"
-            iconColor={BRAND.ink}
-            iconBackground={accents.cyan}
-            title="Plan Calm Route"
-            description="Find sensory friendly paths"
-            onPress={() => router.push('/routes')}
-          />
-          <QuickActionCard
-            iconName="settings-sharp"
-            iconColor={BRAND.ink}
-            iconBackground={accents.green}
-            title="Sensory Sensitivities"
-            description="Update comfort thresholds"
-            onPress={() => router.push('/preferences')}
-          />
-        </View>
-
-        {/* Daily Travel Tips */}
+        {/* Daily Travel Tips
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Daily Travel Tips
         </Text>
-        <DailyTips />
+        <DailyTips /> */}
       </ScrollView>
 
       {/* Global Profile/Login Modal */}
