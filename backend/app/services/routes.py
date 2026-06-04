@@ -786,8 +786,8 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
     u_noise = 2
     u_crowds = 2
     u_heat = 2
-    u_light = 2
-    u_smell = 2
+    _u_light = 2
+    _u_smell = 2
     is_anon = True
 
     if username and username.strip() and not generic:
@@ -803,8 +803,8 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
                     u_noise = int(prefs_data.get("noise_sensitivity") or 2)
                     u_crowds = int(prefs_data.get("crowd_sensitivity") or 2)
                     u_heat = int(prefs_data.get("heat_sensitivity") or 2)
-                    u_light = int(prefs_data.get("light_sensitivity") or 2)
-                    u_smell = int(prefs_data.get("smell_sensitivity") or 2)
+                    _u_light = int(prefs_data.get("light_sensitivity") or 2)
+                    _u_smell = int(prefs_data.get("smell_sensitivity") or 2)
                     is_anon = False
         except Exception as e:
             print(f"Error fetching Supabase sensitivities for warning filter: {e}")
@@ -815,8 +815,8 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
         u_noise = 3
         u_crowds = 3
         u_heat = 3
-        u_light = 3
-        u_smell = 3
+        _u_light = 3
+        _u_smell = 3
 
     warnings = []
     warning_id_counter = 1
@@ -870,8 +870,10 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
             lines_str = f"{delayed_lines[0]} Line"
         elif len(delayed_lines) == 2:
             lines_str = f"{delayed_lines[0]} and {delayed_lines[1]} line"
+        elif len(delayed_lines) == 3:
+            lines_str = f"{delayed_lines[0]}, {delayed_lines[1]}, and {delayed_lines[2]} line"
         else:
-            lines_str = f"{', '.join(delayed_lines[:-1])}, and {delayed_lines[-1]} line"
+            lines_str = "Multiple line"
 
         any_high = len(severe_lines) > 0
         severity_val = "high" if any_high else "medium"
@@ -897,5 +899,28 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
                 "icon": "alert-circle"
             })
             warning_id_counter += 1
+
+    # 4. Live station works check (drilling, construction)
+    if u_noise >= 3:
+        try:
+            works_stations = await tlf_client.get_live_station_works()
+            if works_stations:
+                if len(works_stations) == 1:
+                    desc = f"Drilling works reported at {works_stations[0]} station."
+                elif len(works_stations) == 2:
+                    desc = f"Drilling works reported at {works_stations[0]} and {works_stations[1]} stations."
+                else:
+                    desc = f"Drilling works reported at {works_stations[0]}, {works_stations[1]}, and {len(works_stations)-2} other stations."
+                
+                warnings.append({
+                    "id": f"w_station_works_{warning_id_counter}",
+                    "title": "Drilling & Works",
+                    "desc": desc,
+                    "severity": "medium",
+                    "icon": "volume-high"
+                })
+                warning_id_counter += 1
+        except Exception as e:
+            print(f"Error checking live station works: {e}")
 
     return warnings

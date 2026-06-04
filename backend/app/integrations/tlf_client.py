@@ -14,6 +14,11 @@ CACHE_TTL_SECS = 300  # 5-minute cache lifespan
 _DISRUPTION_LOCKS: dict[str, asyncio.Lock] = {}
 _CROWDING_LOCKS: dict[str, asyncio.Lock] = {}
 
+_LIVE_STATION_WORKS_CACHE: list[str] = []
+_LIVE_STATION_WORKS_EXPIRY: float = 0.0
+_STATION_WORKS_LOCK = asyncio.Lock()
+_IS_REFRESHING_STATION_WORKS: bool = False
+
 
 def _parse_leg(leg: dict) -> dict:
     return {
@@ -282,3 +287,57 @@ async def get_live_line_disruptions() -> list[dict]:
         print(f"Error fetching live line disruptions from TfL: {e}")
         
     return []
+
+
+async def _refresh_live_station_works_task() -> None:
+    """
+    Background worker that updates the live station works cache from TfL.
+    """
+    global _LIVE_STATION_WORKS_EXPIRY, _LIVE_STATION_WORKS_CACHE, _IS_REFRESHING_STATION_WORKS
+    url = f"{TFL_BASE}/StopPoint/Mode/tube/Disruption"
+    params = {}
+    if APP_KEY:
+        params["app_key"] = APP_KEY
+
+    stations = set()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url, params=params)
+            if res.status_code == 200:
+                disruptions = res.json()
+                keywords = [
+                    "drill", "construction", "engineering", 
+                    "refurbishment", "renovation", "building works", 
+                    "maintenance", "vibration", "streetworks", "outside",
+                    "upgrade", "modernisation"
+                ]
+                for d in disruptions:
+                    desc = str(d.get("description", "")).lower()
+                    if any(kw in desc for kw in keywords):
+                        name = d.get("commonName", "")
+                        if name:
+                            name = name.replace(" Underground Station", "")
+                            name = name.replace(" Station", "")
+                            name = name.strip()
+                            if name:
+                                stations.add(name)
+                _LIVE_STATION_WORKS_CACHE = sorted(list(stations))
+    except Exception as e:
+        print(f"Error background fetching live station works: {e}")
+    finally:
+        _LIVE_STATION_WORKS_EXPIRY = time.time() + CACHE_TTL_SECS
+        _IS_REFRESHING_STATION_WORKS = False
+
+
+async def get_live_station_works() -> list[str]:
+    """
+    Return active station disruptions from memory immediately. If cache is expired,
+    fire a background refresh task so the user request remains instant.
+    """
+    global _LIVE_STATION_WORKS_EXPIRY, _IS_REFRESHING_STATION_WORKS
+    now = time.time()
+    if now >= _LIVE_STATION_WORKS_EXPIRY and not _IS_REFRESHING_STATION_WORKS:
+        _IS_REFRESHING_STATION_WORKS = True
+        asyncio.create_task(_refresh_live_station_works_task())
+        
+    return _LIVE_STATION_WORKS_CACHE

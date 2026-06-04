@@ -13,7 +13,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useHealthService, useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
-import { SensorySandbox } from '@/components/home/sensory-sandbox';
 import type { WarningItem } from '@/types/route';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -30,7 +29,6 @@ export default function HomeScreen() {
 
   const [backendState, setBackendState] = useState<BackendStatus>('Checking');
   const [profileVisible, setProfileVisible] = useState(false);
-  const [sandboxVisible, setSandboxVisible] = useState(false);
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
 
   // Hydration mismatch fix
@@ -146,15 +144,6 @@ export default function HomeScreen() {
             onPress={() => router.push('/preferences')}
             style={styles.gridCard}
           />
-          <QuickActionCard
-            iconName="color-palette-outline"
-            iconColor={BRAND.ink}
-            iconBackground={accents.pinkSoft}
-            title="Sensory Sandbox"
-            description="Calming visual light play"
-            onPress={() => setSandboxVisible(true)}
-            style={styles.gridCard}
-          />
         </ScrollView>
 
         {/* Daily Travel Tips */}
@@ -166,9 +155,6 @@ export default function HomeScreen() {
 
       {/* Global Profile/Login Modal */}
       <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
-
-      {/* Sensory Sandbox Modal */}
-      <SensorySandbox visible={sandboxVisible} onClose={() => setSandboxVisible(false)} />
     </SafeAreaView>
   );
 }
