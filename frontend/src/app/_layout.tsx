@@ -12,7 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { GradientBackground } from '@/components/ui/gradient-background';
+import { BRAND } from '@/constants/theme';
 import { ServicesProvider } from '@/services/services-context';
 
 export const unstable_settings = {
@@ -21,11 +21,12 @@ export const unstable_settings = {
 
 SplashScreen.preventAutoHideAsync();
 
-// Light-only Wero theme — transparent navigator background so the fixed
-// gradient (mounted behind the navigator) shows through every screen.
+// Light-only Wero theme. Each screen paints its own opaque gradient (see
+// GradientBackground), so the navigator base is just a solid on-brand fallback
+// — NOT transparent, which let inactive screens bleed through on react-native-web.
 const navTheme = {
   ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: 'transparent' },
+  colors: { ...DefaultTheme.colors, background: BRAND.yellow },
 };
 
 export default function RootLayout() {
@@ -49,7 +50,6 @@ export default function RootLayout() {
   return (
     <ServicesProvider>
       <ThemeProvider value={navTheme}>
-        <GradientBackground />
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { DailyTips } from '@/components/home/daily-tips';
 import { QuickActionCard } from '@/components/home/quick-action-card';
 import { WelcomeBanner } from '@/components/home/welcome-banner';
+import { GradientBackground } from '@/components/ui/gradient-background';
 import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
 import { BRAND, Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -43,6 +44,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.background }]}>
+      <GradientBackground />
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
