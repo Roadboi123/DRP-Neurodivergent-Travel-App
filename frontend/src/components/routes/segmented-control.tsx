@@ -50,8 +50,13 @@ export function SegmentedControl<T extends string>({
               isTab ? styles.tabSegment : styles.chip,
               active && styles.segmentActive,
             ]}>
-            {option.icon && <Ionicons name={option.icon} size={15} color={fg} />}
-            <Text style={[styles.label, { color: fg }]}>{option.label}</Text>
+            {option.icon && <Ionicons name={option.icon} size={isTab ? 13 : 15} color={fg} />}
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[styles.label, isTab && styles.tabLabel, { color: fg }]}>
+              {option.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -74,8 +79,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
     paddingVertical: 10,
+    paddingHorizontal: 4,
     borderRadius: 24,
   },
   chipRow: {
@@ -104,5 +110,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  // Tabs share the row 50/50, so "Preference" + icon must stay compact.
+  tabLabel: {
+    fontSize: 11.5,
+    letterSpacing: 0,
   },
 });
