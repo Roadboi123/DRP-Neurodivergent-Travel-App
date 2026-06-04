@@ -27,6 +27,7 @@ import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
@@ -60,6 +61,7 @@ export default function RoutesScreen() {
   const palette = getPalette(isDark);
   const routesService = useRoutesService();
   const { username, isLoggedIn } = useAuth();
+  const isFocused = useIsFocused();
 
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
@@ -85,6 +87,7 @@ export default function RoutesScreen() {
     let active = true;
 
     async function fetchRoutes() {
+      if (!isFocused) return;
       if (!startLoc.trim() || !endLoc.trim()) {
         setRoutes([]);
         return;
@@ -114,7 +117,7 @@ export default function RoutesScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [startLoc, endLoc, username, routesService]);
+  }, [startLoc, endLoc, username, routesService, isFocused]);
 
   // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
