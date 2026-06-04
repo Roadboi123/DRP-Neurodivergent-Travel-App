@@ -200,11 +200,16 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
           <TouchableOpacity
             activeOpacity={1}
             style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
-            // Tapping anywhere on the sheet (outside an input) dismisses the
-            // keyboard; stopPropagation keeps the backdrop from closing the modal.
+            // Tapping the sheet (outside an input) dismisses the keyboard on
+            // native; stopPropagation keeps the backdrop from closing the modal.
+            // On web the press bubbles up from the inputs, so calling
+            // Keyboard.dismiss() here would blur the field the user just clicked —
+            // and there's no soft keyboard to dismiss anyway, so skip it.
             onPress={(e) => {
               e.stopPropagation();
-              Keyboard.dismiss();
+              if (Platform.OS !== 'web') {
+                Keyboard.dismiss();
+              }
             }}
           >
             <View style={styles.handle} />
