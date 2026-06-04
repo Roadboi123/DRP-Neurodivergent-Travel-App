@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -14,100 +14,41 @@ import {
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
+import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { HeaderNav } from '@/components/ui/header-nav';
 import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { SENSORY_KEYS, SENSORY_META, type SensoryKey } from '@/constants/presets';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { usePreferencesService } from '@/services/services-context';
+import { usePresets } from '@/context/presets-context';
 import { useAuth } from '@/context/auth-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
-const INITIAL_PREFERENCES: Preference[] = [
-  { id: 'noise', label: 'Noise', emoji: '🔊', value: null },
-  { id: 'crowds', label: 'Crowds', emoji: '👥', value: null },
-  { id: 'temperature', label: 'Temperature', emoji: '🌡️', value: null },
-  { id: 'smell', label: 'Smell', emoji: '👃', value: null },
-  { id: 'lights', label: 'Lights', emoji: '💡', value: null },
-];
-
-const valueFor = (prefs: Preference[], id: string): SensitivityLevel | null =>
-  prefs.find((p) => p.id === id)?.value ?? null;
-
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
-
 export default function UserPreferencesScreen() {
-  const preferencesService = usePreferencesService();
-  const { username: authUsername, isLoggedIn } = useAuth();
-  const [preferences, setPreferences] = useState<Preference[]>(INITIAL_PREFERENCES);
-  const [loading, setLoading] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const { isLoggedIn } = useAuth();
+  const { values, activeId, loading, saveStatus, setPresetValue } = usePresets();
   const [guideVisible, setGuideVisible] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
 
-  useEffect(() => {
-    const loadPreferences = async () => {
-      if (!isLoggedIn) {
-        setPreferences(INITIAL_PREFERENCES);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const data = await preferencesService.getPreferences('me');
-
-        if (!data) {
-          setPreferences(INITIAL_PREFERENCES);
-          return;
-        }
-
-        setPreferences([
-          { id: 'noise', label: 'Noise', emoji: '🔊', value: data.noise ?? null },
-          { id: 'crowds', label: 'Crowds', emoji: '👥', value: data.crowds ?? null },
-          { id: 'temperature', label: 'Temperature', emoji: '🌡️', value: data.temperature ?? null },
-          { id: 'smell', label: 'Smell', emoji: '👃', value: data.smell ?? null },
-          { id: 'lights', label: 'Lights', emoji: '💡', value: data.lights ?? null },
-        ]);
-      } catch (e) {
-        console.error('Failed to load preferences', e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadPreferences();
-  }, [isLoggedIn, authUsername, preferencesService]);
-
-  // Persist immediately on input. The backend requires all five fields, so we
-  // only save once every item is set and a username is present.
-  const persist = async (prefs: Preference[]) => {
-    if (!isLoggedIn || !authUsername) return;
-    if (!prefs.every((p) => p.value !== null)) return;
-
-    try {
-      setSaveStatus('saving');
-      await preferencesService.savePreferences({
-        username: authUsername,
-        noise: valueFor(prefs, 'noise')!,
-        crowds: valueFor(prefs, 'crowds')!,
-        temperature: valueFor(prefs, 'temperature')!,
-        smell: valueFor(prefs, 'smell')!,
-        lights: valueFor(prefs, 'lights')!,
-      });
-      setSaveStatus('saved');
-    } catch (e) {
-      console.error(e);
-      setSaveStatus('error');
-    }
-  };
+  // Rows reflect the currently-selected preset's values; editing one writes
+  // back to that preset.
+  const preferences = useMemo<Preference[]>(
+    () =>
+      SENSORY_KEYS.map((key) => ({
+        id: key,
+        label: SENSORY_META[key].label,
+        emoji: SENSORY_META[key].emoji,
+        value: values[key],
+      })),
+    [values]
+  );
 
   const handleSelect = (id: string, value: SensitivityLevel) => {
-    const next = preferences.map((p) => (p.id === id ? { ...p, value } : p));
-    setPreferences(next);
-    void persist(next);
+    setPresetValue(activeId, id as SensoryKey, value);
   };
 
   return (
@@ -160,9 +101,14 @@ export default function UserPreferencesScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.loggedInHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-                How much does each of these affect you?
+            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+              Select preset profile
+            </Text>
+            <PresetSwitcher />
+
+            <View style={[styles.loggedInHeaderRow, styles.rowsHeader]}>
+              <Text style={[styles.sectionTitle, { color: palette.textPrimary, marginBottom: 0 }]}>
+                How much do these affect you?
               </Text>
               
               {loading && (
@@ -338,6 +284,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     flexWrap: 'wrap',
     gap: 8,
+  } as ViewStyle,
+
+  rowsHeader: {
+    marginTop: 28,
   } as ViewStyle,
 });
 

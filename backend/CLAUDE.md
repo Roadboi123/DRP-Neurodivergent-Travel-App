@@ -25,7 +25,29 @@ commit all three together. Backend CI fails if `shared/openapi.json` is stale.
 Annotation tightening is safe only when JSON serialization is unchanged — verify
 with a `fastapi.testclient.TestClient` baseline diff before committing.
 
+## Database & migrations
+
+Schema lives in `migrations/` as ordered, immutable `NNNN_name.sql` files and is
+applied by a small runner (`app/db/migrate.py`) over a **direct Postgres
+connection** — the supabase REST client can't run DDL. Applied files are tracked
+in a `schema_migrations` ledger; pending files run once, in filename order, each
+in its own transaction (a session advisory lock serializes concurrent runners).
+
+- **Add a migration:** create the next `migrations/NNNN_description.sql` (don't
+  edit already-applied files). Use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF
+  NOT EXISTS` so re-runs and the existing prod DB stay safe.
+- **Apply locally:** `make migrate` (or `python -m app.db.migrate`). Needs
+  `DATABASE_URL` — the Supabase **Session pooler** URI (port 5432, `?sslmode=require`),
+  NOT the 6543 transaction pooler. See `.env.example`.
+- **On deploy:** the `Procfile` runs `python -m app.db.migrate` before uvicorn, so
+  Railway applies pending migrations on each deploy. It's **fail-fast**: a broken
+  migration blocks boot, so test migrations before pushing. With `DATABASE_URL`
+  unset the runner skips (exit 0) rather than failing.
+- The runner is never imported by the app/services, so `pytest`/CI need no DB; its
+  pure helpers are unit-tested in `tests/test_migrate.py`.
+
 ## Checks (match CI)
 
-`ruff check .`, `mypy .`, `pytest -q`. ruff/mypy/pytest are installed by CI, not
-pinned in `requirements.txt` — don't add them there.
+`ruff check .`, `mypy .`, `pytest -q`. These dev tools are pinned in
+`requirements-dev.txt` (CI installs them from there, and Dependabot bumps them) —
+keep them OUT of `requirements.txt` so the Railway runtime image stays lean.

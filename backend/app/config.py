@@ -21,6 +21,11 @@ class Settings:
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY") or "placeholder_key"
     JWT_SECRET: str = os.getenv("JWT_SECRET") or "calm_travel_secret_key_88f0d8a7"
 
+    # Direct Postgres connection string (Supabase Session pooler) used ONLY by the
+    # migration runner (app/db/migrate.py) for DDL — the supabase REST client can't
+    # run migrations. Empty when unset so the runner skips rather than failing boot.
+    DATABASE_URL: str = os.getenv("DATABASE_URL") or ""
+
     API_TITLE: str = "Calm Travel API"
     API_VERSION: str = "0.1.0"
 

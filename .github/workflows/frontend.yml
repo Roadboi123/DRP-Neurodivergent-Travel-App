@@ -15,6 +15,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: lint/test/deploy only read the repo; Vercel uses its own token.
+permissions:
+  contents: read
+
 jobs:
 
   # ─────────────────────────────────────────────

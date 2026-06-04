@@ -178,6 +178,149 @@
         "title": "PreferenceResponse",
         "type": "object"
       },
+      "Preset": {
+        "description": "One saved preset profile: a name plus a full set of sensitivities.\n\nReuses the ``SensitivityLevel`` literal from the preferences contract so the\naccepted labels stay a single source of truth (invalid values 422 before the\nhandler runs). Every dimension is required — a preset is always fully set.",
+        "properties": {
+          "crowds": {
+            "enum": [
+              "little",
+              "medium",
+              "high",
+              "veryhigh"
+            ],
+            "title": "Crowds",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "p1",
+              "p2",
+              "p3"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "lights": {
+            "enum": [
+              "little",
+              "medium",
+              "high",
+              "veryhigh"
+            ],
+            "title": "Lights",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "noise": {
+            "enum": [
+              "little",
+              "medium",
+              "high",
+              "veryhigh"
+            ],
+            "title": "Noise",
+            "type": "string"
+          },
+          "smell": {
+            "enum": [
+              "little",
+              "medium",
+              "high",
+              "veryhigh"
+            ],
+            "title": "Smell",
+            "type": "string"
+          },
+          "temperature": {
+            "enum": [
+              "little",
+              "medium",
+              "high",
+              "veryhigh"
+            ],
+            "title": "Temperature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "noise",
+          "crowds",
+          "temperature",
+          "smell",
+          "lights"
+        ],
+        "title": "Preset",
+        "type": "object"
+      },
+      "PresetsPayload": {
+        "description": "Request body for ``POST /presets/`` — replaces a user's whole preset set.\n\nThe active preset's values are mirrored into ``user_sensitivities`` so route\nscoring (the frozen ``GET /routes/``) keeps reading the same row as before.",
+        "properties": {
+          "active_id": {
+            "enum": [
+              "p1",
+              "p2",
+              "p3"
+            ],
+            "title": "Active Id",
+            "type": "string"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/Preset"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "active_id",
+          "presets"
+        ],
+        "title": "PresetsPayload",
+        "type": "object"
+      },
+      "PresetsResponse": {
+        "description": "Response body for ``GET /presets/{username}``.",
+        "properties": {
+          "active_id": {
+            "enum": [
+              "p1",
+              "p2",
+              "p3"
+            ],
+            "title": "Active Id",
+            "type": "string"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/Preset"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "active_id",
+          "presets"
+        ],
+        "title": "PresetsResponse",
+        "type": "object"
+      },
       "RouteFeature": {
         "description": "Color-coded sensory/efficiency feature badge for the route card.",
         "properties": {
@@ -811,6 +954,100 @@
         "summary": "Get Preferences",
         "tags": [
           "preferences"
+        ]
+      }
+    },
+    "/presets/": {
+      "post": {
+        "description": "Replace the signed-in user's three preset profiles and active selection.",
+        "operationId": "save_presets_presets__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Save Presets",
+        "tags": [
+          "presets"
+        ]
+      }
+    },
+    "/presets/{username}": {
+      "get": {
+        "operationId": "get_presets_presets__username__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "title": "Username",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Presets",
+        "tags": [
+          "presets"
         ]
       }
     },
