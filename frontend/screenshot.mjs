@@ -38,10 +38,19 @@ const next =
 const name = `screenshot-${next}${label ? `-${label}` : ''}.png`;
 const outPath = path.join(dir, name);
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--no-sandbox', '--disable-setuid-sandbox'],
-});
+let browser;
+try {
+  browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+} catch (err) {
+  console.error(
+    'Could not launch Chrome. The browser is not downloaded on install — fetch it once:\n' +
+      '  npx puppeteer browsers install chrome\n'
+  );
+  throw err;
+}
 
 try {
   const page = await browser.newPage();

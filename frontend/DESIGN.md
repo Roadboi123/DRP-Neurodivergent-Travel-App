@@ -13,6 +13,9 @@ is **no Tailwind and no HTML/CSS**. Everything is `StyleSheet` + the theme in
 
 ## Screenshot workflow (REQUIRED for any visual change)
 
+**First-time setup (once per machine):** the Chromium download is skipped on install (so CI /
+Vercel stay green), so fetch a browser once: `npx puppeteer browsers install chrome`.
+
 1. Start the web dev server in the background: `npm run web` (`expo start --web`) → serves on
    **http://localhost:8081**. Wait until it responds before shooting. Always use localhost,
    never a `file://` URL (react-native-web needs the bundler).
