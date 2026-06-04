@@ -1,6 +1,10 @@
 @AGENTS.md
+@DESIGN.md
 
 # Frontend (Expo / React Native)
+
+> **Before any UI work, read `DESIGN.md`** — the design system and the **required**
+> screenshot-verification loop live there.
 
 All source under `src/`, with `@/*` → `./src/*`:
 
