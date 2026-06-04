@@ -13,6 +13,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useHealthService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
+import { SensorySandbox } from '@/components/home/sensory-sandbox';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
@@ -24,6 +25,7 @@ export default function HomeScreen() {
 
   const [backendState, setBackendState] = useState<BackendStatus>('Checking');
   const [profileVisible, setProfileVisible] = useState(false);
+  const [sandboxVisible, setSandboxVisible] = useState(false);
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
@@ -88,11 +90,16 @@ export default function HomeScreen() {
           <StatusBadge status={backendState} />
         </View>
 
-        {/* Quick Actions Grid */}
+        {/* Quick Actions Scroll List */}
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Quick Actions
         </Text>
-        <View style={styles.gridRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollRow}
+        >
           <QuickActionCard
             iconName="navigate"
             iconColor={BRAND.ink}
@@ -100,6 +107,7 @@ export default function HomeScreen() {
             title="Plan Calm Route"
             description="Find sensory friendly paths"
             onPress={() => router.push('/routes')}
+            style={styles.gridCard}
           />
           <QuickActionCard
             iconName="settings-sharp"
@@ -108,8 +116,18 @@ export default function HomeScreen() {
             title="Sensory Sensitivities"
             description="Update comfort thresholds"
             onPress={() => router.push('/preferences')}
+            style={styles.gridCard}
           />
-        </View>
+          <QuickActionCard
+            iconName="color-palette-outline"
+            iconColor={BRAND.ink}
+            iconBackground={accents.pinkSoft}
+            title="Sensory Sandbox"
+            description="Calming visual light play"
+            onPress={() => setSandboxVisible(true)}
+            style={styles.gridCard}
+          />
+        </ScrollView>
 
         {/* Daily Travel Tips */}
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
@@ -120,6 +138,9 @@ export default function HomeScreen() {
 
       {/* Global Profile/Login Modal */}
       <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
+
+      {/* Sensory Sandbox Modal */}
+      <SensorySandbox visible={sandboxVisible} onClose={() => setSandboxVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -187,10 +208,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.2,
   },
-  gridRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+  scrollContainer: {
+    marginHorizontal: -20,
     marginBottom: 24,
+  },
+  scrollRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  gridCard: {
+    width: 175,
+    flex: undefined,
   },
 });
