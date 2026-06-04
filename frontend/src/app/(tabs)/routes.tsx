@@ -25,7 +25,7 @@ import {
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
@@ -182,7 +182,7 @@ export default function RoutesScreen() {
                 key={chip}
                 onPress={() => setFiltersVisible(true)}
                 activeOpacity={0.85}
-                style={[styles.statusChip, { backgroundColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
+                style={styles.statusChip}>
                 <Text style={[styles.statusChipText, { color: palette.textPrimary }]}>{chip}</Text>
               </TouchableOpacity>
             ))}
@@ -198,8 +198,8 @@ export default function RoutesScreen() {
           </View>
         ) : pool.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="map" size={48} color={isDark ? '#333' : '#CCC'} />
-            <Text style={[styles.emptyText, { color: '#888' }]}>
+            <Ionicons name="map" size={48} color={BRAND.ink} />
+            <Text style={[styles.emptyText, { color: palette.textPrimary }]}>
               {routes.length === 0
                 ? 'No routes found. Please check location inputs.'
                 : 'No routes are air conditioned throughout. Try relaxing the A/C filter.'}
@@ -209,7 +209,7 @@ export default function RoutesScreen() {
           <View style={styles.routesList}>
             {groups.map((group) => (
               <View key={`group-${group.changes}`} style={styles.group}>
-                <Text style={[styles.groupHeading, { color: isDark ? '#AAA' : '#555' }]}>
+                <Text style={[styles.groupHeading, { color: palette.textPrimary }]}>
                   {group.changes} {group.changes === 1 ? 'change' : 'changes'}
                 </Text>
                 {group.routes.map((route) => (
@@ -257,40 +257,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingVertical: 11,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    paddingHorizontal: 18,
+    borderRadius: 30,
+    borderWidth: 2,
+    ...hardShadow(4),
   },
   filtersButtonText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 8,
+    marginTop: 10,
   },
   statusChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 20,
+    borderRadius: 30,
+    backgroundColor: BRAND.white,
+    borderWidth: 2,
+    borderColor: BRAND.ink,
+    ...hardShadow(3),
   },
   statusChipText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   routesList: {
-    gap: 16,
-    marginTop: 12,
+    gap: 18,
+    marginTop: 14,
   },
   group: {
-    gap: 12,
+    gap: 14,
   },
   groupHeading: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
+    fontSize: 16,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   loadingSpinner: {
     paddingVertical: 40,

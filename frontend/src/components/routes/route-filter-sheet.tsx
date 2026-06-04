@@ -3,11 +3,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AcFilter, RouteFilters, SortMode } from '@/components/routes/route-filtering';
 
-const ACCENT = '#E91E63';
+const ACCENT = BRAND.pink;
 
 const SORT_OPTIONS: SegmentOption<SortMode>[] = [
   { value: 'preference', label: 'Preference', icon: 'heart-outline' },
@@ -122,6 +122,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
+    borderWidth: 2,
+    borderColor: BRAND.ink,
   },
   handle: {
     alignSelf: 'center',
@@ -138,8 +140,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
     letterSpacing: -0.3,
   },
   sectionHeading: {
@@ -150,8 +154,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionHeadingText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   switchRow: {
     flexDirection: 'row',
@@ -176,14 +183,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   doneButton: {
-    marginTop: 24,
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginTop: 26,
+    paddingVertical: 15,
+    borderRadius: 30,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: BRAND.ink,
+    ...hardShadow(5),
   },
   doneButtonText: {
-    color: '#FFF',
+    color: BRAND.white,
+    fontFamily: Fonts?.display,
     fontSize: 15,
     fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

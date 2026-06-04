@@ -45,9 +45,11 @@ export const BRAND = {
 
 /** Linear-gradient presets (consumed by expo-linear-gradient). */
 export const GRADIENTS = {
-  // Static page background — pink → yellow at ~121deg (start/end approximate it).
+  // Static page background — pink bleeding from the top-left corner into a
+  // dominant yellow field (mirrors Wero's `121deg, #ff158a -20%, #fff48d 66%`).
   background: {
     colors: [BRAND.pink, BRAND.yellow] as [string, string],
+    locations: [0, 0.45] as [number, number],
     start: { x: 0, y: 0 },
     end: { x: 1, y: 1 },
   },

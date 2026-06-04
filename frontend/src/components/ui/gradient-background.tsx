@@ -12,6 +12,7 @@ export function GradientBackground() {
   return (
     <LinearGradient
       colors={GRADIENTS.background.colors}
+      locations={GRADIENTS.background.locations}
       start={GRADIENTS.background.start}
       end={GRADIENTS.background.end}
       style={StyleSheet.absoluteFill}

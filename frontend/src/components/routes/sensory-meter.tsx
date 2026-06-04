@@ -1,15 +1,15 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SensoryLevel } from '@/types/route';
 
-// 1 = Low (Green), 2 = Moderate (Amber), 3 = High (Orange), 4 = Extreme (Red).
+// Wero ramp: 1 = Low (green), 2 = Moderate (yellow), 3 = High (orange), 4 = Extreme (pink).
 const LEVEL_COLORS: Record<SensoryLevel, string> = {
-  1: '#4CAF50',
-  2: '#FFC107',
-  3: '#FF9800',
-  4: '#F44336',
+  1: BRAND.green,
+  2: BRAND.yellow,
+  3: BRAND.orange,
+  4: BRAND.pink,
 };
 
 const THRESHOLDS: SensoryLevel[] = [1, 2, 3, 4];
@@ -17,11 +17,11 @@ const THRESHOLDS: SensoryLevel[] = [1, 2, 3, 4];
 export function SensoryMeter({ level, label }: { level: SensoryLevel; label: string }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const emptyColor = isDark ? '#333' : '#E5E7EB';
+  const emptyColor = BRAND.white;
 
   return (
     <View style={styles.meterContainer}>
-      <Text style={[styles.meterLabel, { color: palette.textSecondary }]}>{label}</Text>
+      <Text style={[styles.meterLabel, { color: palette.textPrimary }]}>{label}</Text>
       <View style={styles.meterBlocks}>
         {THRESHOLDS.map((threshold) => (
           <View
@@ -43,9 +43,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   meterLabel: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+    marginBottom: 5,
   },
   meterBlocks: {
     flexDirection: 'row',
@@ -53,7 +56,9 @@ const styles = StyleSheet.create({
   },
   meterBlock: {
     width: 12,
-    height: 6,
+    height: 8,
     borderRadius: 2,
+    borderWidth: 1,
+    borderColor: BRAND.ink,
   },
 });
