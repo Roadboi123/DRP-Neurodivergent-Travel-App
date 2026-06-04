@@ -46,7 +46,7 @@ export function QuickActionCard({
 
 const styles = StyleSheet.create({
   gridCard: {
-    flex: 1,
+    flex: 0.5,
     borderRadius: 14,
     borderWidth: 2,
     padding: 16,

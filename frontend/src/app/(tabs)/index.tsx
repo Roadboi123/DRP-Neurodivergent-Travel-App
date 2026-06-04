@@ -88,7 +88,7 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.greetingText, { color: palette.textSecondary }]}>
-              {isLoggedIn ? `Hello, ${username} 🥀` : 'Hello, Traveler 🥀'}
+              {isLoggedIn ? `Hello, ${username}!` : 'Hello!'}
             </Text>
             <Text style={[styles.title, { color: palette.textPrimary }]}>My Planner</Text>
           </View>
@@ -113,10 +113,14 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Backend status (sits where the welcome banner used to) */}
+        {/* Backend status (sits where the welcome banner used to)
         <View style={styles.statusRow}>
           <StatusBadge status={backendState} />
-        </View>
+        </View> */}
+        
+          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+            Plan a route
+          </Text>
 
         {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
             active profile's sensory levels. */}
@@ -149,6 +153,13 @@ export default function HomeScreen() {
             onPress={() => router.push('/routes')}
             style={styles.gridCard}
           />
+        </View>
+          
+          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+            Set preferences
+          </Text>
+        <View style={styles.gridRow}>
+          
           <QuickActionCard
             iconName="settings-sharp"
             iconColor={BRAND.ink}
@@ -160,7 +171,19 @@ export default function HomeScreen() {
           />
         </ScrollView>
 
-        {/* Daily Travel Tips */}
+        {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
+            active profile's sensory levels. */}
+        {isLoggedIn && (
+          <View style={styles.presetSection}>
+            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+              Select preset profile
+            </Text>
+            <PresetSwitcher />
+            <PresetGlimpse />
+          </View>
+        )}
+
+        {/* Daily Travel Tips
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Daily Travel Tips
         </Text>
