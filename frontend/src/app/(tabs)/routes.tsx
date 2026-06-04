@@ -30,6 +30,8 @@ import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
+import { useAuth } from '@/context/auth-context';
+import { ProfileModal } from '@/components/profile/profile-modal';
 
 // How many routes to show in the ungrouped (Google-Maps-style) list.
 const MAX_RESULTS = 5;
@@ -57,12 +59,13 @@ export default function RoutesScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const routesService = useRoutesService();
+  const { username, isLoggedIn } = useAuth();
 
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
   const [endLoc, setEndLoc] = useState('Imperial College London');
-  const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
 
   // Filter states
   const [filters, setFilters] = useState<RouteFilters>(DEFAULT_FILTERS);
@@ -140,17 +143,36 @@ export default function RoutesScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Navigation Icons */}
-      <HeaderNav />
+      <HeaderNav onProfilePress={() => setProfileVisible(true)} />
 
       <RouteSearchInputs
         startLoc={startLoc}
         endLoc={endLoc}
-        username={username}
         loading={loading}
         onStartChange={setStartLoc}
         onEndChange={setEndLoc}
-        onUsernameChange={setUsername}
       />
+
+      {/* Personalization warning bar */}
+      {!isLoggedIn && (
+        <TouchableOpacity
+          onPress={() => setProfileVisible(true)}
+          style={[
+            styles.loginWarningBanner,
+            {
+              backgroundColor: isDark ? '#2B2620' : '#FFF9F3',
+              borderColor: isDark ? '#5c4320' : '#FFE0B2',
+            }
+          ]}
+          activeOpacity={0.8}
+          accessibilityLabel="Click to log in and personalize routes"
+        >
+          <Ionicons name="warning" size={16} color="#FF9800" />
+          <Text style={[styles.loginWarningText, { color: isDark ? '#FFB74D' : '#E65100' }]}>
+            Viewing generic routes. <Text style={{ textDecorationLine: 'underline', fontWeight: 'bold' }}>Log in</Text> to personalize.
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
@@ -238,12 +260,32 @@ export default function RoutesScreen() {
         onChange={setFilters}
         onClose={() => setFiltersVisible(false)}
       />
+
+      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: {
+    flex: 1,
+  },
+  loginWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    gap: 10,
+    ...hardShadow(3),
+  },
+  loginWarningText: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: Fonts?.sans,
     flex: 1,
   },
   scrollContent: {

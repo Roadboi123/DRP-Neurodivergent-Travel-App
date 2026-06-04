@@ -5,11 +5,17 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { useAuth } from '@/context/auth-context';
 
-/** Top bar: Back + Home circular buttons on the left, theme toggle on the right. */
-export function HeaderNav() {
+export interface HeaderNavProps {
+  onProfilePress?: () => void;
+}
+
+/** Top bar: Back + Home circular buttons on the left, theme toggle + profile on the right. */
+export function HeaderNav({ onProfilePress }: HeaderNavProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const { isLoggedIn } = useAuth();
   const btnStyle = [
     styles.iconBtn,
     { backgroundColor: palette.surface, borderColor: palette.border },
@@ -32,7 +38,22 @@ export function HeaderNav() {
           <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
         </TouchableOpacity>
       </View>
-      <ThemeToggle />
+      <View style={styles.right}>
+        <ThemeToggle />
+        {onProfilePress && (
+          <TouchableOpacity
+            onPress={onProfilePress}
+            accessibilityLabel="Open profile modal"
+            style={btnStyle}>
+            <Ionicons
+              name={isLoggedIn ? "person" : "person-outline"}
+              size={18}
+              color={isLoggedIn ? "#E91E63" : palette.textPrimary}
+            />
+            {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: palette.surface }]} />}
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -50,6 +71,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  right: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   iconBtn: {
     width: 42,
     height: 42,
@@ -57,5 +83,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
+    position: 'relative',
+  },
+  profileActiveDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#2E7D32',
+    borderWidth: 1.5,
   },
 });

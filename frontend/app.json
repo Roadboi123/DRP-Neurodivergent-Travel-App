@@ -24,7 +24,16 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "pwa": {
+        "manifest": {
+          "name": "Roadboi",
+          "short_name": "Roadboi",
+          "display": "standalone",
+          "background_color": "#FAF9F6",
+          "theme_color": "#E91E63"
+        }
+      }
     },
     "plugins": [
       "expo-router",

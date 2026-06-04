@@ -16,6 +16,7 @@ import { BRAND } from '@/constants/theme';
 import { ThemeProvider } from '@/contexts/theme-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ServicesProvider } from '@/services/services-context';
+import { AuthProvider } from '@/context/auth-context';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -68,9 +69,11 @@ export default function RootLayout() {
 
   return (
     <ServicesProvider>
-      <ThemeProvider>
-        <ThemedApp />
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <ThemedApp />
+        </ThemeProvider>
+      </AuthProvider>
     </ServicesProvider>
   );
 }

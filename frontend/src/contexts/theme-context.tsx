@@ -36,7 +36,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     AsyncStorage.getItem(STORAGE_KEY)
-      .then((saved) => {
+      .then((saved: string | null) => {
         if (active && (saved === 'light' || saved === 'dark')) {
           setSchemeState(saved);
         }

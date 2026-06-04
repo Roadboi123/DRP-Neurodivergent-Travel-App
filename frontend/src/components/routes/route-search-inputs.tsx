@@ -7,21 +7,17 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 interface RouteSearchInputsProps {
   startLoc: string;
   endLoc: string;
-  username: string;
   loading: boolean;
   onStartChange: (text: string) => void;
   onEndChange: (text: string) => void;
-  onUsernameChange: (text: string) => void;
 }
 
 export function RouteSearchInputs({
   startLoc,
   endLoc,
-  username,
   loading,
   onStartChange,
   onEndChange,
-  onUsernameChange,
 }: RouteSearchInputsProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -76,38 +72,7 @@ export function RouteSearchInputs({
         </View>
       </View>
 
-      {/* Username Sensitivities Card */}
-      <View
-        style={[
-          styles.usernameCard,
-          { backgroundColor: palette.surface, borderColor: palette.borderStrong, marginTop: 10 },
-        ]}>
-        <View style={styles.inputRow}>
-          <View style={styles.inputIconContainer}>
-            <Ionicons name="person-circle-outline" size={22} color="#1D9E75" />
-          </View>
-          <View style={styles.inputTextContainer}>
-            <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>Apply Username Sensitivities</Text>
-            <TextInput
-              style={[styles.textInput, { color: palette.textPrimary }]}
-              value={username}
-              onChangeText={onUsernameChange}
-              placeholder="Enter username (e.g. calm_traveler)..."
-              placeholderTextColor={placeholderColor}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-          {username.trim().length > 0 && !loading && (
-            <Ionicons
-              name="checkmark-circle"
-              size={20}
-              color="#1D9E75"
-              style={{ marginLeft: 6 }}
-            />
-          )}
-        </View>
-      </View>
+
     </View>
   );
 }

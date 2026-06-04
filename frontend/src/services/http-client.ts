@@ -5,6 +5,8 @@
  * `fetch`, a base URL, or a host string directly.
  */
 
+import { authStore } from '@/services/auth-store';
+
 /** Thrown by {@link HttpClient.get}/{@link HttpClient.post} when a response is not `ok`. */
 export class HttpError extends Error {
   constructor(
@@ -38,6 +40,15 @@ export interface HttpClientOptions {
 export function createHttpClient({ baseUrl }: HttpClientOptions): HttpClient {
   const url = (path: string) => `${baseUrl}${path}`;
 
+  const getHeaders = (extraHeaders: Record<string, string> = {}): HeadersInit => {
+    const headers: Record<string, string> = { ...extraHeaders };
+    const token = authStore.getToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  };
+
   async function parse<T>(res: Response, path: string): Promise<T> {
     if (!res.ok) {
       throw new HttpError(res.status, path);
@@ -47,20 +58,25 @@ export function createHttpClient({ baseUrl }: HttpClientOptions): HttpClient {
 
   return {
     async get<T>(path: string): Promise<T> {
-      return parse<T>(await fetch(url(path)), path);
+      const res = await fetch(url(path), {
+        headers: getHeaders(),
+      });
+      return parse<T>(res, path);
     },
 
     async post<T>(path: string, body: unknown): Promise<T> {
       const res = await fetch(url(path), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(body),
       });
       return parse<T>(res, path);
     },
 
     getResponse(path: string): Promise<Response> {
-      return fetch(url(path));
+      return fetch(url(path), {
+        headers: getHeaders(),
+      });
     },
   };
 }
