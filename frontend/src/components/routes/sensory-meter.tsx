@@ -12,27 +12,23 @@ const LEVEL_COLORS: Record<SensoryLevel, string> = {
   4: BRAND.pink,
 };
 
-const THRESHOLDS: SensoryLevel[] = [1, 2, 3, 4];
-
 export function SensoryMeter({ level, label }: { level: SensoryLevel; label: string }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const emptyColor = BRAND.white;
 
+  // Collapse the old four-block ramp into a single block painted the stimulus's
+  // own level colour — the "max" it reaches — so the row stays legible at phone width.
   return (
     <View style={styles.meterContainer}>
-      <Text style={[styles.meterLabel, { color: palette.textPrimary }]}>{label}</Text>
-      <View style={styles.meterBlocks}>
-        {THRESHOLDS.map((threshold) => (
-          <View
-            key={threshold}
-            style={[
-              styles.meterBlock,
-              { backgroundColor: level >= threshold ? LEVEL_COLORS[threshold] : emptyColor },
-            ]}
-          />
-        ))}
-      </View>
+      <Text style={[styles.meterLabel, { color: palette.textPrimary }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.meterBlock,
+          { backgroundColor: LEVEL_COLORS[level], borderColor: palette.border },
+        ]}
+      />
     </View>
   );
 }
@@ -43,22 +39,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   meterLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: Fonts?.display,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: 0,
     marginBottom: 5,
   },
-  meterBlocks: {
-    flexDirection: 'row',
-    gap: 2,
-  },
   meterBlock: {
-    width: 12,
-    height: 8,
-    borderRadius: 2,
+    alignSelf: 'stretch',
+    marginHorizontal: 2,
+    height: 10,
+    borderRadius: 3,
     borderWidth: 1,
-    borderColor: BRAND.ink,
   },
 });

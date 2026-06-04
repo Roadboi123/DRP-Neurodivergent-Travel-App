@@ -320,11 +320,10 @@ const styles = StyleSheet.create({
   },
   sensoryRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     borderTopWidth: 1,
     paddingTop: 10,
-    rowGap: 10,
-    columnGap: 4,
+    columnGap: 3,
     justifyContent: 'space-between',
     marginBottom: 10,
   },
