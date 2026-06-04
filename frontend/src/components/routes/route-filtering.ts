@@ -8,22 +8,22 @@ import type { RouteOption } from '@/types/route';
  * stays thin and these can be unit-tested.
  */
 
-// Which "best by" summary cards to pin at the top; both default on. At least one
-// must stay on (the screen guards against turning the last one off).
-export type BestByFilter = { preference: boolean; speed: boolean };
+// How the route list is ranked. A single choice, surfaced as the on-screen
+// Preference|Speed tab (so it stays a single sort even when grouping is on).
+export type SortMode = BestByMode;
 
 // A/C preference. 'any' = don't care, 'preferred' = float A/C routes first,
 // 'every' = only keep routes that are air conditioned throughout.
 export type AcFilter = 'any' | 'preferred' | 'every';
 
 export interface RouteFilters {
-  bestBy: BestByFilter;
+  sort: SortMode;
   ac: AcFilter;
   groupByChanges: boolean;
 }
 
 export const DEFAULT_FILTERS: RouteFilters = {
-  bestBy: { preference: true, speed: true },
+  sort: 'preference',
   ac: 'any',
   groupByChanges: false,
 };
@@ -88,12 +88,12 @@ export function compareByMode(a: RouteOption, b: RouteOption, mode: BestByMode):
   return (b.match_percentage ?? 0) - (a.match_percentage ?? 0);
 }
 
-/** The single best route for a mode, or undefined if the pool is empty. */
-export function pickBest(routes: RouteOption[], mode: BestByMode): RouteOption | undefined {
-  if (routes.length === 0) {
-    return undefined;
-  }
-  return [...routes].sort((a, b) => compareByMode(a, b, mode))[0];
+/**
+ * The top `limit` routes for a mode, best first. Returns fewer when the pool is
+ * smaller. Used for the Google-Maps-style results list.
+ */
+export function rankRoutes(routes: RouteOption[], mode: BestByMode, limit: number): RouteOption[] {
+  return [...routes].sort((a, b) => compareByMode(a, b, mode)).slice(0, limit);
 }
 
 export interface ChangeGroup {

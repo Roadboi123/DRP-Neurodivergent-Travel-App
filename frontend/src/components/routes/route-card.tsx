@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { Fonts, getPalette } from '@/constants/theme';
@@ -55,7 +55,7 @@ function matchBadgeColors(matchPercentage: number | null | undefined, isDark: bo
   };
 }
 
-export function RouteCard({
+function RouteCardBase({
   route,
   customTitle,
   hideTitle,
@@ -92,11 +92,11 @@ export function RouteCard({
           styles.routeCard,
           { backgroundColor: palette.surface, borderColor: palette.border },
         ]}>
-        {/* Header: Journey Timeline + Match Rating Pill + Travel Stats */}
-        <View style={styles.cardHeader}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }}>
+        {/* Left column: journey timeline + sensory dashboard + description */}
+        <View style={styles.leftContent}>
+          <View style={styles.timelineWrapper}>
             {route.legs && route.legs.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineScroll} style={{ flex: 1 }}>
+              <View style={styles.timelineRow}>
                 {route.legs.map((leg, lIdx) => {
                   const mode = leg.mode.toLowerCase();
                   const line = leg.line ? leg.line.toLowerCase() : '';
@@ -194,31 +194,18 @@ export function RouteCard({
                   );
                 })}
 
-                {/* Match Rating Pill inside ScrollView at the end */}
+                {/* Match Rating Pill at the end of the timeline */}
                 <View style={[styles.matchBadge, { backgroundColor: matchColors.bg }]}>
                   <Text style={[styles.matchBadgeText, { color: matchColors.text }]}>
                     {route.match_percentage ?? 100}% Match
                   </Text>
                 </View>
-              </ScrollView>
+              </View>
             )}
           </View>
 
-          {/* Travel Stats: Time + Cost */}
-          <View style={[styles.cardStats, { marginLeft: 8 }]}>
-            <Text style={[styles.cardTime, { color: palette.textPrimary }]}>
-              {route.duration} min
-            </Text>
-            <Text style={[styles.cardCost, { color: palette.textSecondary }]}>
-              £{route.price.toFixed(2)}
-            </Text>
-          </View>
-        </View>
-
-
-
-        {/* Sensory Dashboard - Wrapping Grid layout for 5 distinct meters */}
-        <View style={[styles.sensoryRow, { borderTopColor: palette.divider }]}>
+          {/* Sensory Dashboard - Wrapping Grid layout for 5 distinct meters */}
+          <View style={[styles.sensoryRow, { borderTopColor: palette.divider }]}>
           <SensoryMeter level={route.noise} label="Sound" />
           <SensoryMeter level={route.crowds} label="Crowds" />
           <SensoryMeter level={route.heat} label="Heat" />
@@ -244,12 +231,27 @@ export function RouteCard({
             {route.sensory_description}
           </Text>
         )}
+        </View>
 
-
+        {/* Right: big duration over tiny cost, full-height boxed widget */}
+        <View style={[styles.statsWidget, { backgroundColor: isDark ? '#2A2E35' : '#F4F4F2' }]}>
+          <Text style={[styles.statsTime, { color: palette.textPrimary }]}>{route.duration}</Text>
+          <Text style={[styles.statsUnit, { color: palette.textSecondary }]}>min</Text>
+          <Text style={[styles.statsCost, { color: palette.textSecondary }]}>
+            £{route.price.toFixed(2)}
+          </Text>
+        </View>
       </View>
     </View>
   );
 }
+
+// Memoized so re-ranking the list (e.g. Speed↔Preference) reorders already-painted
+// cards instead of re-rendering each one (route object refs are stable across a
+// re-sort). The legs timeline is a plain wrapping row rather than a horizontal
+// ScrollView — that scroll container was repainting a blank white frame on
+// react-native-web whenever the list updated.
+export const RouteCard = React.memo(RouteCardBase);
 
 const styles = StyleSheet.create({
   routeGroupWrapper: {
@@ -263,6 +265,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   routeCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     borderRadius: 16,
     borderWidth: 1.5,
     padding: 14,
@@ -272,11 +276,15 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  cardHeader: {
+  leftContent: {
+    flex: 1,
+    marginRight: 12,
+    gap: 10,
+  },
+  timelineWrapper: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    overflow: 'hidden',
   },
   transitBadgeRow: {
     flexDirection: 'row',
@@ -297,16 +305,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-  cardStats: {
-    alignItems: 'flex-end',
+  statsWidget: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 64,
+    paddingHorizontal: 12,
+    borderRadius: 14,
   },
-  cardTime: {
-    fontSize: 15,
+  statsTime: {
+    fontSize: 22,
     fontWeight: '800',
+    lineHeight: 24,
   },
-  cardCost: {
+  statsUnit: {
     fontSize: 11,
-    marginTop: 2,
+    fontWeight: '600',
+    marginTop: -1,
+  },
+  statsCost: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 6,
   },
   sensoryRow: {
     flexDirection: 'row',
@@ -348,8 +368,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  timelineScroll: {
+  timelineRow: {
+    flex: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
   },

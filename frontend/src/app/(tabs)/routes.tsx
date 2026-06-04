@@ -10,44 +10,41 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 
+import { HeaderNav } from '@/components/ui/header-nav';
 import { RouteCard } from '@/components/routes/route-card';
 import { RouteFilterSheet } from '@/components/routes/route-filter-sheet';
 import {
   applyAcFilter,
   DEFAULT_FILTERS,
   groupByChangeCount,
-  pickBest,
-  type BestByMode,
+  rankRoutes,
   type RouteFilters,
+  type SortMode,
 } from '@/components/routes/route-filtering';
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
+import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
 
-/** A pinned summary card: a route plus the heading it's shown under. */
-interface PinnedCard {
-  route: RouteOption;
-  title: string;
-}
+// How many routes to show in the ungrouped (Google-Maps-style) list.
+const MAX_RESULTS = 5;
 
-/** Active-filter status chips that mirror the filter sheet. */
+const SORT_TABS: SegmentOption<SortMode>[] = [
+  { value: 'preference', label: 'Preference', icon: 'heart-outline' },
+  { value: 'speed', label: 'Speed', icon: 'flash-outline' },
+];
+
+/** Active-filter chips for state NOT already shown by the on-screen sort tab. */
 function statusChips(filters: RouteFilters): string[] {
   const chips: string[] = [];
-  if (filters.bestBy.preference) {
-    chips.push('Preference');
-  }
-  if (filters.bestBy.speed) {
-    chips.push('Speed');
-  }
   if (filters.ac === 'preferred') {
     chips.push('A/C preferred');
   } else if (filters.ac === 'every') {
-    chips.push('A/C every point');
+    chips.push('A/C throughout');
   }
   if (filters.groupByChanges) {
     chips.push('Grouped by changes');
@@ -115,32 +112,19 @@ export default function RoutesScreen() {
     };
   }, [startLoc, endLoc, username, routesService]);
 
-  // A/C filter applies to the whole pool before anything else.
+  // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
 
-  // The two pinned "best by" cards, de-duplicated if both resolve to one route.
-  const pinned = useMemo<PinnedCard[]>(() => {
-    const pref = filters.bestBy.preference ? pickBest(pool, 'preference') : undefined;
-    const speed = filters.bestBy.speed ? pickBest(pool, 'speed') : undefined;
+  // Ungrouped: top results ranked by the active sort tab, best first.
+  const ranked = useMemo(
+    () => rankRoutes(pool, filters.sort, MAX_RESULTS),
+    [pool, filters.sort]
+  );
 
-    if (pref && speed && pref.id === speed.id) {
-      return [{ route: pref, title: 'Best by Preference & Speed' }];
-    }
-    const cards: PinnedCard[] = [];
-    if (pref) {
-      cards.push({ route: pref, title: 'Best by Preference' });
-    }
-    if (speed) {
-      cards.push({ route: speed, title: 'Best by Speed' });
-    }
-    return cards;
-  }, [pool, filters.bestBy]);
-
-  // When grouping is on, order each group by the dominant best-by mode.
-  const groupMode: BestByMode = filters.bestBy.preference ? 'preference' : 'speed';
+  // Grouped: every route under its change-count heading, ranked by the sort.
   const groups = useMemo(
-    () => (filters.groupByChanges ? groupByChangeCount(pool, groupMode) : []),
-    [pool, filters.groupByChanges, groupMode]
+    () => (filters.groupByChanges ? groupByChangeCount(pool, filters.sort) : []),
+    [pool, filters.groupByChanges, filters.sort]
   );
 
   if (!mounted) {
@@ -154,14 +138,7 @@ export default function RoutesScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Navigation Icons */}
-      <View style={styles.headerNavRow}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.navIconBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
-          <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.replace('/')} style={[styles.navIconBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
-          <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      <HeaderNav />
 
       <RouteSearchInputs
         startLoc={startLoc}
@@ -175,52 +152,42 @@ export default function RoutesScreen() {
 
       <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* Warnings Banner + Options/Edit button */}
-        <View style={styles.warningsRow}>
-          <View style={{ flex: 1 }}>
-            <WarningsPanel />
-          </View>
-          <TouchableOpacity
-            onPress={() => router.push('/preferences')}
-            activeOpacity={0.8}
-            style={[
-              styles.editButton,
-              {
-                backgroundColor: isDark ? '#2E3543' : '#FFF5F0',
-                borderColor: '#FF7F50',
-              }
-            ]}
-          >
-            <Ionicons name="construct-outline" size={16} color="#FF7F50" />
-            <Text style={[styles.editButtonText, { color: isDark ? '#FF9E79' : '#D04E1F' }]}>Edit</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Warnings Banner */}
+        <WarningsPanel />
 
-        {/* Filters button + active-filter status chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersRow}
-          style={{ backgroundColor: palette.background }}>
+        {/* Sort tab (Preference | Speed) + Filters button */}
+        <View style={styles.controlsRow}>
+          <View style={{ flex: 1 }}>
+            <SegmentedControl
+              variant="tab"
+              options={SORT_TABS}
+              value={filters.sort}
+              onChange={(sort) => setFilters((f) => ({ ...f, sort }))}
+            />
+          </View>
           <TouchableOpacity
             onPress={() => setFiltersVisible(true)}
             activeOpacity={0.85}
             style={[styles.filtersButton, { borderColor: palette.borderStrong, backgroundColor: palette.surface }]}>
             <Ionicons name="options-outline" size={16} color={palette.textPrimary} />
             <Text style={[styles.filtersButtonText, { color: palette.textPrimary }]}>Filters</Text>
-            <Ionicons name="chevron-down" size={14} color={palette.textSecondary} />
           </TouchableOpacity>
+        </View>
 
-          {chips.map((chip) => (
-            <TouchableOpacity
-              key={chip}
-              onPress={() => setFiltersVisible(true)}
-              activeOpacity={0.85}
-              style={[styles.statusChip, { backgroundColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
-              <Text style={[styles.statusChipText, { color: palette.textPrimary }]}>{chip}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* Active non-default filter chips (tap to open the sheet) */}
+        {chips.length > 0 && (
+          <View style={styles.chipRow}>
+            {chips.map((chip) => (
+              <TouchableOpacity
+                key={chip}
+                onPress={() => setFiltersVisible(true)}
+                activeOpacity={0.85}
+                style={[styles.statusChip, { backgroundColor: isDark ? '#2E3543' : '#EAEAEA' }]}>
+                <Text style={[styles.statusChipText, { color: palette.textPrimary }]}>{chip}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {loading ? (
           <View style={styles.loadingSpinner}>
@@ -238,14 +205,8 @@ export default function RoutesScreen() {
                 : 'No routes are air conditioned throughout. Try relaxing the A/C filter.'}
             </Text>
           </View>
-        ) : (
+        ) : filters.groupByChanges ? (
           <View style={styles.routesList}>
-            {/* Pinned "best by" summary cards */}
-            {pinned.map(({ route, title }) => (
-              <RouteCard key={`pinned-${route.id}`} route={route} customTitle={title} />
-            ))}
-
-            {/* Full list grouped by number of changes */}
             {groups.map((group) => (
               <View key={`group-${group.changes}`} style={styles.group}>
                 <Text style={[styles.groupHeading, { color: isDark ? '#AAA' : '#555' }]}>
@@ -255,6 +216,12 @@ export default function RoutesScreen() {
                   <RouteCard key={`g${group.changes}-${route.id}`} route={route} hideTitle />
                 ))}
               </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.routesList}>
+            {ranked.map((route) => (
+              <RouteCard key={route.id} route={route} hideTitle />
             ))}
           </View>
         )}
@@ -274,63 +241,35 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
   },
-  headerNavRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  navIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
-  warningsRow: {
+  controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginVertical: 4,
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    gap: 5,
-    height: 52,
-  },
-  editButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  filtersRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 4,
   },
   filtersButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     borderWidth: 1.5,
   },
   filtersButtonText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
   },
   statusChip: {
     paddingVertical: 8,
@@ -343,7 +282,7 @@ const styles = StyleSheet.create({
   },
   routesList: {
     gap: 16,
-    marginTop: 10,
+    marginTop: 12,
   },
   group: {
     gap: 12,
