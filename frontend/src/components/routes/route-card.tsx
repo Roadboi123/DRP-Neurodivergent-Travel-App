@@ -220,24 +220,7 @@ function RouteCardBase({
           <SensoryMeter level={route.smell} label="Smell" />
         </View>
 
-        {/* Sensory Compatibility Score Explanation */}
-        {route.sensory_description && !route.sensory_description.includes('Enter a username') && (
-          <Text
-            style={[
-              styles.sensoryExplanationText,
-              {
-                color: route.sensory_description.includes('⚠️')
-                  ? isDark
-                    ? '#FF8A65'
-                    : '#D84315'
-                  : isDark
-                    ? '#81C784'
-                    : '#2E7D32',
-              },
-            ]}>
-            {route.sensory_description}
-          </Text>
-        )}
+
         </View>
 
         {/* Right: big duration over tiny cost, full-height boxed widget */}
