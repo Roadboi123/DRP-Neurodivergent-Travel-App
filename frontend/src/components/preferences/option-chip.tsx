@@ -1,6 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 import { getOptionColors } from '@/components/preferences/options';
+import { BRAND, Fonts, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { SensitivityLevel } from '@/types/preference';
 
@@ -22,22 +23,12 @@ export function OptionChip({
       activeOpacity={0.75}
       style={[
         styles.chip,
-        selected
-          ? {
-              backgroundColor: colors.bg,
-              borderColor: colors.border,
-            }
-          : (isDark ? styles.chipUnselectedDark : styles.chipUnselected),
+        selected ? { backgroundColor: colors.bg } : styles.chipUnselected,
       ]}>
       <Text
         style={[
           styles.chipLabel,
-          selected
-            ? {
-                color: colors.text,
-                fontWeight: '700',
-              }
-            : (isDark ? styles.chipLabelUnselectedDark : styles.chipLabelUnselected),
+          selected ? { color: colors.text } : styles.chipLabelUnselected,
         ]}
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -53,34 +44,25 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 11,
     paddingHorizontal: 2,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: BRAND.ink,
+    ...hardShadow(3),
   },
   chipUnselected: {
-    backgroundColor: '#F7F7F5',
-    borderColor: '#E8E8E6',
-  },
-  chipUnselectedDark: {
-    backgroundColor: '#1C212A',
-    borderColor: '#2A313E',
-  },
-  chipX: {
-    fontSize: 10,
-    color: '#AAAAAA',
-    fontWeight: '700',
+    backgroundColor: BRAND.white,
   },
   chipLabel: {
-    fontSize: 12,
-    color: '#888888',
-    fontWeight: '600',
+    fontSize: 11,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
     textAlign: 'center',
   },
   chipLabelUnselected: {
-    color: '#999999',
-  },
-  chipLabelUnselectedDark: {
-    color: '#555555',
+    color: BRAND.ink,
   },
 });

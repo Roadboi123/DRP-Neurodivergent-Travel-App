@@ -1,3 +1,4 @@
+import { BRAND } from '@/constants/theme';
 import type { SensitivityLevel } from '@/types/preference';
 
 // Severity options, ordered least → most affected. The chip colour ramps from
@@ -11,27 +12,12 @@ export const OPTIONS: { value: SensitivityLevel; label: string }[] = [
 
 type ChipColors = { bg: string; text: string; border: string };
 
+// Wero ramp: green → yellow → orange → pink, all outlined in ink.
 const LIGHT_COLORS: Record<SensitivityLevel, ChipColors> = {
-  little: {
-    bg: '#E3F2E6',
-    text: '#1E7A3D',
-    border: '#1E7A3D',
-  },
-  medium: {
-    bg: '#FFF6DD',
-    text: '#9A7B12',
-    border: '#E8C24A',
-  },
-  high: {
-    bg: '#FFE9D6',
-    text: '#C2620F',
-    border: '#F0A35E',
-  },
-  veryhigh: {
-    bg: '#FCE3E1',
-    text: '#C0392B',
-    border: '#E07A6E',
-  },
+  little: { bg: BRAND.green, text: BRAND.ink, border: BRAND.ink },
+  medium: { bg: BRAND.yellow, text: BRAND.ink, border: BRAND.ink },
+  high: { bg: BRAND.orange, text: BRAND.ink, border: BRAND.ink },
+  veryhigh: { bg: BRAND.pink, text: BRAND.white, border: BRAND.ink },
 };
 
 const DARK_COLORS: Record<SensitivityLevel, ChipColors> = {

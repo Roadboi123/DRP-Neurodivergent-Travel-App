@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface QuickActionCardProps {
@@ -41,27 +41,28 @@ export function QuickActionCard({
 const styles = StyleSheet.create({
   gridCard: {
     flex: 1,
-    borderRadius: 18,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 2,
     padding: 16,
     alignItems: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 2,
+    ...hardShadow(6),
   },
   iconContainer: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
+    borderWidth: 2,
+    borderColor: BRAND.ink,
   },
   cardTitleText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
     marginBottom: 4,
   },
   cardDescText: {

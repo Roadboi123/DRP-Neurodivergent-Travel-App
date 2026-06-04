@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { OptionChip } from '@/components/preferences/option-chip';
 import { OPTIONS } from '@/components/preferences/options';
-import { getPalette } from '@/constants/theme';
+import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
@@ -51,8 +51,10 @@ const styles = StyleSheet.create({
   },
   rowText: {
     fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: -0.2,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   chipRow: {
     flexDirection: 'row',

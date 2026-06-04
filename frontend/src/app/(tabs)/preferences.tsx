@@ -14,7 +14,7 @@ import {
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
 import { HeaderNav } from '@/components/ui/header-nav';
-import { getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePreferencesService } from '@/services/services-context';
 import type { Preference, SensitivityLevel } from '@/types/preference';
@@ -173,7 +173,7 @@ export default function UserPreferencesScreen() {
         </Text>
 
         {/* Card */}
-        <View style={[styles.card, { backgroundColor: palette.surface }]}>
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: BRAND.ink }]}>
           {preferences.map((pref, i) => (
             <View key={pref.id}>
               <PreferenceRow preference={pref} onSelect={handleSelect} />
@@ -214,15 +214,19 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    fontSize: 34,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: -1,
   },
 
   sectionTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
     marginBottom: 12,
   },
 
@@ -232,17 +236,22 @@ const styles = StyleSheet.create({
   },
 
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
     marginBottom: 8,
   },
 
   input: {
-    borderWidth: 1,
+    borderWidth: 2,
+    borderColor: BRAND.ink,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 15,
+    ...hardShadow(3),
   },
 
   statusText: {
@@ -262,19 +271,11 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    borderRadius: 20,
+    borderRadius: 14,
+    borderWidth: 2,
     paddingVertical: 8,
     paddingHorizontal: 16,
-
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    ...hardShadow(6),
   },
 
   rowDivider: {

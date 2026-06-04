@@ -6,7 +6,7 @@ import { DailyTips } from '@/components/home/daily-tips';
 import { QuickActionCard } from '@/components/home/quick-action-card';
 import { WelcomeBanner } from '@/components/home/welcome-banner';
 import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
-import { Fonts, getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useHealthService } from '@/services/services-context';
 
@@ -52,9 +52,7 @@ export default function HomeScreen() {
             <Text style={[styles.greetingText, { color: palette.textSecondary }]}>
               Hello, Traveler 🥀
             </Text>
-            <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
-              My Planner
-            </Text>
+            <Text style={[styles.title, { color: palette.textPrimary }]}>My Planner</Text>
           </View>
           <StatusBadge status={backendState} />
         </View>
@@ -63,22 +61,22 @@ export default function HomeScreen() {
         <WelcomeBanner />
 
         {/* Quick Actions Grid */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Quick Actions
         </Text>
         <View style={styles.gridRow}>
           <QuickActionCard
             iconName="navigate"
-            iconColor="#1E88E5"
-            iconBackground="#E3F2FD"
+            iconColor={BRAND.ink}
+            iconBackground={BRAND.cyan}
             title="Plan Calm Route"
             description="Find sensory friendly paths"
             onPress={() => router.push('/routes')}
           />
           <QuickActionCard
             iconName="settings-sharp"
-            iconColor="#4CAF50"
-            iconBackground="#E8F5E9"
+            iconColor={BRAND.ink}
+            iconBackground={BRAND.green}
             title="Sensory Sensitivities"
             description="Update comfort thresholds"
             onPress={() => router.push('/preferences')}
@@ -86,7 +84,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Daily Travel Tips */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Daily Travel Tips
         </Text>
         <DailyTips />
@@ -115,15 +113,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   title: {
-    fontSize: 28,
+    fontSize: 36,
+    fontFamily: Fonts?.display,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    textTransform: 'uppercase',
+    letterSpacing: -1,
+    lineHeight: 36,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
+    textTransform: 'uppercase',
     marginBottom: 12,
-    letterSpacing: -0.2,
+    letterSpacing: 0.2,
   },
   gridRow: {
     flexDirection: 'row',
