@@ -126,6 +126,7 @@ export default function UserPreferencesScreen() {
             <TouchableOpacity
               onPress={() => setGuideVisible(true)}
               hitSlop={10}
+              style={styles.infoButton}
               accessibilityLabel="About your preferences">
               <Ionicons name="information-circle-outline" size={26} color={palette.textSecondary} />
             </TouchableOpacity>
@@ -211,16 +212,22 @@ const styles = StyleSheet.create({
 
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: 12,
   },
 
   title: {
+    flex: 1,
     fontSize: 34,
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: -1,
+  },
+
+  infoButton: {
+    marginTop: 6,
   },
 
   sectionTitle: {
