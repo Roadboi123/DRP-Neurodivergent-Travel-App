@@ -32,7 +32,7 @@ const navThemeLight = {
 };
 const navThemeDark = {
   ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: '#15151a' },
+  colors: { ...DefaultTheme.colors, background: '#0d1426' },
 };
 
 // Inner tree so it can read the in-app theme context for the nav base + status bar.

@@ -53,10 +53,11 @@ export const GRADIENTS = {
     start: { x: 0, y: 0 },
     end: { x: 1, y: 1 },
   },
-  // Calm dark variant of the page background — a muted charcoal/plum echo of
-  // the pink→yellow sweep, low-saturation so it reads as restful, not vivid.
+  // Dark-blue variant of the page background — mirrors the light pink→yellow
+  // diagonal sweep but with a royal-blue corner glow bleeding into a deep navy
+  // field, so dark mode keeps the same Wero gradient style while staying calm.
   backgroundDark: {
-    colors: ['#241d24', '#15151a'] as [string, string],
+    colors: ['#2c4f8f', '#0d1426'] as [string, string],
     locations: [0, 0.45] as [number, number],
     start: { x: 0, y: 0 },
     end: { x: 1, y: 1 },
@@ -92,11 +93,11 @@ const LIGHT_ACCENTS: Accents = {
 };
 
 const DARK_ACCENTS: Accents = {
-  green: '#4f7a5b',
-  yellow: '#8a8259',
-  orange: '#9c7a5a',
-  pink: '#a85478',
-  pinkSoft: '#8a6a9c',
+  green: '#4c9461',
+  yellow: '#acaa50',
+  orange: '#b86111',
+  pink: '#a53e6b',
+  pinkSoft: '#9970b1',
   cyan: '#4d8a8a',
 };
 
@@ -144,19 +145,19 @@ const weroPalette: ThemePalette = {
   textMuted: '#5b5b5b',
 };
 
-// Calm dark palette: charcoal surfaces, soft (not pure-black) borders and
-// off-white text. `background` stays transparent so the dark gradient shows
-// through. Hard ink shadows naturally recede on these surfaces — the 2px
-// borders carry the Wero structure instead.
+// Calm dark-blue palette: navy-tinted surfaces, soft (not pure-black) borders
+// and a faintly blue off-white text. `background` stays transparent so the dark
+// blue gradient shows through. Hard ink shadows naturally recede on these
+// surfaces — the 2px borders carry the Wero structure instead.
 const darkPalette: ThemePalette = {
   background: 'transparent',
-  surface: '#26262b',
-  border: '#3d3d45',
-  borderStrong: '#52525c',
-  divider: '#3d3d45',
-  textPrimary: '#ececf0',
-  textSecondary: '#c2c2cc',
-  textMuted: '#8a8a94',
+  surface: '#172033',
+  border: '#33415f',
+  borderStrong: '#47587d',
+  divider: '#2b3650',
+  textPrimary: '#e7ecf6',
+  textSecondary: '#bcc6db',
+  textMuted: '#828ea8',
 };
 
 export const Palette: { light: ThemePalette; dark: ThemePalette } = {
