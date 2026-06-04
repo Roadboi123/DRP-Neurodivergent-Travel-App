@@ -12,9 +12,11 @@ import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { BRAND, Fonts, getAccents, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useHealthService } from '@/services/services-context';
+import { useHealthService, useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
+import type { WarningItem } from '@/types/route';
+import { useIsFocused } from '@react-navigation/native';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
@@ -24,8 +26,12 @@ export default function HomeScreen() {
   const health = useHealthService();
   const { username, isLoggedIn } = useAuth();
 
+  const routesService = useRoutesService();
+  const isFocused = useIsFocused();
+
   const [backendState, setBackendState] = useState<BackendStatus>('Checking');
   const [profileVisible, setProfileVisible] = useState(false);
+  const [warnings, setWarnings] = useState<WarningItem[]>([]);
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
@@ -45,6 +51,28 @@ export default function HomeScreen() {
     }
     checkBackend();
   }, [health]);
+
+  useEffect(() => {
+    let active = true;
+    async function fetchWarnings() {
+      if (!isFocused) return;
+      try {
+        const data = await routesService.getWarnings('', true);
+        if (active) {
+          setWarnings(data);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch warnings on home screen:', error);
+        if (active) {
+          setWarnings([]);
+        }
+      }
+    }
+    fetchWarnings();
+    return () => {
+      active = false;
+    };
+  }, [username, routesService, isFocused]);
 
   if (!mounted) {
     return null;
@@ -94,8 +122,28 @@ export default function HomeScreen() {
             Plan a route
           </Text>
 
-        <View style={styles.gridRow}>
-        
+        {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
+            active profile's sensory levels. */}
+        {isLoggedIn && (
+          <View style={styles.presetSection}>
+            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+              Select preset profile
+            </Text>
+            <PresetSwitcher />
+            <PresetGlimpse />
+          </View>
+        )}
+
+        {/* Quick Actions Grid */}
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+          Quick Actions
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollRow}
+        >
           <QuickActionCard
             iconName="navigate"
             iconColor={BRAND.ink}
@@ -103,6 +151,7 @@ export default function HomeScreen() {
             title="Plan Calm Route"
             description="Find sensory friendly paths"
             onPress={() => router.push('/routes')}
+            style={styles.gridCard}
           />
         </View>
           
@@ -118,8 +167,9 @@ export default function HomeScreen() {
             title="Sensory Sensitivities"
             description="Update comfort thresholds"
             onPress={() => router.push('/preferences')}
+            style={styles.gridCard}
           />
-        </View>
+        </ScrollView>
 
         {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
             active profile's sensory levels. */}
@@ -137,7 +187,7 @@ export default function HomeScreen() {
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
           Daily Travel Tips
         </Text>
-        <DailyTips /> */}
+        <DailyTips warnings={warnings} />
       </ScrollView>
 
       {/* Global Profile/Login Modal */}
@@ -209,11 +259,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.2,
   },
-  gridRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+  scrollContainer: {
+    marginHorizontal: -20,
     marginBottom: 24,
+  },
+  scrollRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  gridCard: {
+    width: 175,
+    flex: undefined,
   },
   presetSection: {
     marginBottom: 24,

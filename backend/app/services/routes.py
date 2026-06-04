@@ -775,3 +775,242 @@ async def get_route_suggestions(
     routes.sort(key=lambda x: (0 if x["type"] == "best" else 1 if x["type"] == "quickest" else 2))
 
     return routes
+
+
+async def get_user_warnings(username: Optional[str] = None, generic: bool = False) -> List[Dict[str, Any]]:
+    """
+    Generate dynamic live warning items tailored to the user's specific sensitivities
+    by querying real-time TfL disruptions and London weather forecasts.
+    """
+    # 1. Fetch user preferences if username is provided and not generic request
+    u_noise = 2
+    u_crowds = 2
+    u_heat = 2
+    _u_light = 2
+    _u_smell = 2
+    is_anon = True
+
+    if username and username.strip() and not generic:
+        try:
+            res = supabase.table("user_sensitivities") \
+                .select("*") \
+                .eq("username", username.strip()) \
+                .execute()
+            
+            if res.data and isinstance(res.data, list) and len(res.data) > 0:
+                prefs_data = res.data[0]
+                if isinstance(prefs_data, dict):
+                    u_noise = int(prefs_data.get("noise_sensitivity") or 2)
+                    u_crowds = int(prefs_data.get("crowd_sensitivity") or 2)
+                    u_heat = int(prefs_data.get("heat_sensitivity") or 2)
+                    _u_light = int(prefs_data.get("light_sensitivity") or 2)
+                    _u_smell = int(prefs_data.get("smell_sensitivity") or 2)
+                    is_anon = False
+        except Exception as e:
+            print(f"Error fetching Supabase sensitivities for warning filter: {e}")
+
+    # If anonymous/logged out or generic travel tips request, display all live warnings,
+    # mapping to a high sensitivity (3) default threshold for all.
+    if is_anon or generic:
+        u_noise = 3
+        u_crowds = 3
+        u_heat = 3
+        _u_light = 3
+        _u_smell = 3
+
+    warnings = []
+    warning_id_counter = 1
+
+    # 2. Temperature check
+    try:
+        temp = await get_current_london_temp()
+    except Exception:
+        temp = 18.0
+
+    if u_heat >= 3:
+        if temp >= 24.0:
+            warnings.append({
+                "id": f"w_temp_{warning_id_counter}",
+                "title": "Severe Heat",
+                "desc": f"Piccadilly & Central lines are running hot ({temp}°C).",
+                "severity": "high",
+                "icon": "thermometer"
+            })
+            warning_id_counter += 1
+        elif temp >= 20.0:
+            warnings.append({
+                "id": f"w_temp_{warning_id_counter}",
+                "title": "Warm Carriages",
+                "desc": f"Deep tubes and non-AC buses will be warm ({temp}°C).",
+                "severity": "medium",
+                "icon": "thermometer"
+            })
+            warning_id_counter += 1
+
+    # 3. Live line disruptions check from TfL Status API
+    tfl_disruptions = []
+    if u_crowds >= 3 or u_noise >= 3 or generic:
+        try:
+            tfl_disruptions = await tlf_client.get_live_line_disruptions()
+        except Exception as e:
+            print(f"Error getting live line disruptions: {e}")
+
+    # Categorize disruptions
+    suspended_lines = []
+    closed_lines = []
+    delayed_only_lines = []
+    
+    delayed_lines = []
+    severe_lines = []
+
+    for d in tfl_disruptions:
+        line_name = d["line"]
+        status_desc = str(d.get("status_desc", "")).lower()
+        
+        # Categorize
+        if "suspend" in status_desc:
+            if line_name not in suspended_lines:
+                suspended_lines.append(line_name)
+        elif "close" in status_desc or "block" in status_desc:
+            if line_name not in closed_lines:
+                closed_lines.append(line_name)
+        else:
+            if line_name not in delayed_only_lines:
+                delayed_only_lines.append(line_name)
+                
+        # Track for crowding/noise (which we do for personalized route warnings)
+        if line_name not in delayed_lines:
+            delayed_lines.append(line_name)
+        if d["severity"] == "high" and line_name not in severe_lines:
+            severe_lines.append(line_name)
+
+    # 1. Suspensions (shown in both personalized and generic)
+    if suspended_lines:
+        if len(suspended_lines) == 1:
+            desc = f"{suspended_lines[0]} Line is suspended."
+            title = "Line Suspension"
+        elif len(suspended_lines) == 2:
+            desc = f"{suspended_lines[0]} and {suspended_lines[1]} lines are suspended."
+            title = "Line Suspensions"
+        else:
+            desc = f"{', '.join(suspended_lines[:-1])}, and {suspended_lines[-1]} lines are suspended."
+            title = "Line Suspensions"
+            
+        warnings.append({
+            "id": f"w_tfl_susp_{warning_id_counter}",
+            "title": title,
+            "desc": desc,
+            "severity": "high",
+            "icon": "alert-circle"
+        })
+        warning_id_counter += 1
+
+    # 2. Closures (shown in both personalized and generic)
+    if closed_lines:
+        if len(closed_lines) == 1:
+            desc = f"{closed_lines[0]} Line has closures."
+            title = "Line Closure"
+        elif len(closed_lines) == 2:
+            desc = f"{closed_lines[0]} and {closed_lines[1]} lines have closures."
+            title = "Line Closures"
+        elif len(closed_lines) == 3:
+            desc = f"{closed_lines[0]}, {closed_lines[1]}, and {closed_lines[2]} lines have closures."
+            title = "Line Closures"
+        else:
+            desc = "Multiple lines have closures."
+            title = "Line Closures"
+            
+        warnings.append({
+            "id": f"w_tfl_closure_{warning_id_counter}",
+            "title": title,
+            "desc": desc,
+            "severity": "high",
+            "icon": "alert-circle"
+        })
+        warning_id_counter += 1
+
+    # 3. Delays
+    # 3a. Generic Delays (only shown when generic=True)
+    if generic and delayed_only_lines:
+        if len(delayed_only_lines) == 1:
+            desc = f"{delayed_only_lines[0]} Line is experiencing delays."
+            title = "Line Delay"
+        elif len(delayed_only_lines) == 2:
+            desc = f"{delayed_only_lines[0]} and {delayed_only_lines[1]} lines are experiencing delays."
+            title = "Line Delays"
+        elif len(delayed_only_lines) == 3:
+            desc = f"{delayed_only_lines[0]}, {delayed_only_lines[1]}, and {delayed_only_lines[2]} lines are experiencing delays."
+            title = "Line Delays"
+        else:
+            desc = "Multiple lines are experiencing delays."
+            title = "Line Delays"
+            
+        warnings.append({
+            "id": f"w_tfl_delays_{warning_id_counter}",
+            "title": title,
+            "desc": desc,
+            "severity": "medium",
+            "icon": "alert-circle"
+        })
+        warning_id_counter += 1
+
+    # 3b. Sensory warnings for platform/station (only shown when generic=False)
+    if not generic and delayed_lines:
+        if len(delayed_lines) == 1:
+            lines_str = f"{delayed_lines[0]} Line"
+        elif len(delayed_lines) == 2:
+            lines_str = f"{delayed_lines[0]} and {delayed_lines[1]} line"
+        elif len(delayed_lines) == 3:
+            lines_str = f"{delayed_lines[0]}, {delayed_lines[1]}, and {delayed_lines[2]} line"
+        else:
+            lines_str = "Multiple line"
+
+        any_high = len(severe_lines) > 0
+        severity_val = "high" if any_high else "medium"
+
+        if u_crowds >= 3:
+            desc = f"{lines_str} delays are causing severe platform crowding." if any_high else f"{lines_str} delays are causing platform crowding."
+            warnings.append({
+                "id": f"w_tfl_crowds_{warning_id_counter}",
+                "title": "Station Crowding",
+                "desc": desc,
+                "severity": severity_val,
+                "icon": "alert-circle"
+            })
+            warning_id_counter += 1
+
+        if u_noise >= 3:
+            desc = f"{lines_str} delays are causing loud station announcements." if any_high else f"{lines_str} delays are causing station announcements."
+            warnings.append({
+                "id": f"w_tfl_noise_{warning_id_counter}",
+                "title": "Platform Noise",
+                "desc": desc,
+                "severity": severity_val,
+                "icon": "alert-circle"
+            })
+            warning_id_counter += 1
+
+    # 4. Live station works check (drilling, construction)
+    if u_noise >= 3:
+        try:
+            works_stations = await tlf_client.get_live_station_works()
+            if works_stations:
+                if len(works_stations) == 1:
+                    desc = f"Drilling works reported at {works_stations[0]} station."
+                elif len(works_stations) == 2:
+                    desc = f"Drilling works reported at {works_stations[0]} and {works_stations[1]} stations."
+                else:
+                    desc = f"Drilling works reported at {works_stations[0]}, {works_stations[1]}, and {len(works_stations)-2} other stations."
+                
+                warnings.append({
+                    "id": f"w_station_works_{warning_id_counter}",
+                    "title": "Drilling & Works",
+                    "desc": desc,
+                    "severity": "medium",
+                    "icon": "volume-high"
+                })
+                warning_id_counter += 1
+        except Exception as e:
+            print(f"Error checking live station works: {e}")
+
+    return warnings

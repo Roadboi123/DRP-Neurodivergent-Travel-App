@@ -12,6 +12,7 @@ interface QuickActionCardProps {
   title: string;
   description: string;
   onPress: () => void;
+  style?: any;
 }
 
 export function QuickActionCard({
@@ -21,6 +22,7 @@ export function QuickActionCard({
   title,
   description,
   onPress,
+  style,
 }: QuickActionCardProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -28,7 +30,7 @@ export function QuickActionCard({
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[styles.gridCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      style={[styles.gridCard, { backgroundColor: palette.surface, borderColor: palette.border }, style]}>
       <View
         style={[
           styles.iconContainer,
