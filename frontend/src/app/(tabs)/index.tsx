@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { DailyTips } from '@/components/home/daily-tips';
 import { QuickActionCard } from '@/components/home/quick-action-card';
+import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -87,6 +88,16 @@ export default function HomeScreen() {
         <View style={styles.statusRow}>
           <StatusBadge status={backendState} />
         </View>
+
+        {/* Today's tolerance presets — quick way to re-tune routes per day */}
+        {isLoggedIn && (
+          <View style={styles.presetSection}>
+            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+              How are you feeling today?
+            </Text>
+            <PresetSwitcher showDescription />
+          </View>
+        )}
 
         {/* Quick Actions Grid */}
         <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
@@ -191,6 +202,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
+    marginBottom: 24,
+  },
+  presetSection: {
     marginBottom: 24,
   },
 });
