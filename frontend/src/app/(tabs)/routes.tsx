@@ -32,6 +32,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
+import { usePresets } from '@/context/presets-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
 
 // How many routes to show in the ungrouped (Google-Maps-style) list.
@@ -61,7 +62,12 @@ export default function RoutesScreen() {
   const palette = getPalette(isDark);
   const routesService = useRoutesService();
   const { username, isLoggedIn } = useAuth();
+  const { values: prefValues } = usePresets();
   const isFocused = useIsFocused();
+
+  // Backend route scoring reads the user's saved sensitivities, so re-fetch
+  // whenever the active preset changes (it's already been persisted by then).
+  const prefKey = useMemo(() => JSON.stringify(prefValues), [prefValues]);
 
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
@@ -117,7 +123,7 @@ export default function RoutesScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [startLoc, endLoc, username, routesService, isFocused]);
+  }, [startLoc, endLoc, username, routesService, prefKey, isFocused]);
 
   // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);

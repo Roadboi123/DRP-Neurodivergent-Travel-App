@@ -7,11 +7,13 @@ import {
   createPreferencesService,
   type PreferencesService,
 } from '@/services/preferences';
+import { createPresetsService, type PresetsService } from '@/services/presets';
 import { createRoutesService, type RoutesService } from '@/services/routes';
 
 export interface Services {
   routes: RoutesService;
   preferences: PreferencesService;
+  presets: PresetsService;
   health: HealthService;
 }
 
@@ -27,6 +29,7 @@ function createDefaultServices(): Services {
   return {
     routes: createRoutesService(createFallbackClient(api, local)),
     preferences: createPreferencesService(api),
+    presets: createPresetsService(api),
     health: createHealthService(api),
   };
 }
@@ -56,4 +59,5 @@ function useServices(): Services {
 
 export const useRoutesService = (): RoutesService => useServices().routes;
 export const usePreferencesService = (): PreferencesService => useServices().preferences;
+export const usePresetsService = (): PresetsService => useServices().presets;
 export const useHealthService = (): HealthService => useServices().health;

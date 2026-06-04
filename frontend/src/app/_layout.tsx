@@ -17,6 +17,7 @@ import { ThemeProvider } from '@/contexts/theme-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ServicesProvider } from '@/services/services-context';
 import { AuthProvider } from '@/context/auth-context';
+import { PresetsProvider } from '@/context/presets-context';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -70,9 +71,11 @@ export default function RootLayout() {
   return (
     <ServicesProvider>
       <AuthProvider>
-        <ThemeProvider>
-          <ThemedApp />
-        </ThemeProvider>
+        <PresetsProvider>
+          <ThemeProvider>
+            <ThemedApp />
+          </ThemeProvider>
+        </PresetsProvider>
       </AuthProvider>
     </ServicesProvider>
   );
