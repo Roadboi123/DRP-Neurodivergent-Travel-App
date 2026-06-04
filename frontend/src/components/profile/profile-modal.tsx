@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import {
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -189,13 +192,22 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable style={styles.backdrop} onPress={handleClose}>
-        <TouchableOpacity
-          activeOpacity={1}
-          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <View style={styles.handle} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable style={styles.backdrop} onPress={handleClose}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
+            // Tapping anywhere on the sheet (outside an input) dismisses the
+            // keyboard; stopPropagation keeps the backdrop from closing the modal.
+            onPress={(e) => {
+              e.stopPropagation();
+              Keyboard.dismiss();
+            }}
+          >
+            <View style={styles.handle} />
 
           <View style={styles.header}>
             <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
@@ -207,7 +219,12 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             {mode === 'profile' && isLoggedIn ? (
               <View style={styles.loggedInContainer}>
                 {/* Avatar */}
@@ -374,13 +391,17 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
               </View>
             )}
           </ScrollView>
-        </TouchableOpacity>
-      </Pressable>
+          </TouchableOpacity>
+        </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  } as ViewStyle,
   backdrop: {
     flex: 1,
     backgroundColor: 'transparent',
