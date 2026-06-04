@@ -92,11 +92,10 @@ export function RouteFilterSheet({
               ios_backgroundColor={isDark ? '#3A4150' : '#D1D5DB'}
             />
           </View>
-          {filters.groupByChanges && (
-            <Text style={[styles.helperNote, { color: palette.textSecondary }]}>
-              Routes are grouped by number of changes, ranked by your sort.
-            </Text>
-          )}
+          <Text style={[styles.helperNote, { color: palette.textSecondary }]}>
+            Groups routes by how many changes (interchanges) each one takes — 0 changes, 1 change,
+            and so on — with each group still ranked by your sort.
+          </Text>
 
           <TouchableOpacity
             onPress={onClose}
