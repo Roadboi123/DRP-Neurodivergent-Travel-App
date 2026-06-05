@@ -7,6 +7,8 @@ export interface AuthContextType {
   isLoggedIn: boolean;
   login: (username: string, token: string) => void;
   logout: () => void;
+  isProfileModalVisible: boolean;
+  setProfileModalVisible: (visible: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -48,6 +50,7 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [username, setUsername] = useState<string>('');
   const [token, setToken] = useState<string | null>(null);
+  const [isProfileModalVisible, setProfileModalVisible] = useState<boolean>(false);
 
   // Load session from storage on mount
   useEffect(() => {
@@ -82,10 +85,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setStoredValue(STORAGE_TOKEN_KEY, '');
   };
 
+  // Automatically prompt user to log in when token expires
+  useEffect(() => {
+    authStore.onUnauthorized(() => {
+      logout();
+      setProfileModalVisible(true);
+    });
+  }, []);
+
   const isLoggedIn = username.length > 0 && token !== null;
 
   return (
-    <AuthContext.Provider value={{ username, token, isLoggedIn, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        username,
+        token,
+        isLoggedIn,
+        login,
+        logout,
+        isProfileModalVisible,
+        setProfileModalVisible,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -16,8 +16,9 @@ import { BRAND } from '@/constants/theme';
 import { ThemeProvider } from '@/contexts/theme-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ServicesProvider } from '@/services/services-context';
-import { AuthProvider } from '@/context/auth-context';
+import { AuthProvider, useAuth } from '@/context/auth-context';
 import { PresetsProvider } from '@/context/presets-context';
+import { ProfileModal } from '@/components/profile/profile-modal';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -40,12 +41,18 @@ const navThemeDark = {
 // Inner tree so it can read the in-app theme context for the nav base + status bar.
 function ThemedApp() {
   const isDark = useColorScheme() === 'dark';
+  const { isProfileModalVisible, setProfileModalVisible } = useAuth();
+  
   return (
     <NavThemeProvider value={isDark ? navThemeDark : navThemeLight}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      <ProfileModal
+        visible={isProfileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+      />
     </NavThemeProvider>
   );
 }

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface RouteSearchInputsProps {
@@ -10,6 +10,7 @@ interface RouteSearchInputsProps {
   loading: boolean;
   onStartChange: (text: string) => void;
   onEndChange: (text: string) => void;
+  onSwap: () => void;
 }
 
 export function RouteSearchInputs({
@@ -18,10 +19,12 @@ export function RouteSearchInputs({
   loading,
   onStartChange,
   onEndChange,
+  onSwap,
 }: RouteSearchInputsProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const placeholderColor = isDark ? '#555' : '#999';
+  const accents = getAccents(isDark);
+  const placeholderColor = palette.textMuted;
 
   return (
     <View style={styles.headerSpacer}>
@@ -34,8 +37,8 @@ export function RouteSearchInputs({
         {/* Start Location Input */}
         <View style={styles.inputRow}>
           <View style={styles.inputIconContainer}>
-            <View style={[styles.dotCircle, { backgroundColor: '#4A90E2' }]} />
-            <View style={styles.dotLine} />
+            <View style={[styles.dotCircle, { backgroundColor: accents.green, borderColor: palette.border }]} />
+            <View style={[styles.dotLine, { backgroundColor: palette.divider }]} />
           </View>
           <View style={styles.inputTextContainer}>
             <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>Start Location</Text>
@@ -56,7 +59,7 @@ export function RouteSearchInputs({
         {/* End Location Input */}
         <View style={styles.inputRow}>
           <View style={styles.inputIconContainer}>
-            <Ionicons name="location" size={20} color="#E04F5F" />
+            <Ionicons name="location" size={20} color={accents.pink} />
           </View>
           <View style={styles.inputTextContainer}>
             <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>End Destination</Text>
@@ -70,9 +73,20 @@ export function RouteSearchInputs({
             />
           </View>
         </View>
+
+        {/* Swap start/end (Google-Maps style), vertically centred over the divider */}
+        <TouchableOpacity
+          onPress={onSwap}
+          accessibilityRole="button"
+          accessibilityLabel="Swap start and destination"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={[
+            styles.swapButton,
+            { backgroundColor: palette.surface, borderColor: palette.border },
+          ]}>
+          <Ionicons name="swap-vertical" size={18} color={palette.textPrimary} />
+        </TouchableOpacity>
       </View>
-
-
     </View>
   );
 }
@@ -116,6 +130,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
+    // Reserve room on the right so input text never runs under the swap button.
+    paddingRight: 44,
   },
   inputIconContainer: {
     width: 24,
@@ -127,11 +143,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+    borderWidth: 1,
   },
   dotLine: {
     width: 2,
     height: 24,
-    backgroundColor: '#CCC',
     position: 'absolute',
     bottom: -22,
   },
@@ -156,5 +172,18 @@ const styles = StyleSheet.create({
     height: 1,
     marginVertical: 8,
     marginLeft: 36,
+  },
+  swapButton: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    marginTop: -18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...hardShadow(3),
   },
 });

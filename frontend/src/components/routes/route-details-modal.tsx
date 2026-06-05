@@ -5,7 +5,7 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { RouteOption } from '@/types/route';
 
@@ -19,7 +19,8 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
-  const linkColor = isDark ? '#64b5f6' : '#003688';
+  const semantic = getSemanticColors(isDark);
+  const linkColor = semantic.link;
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
   const [isExpanded, setIsExpanded] = useState(false);
@@ -33,6 +34,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const panY = React.useRef(new Animated.Value(MAX_TRANSLATE_Y)).current;
   const lastTranslateY = React.useRef(MAX_TRANSLATE_Y);
   const startTranslateY = React.useRef(MAX_TRANSLATE_Y);
+  // Current scroll offset of the inner list, so a downward drag at the very top
+  // collapses the sheet instead of being swallowed by the ScrollView.
+  const scrollOffsetY = React.useRef(0);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -75,12 +79,27 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
     });
   };
 
+  // A drag is "the sheet's" when it's a clear vertical move AND either we're
+  // pulling the sheet down while the list is already scrolled to the top, or
+  // pulling it up while it isn't fully expanded. Everything else stays with the
+  // inner ScrollView so normal content scrolling still works.
+  const shouldClaimDrag = (dy: number, dx: number) => {
+    const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+    if (!verticalEnough) return false;
+    if (dy > 0) return scrollOffsetY.current <= 0; // dragging down at the top → collapse
+    return lastTranslateY.current > 1; // dragging up while not fully expanded → expand
+  };
+
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 5;
-      },
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      // Capture phase: intercept the gesture before the inner ScrollView when it
+      // is genuinely the sheet being dragged (fixes the intermittent swipe-down).
+      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         startTranslateY.current = lastTranslateY.current;
         panY.setOffset(startTranslateY.current);
@@ -445,7 +464,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
           </View>
           <TouchableOpacity
             onPress={onClose}
-            style={[styles.closeBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE', borderColor: palette.border }]}
+            style={[styles.closeBtn, { backgroundColor: semantic.neutralSurface, borderColor: palette.border }]}
             accessibilityLabel="Close detailed route overlay"
           >
             <Ionicons name="close" size={20} color={palette.textPrimary} />
@@ -508,10 +527,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
           )}
 
           {/* Timeline sheet panel overlapping the bottom of the map */}
-          <Animated.View style={[
-            styles.sheetPanel, 
-            { 
-              backgroundColor: palette.surface, 
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={[
+            styles.sheetPanel,
+            {
+              backgroundColor: palette.surface,
               borderColor: palette.border,
               height: SHEET_HEIGHT,
               position: 'absolute',
@@ -521,9 +542,8 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               transform: [{ translateY: panY }]
             }
           ]}>
-            {/* Tappable and draggable header wrapper */}
+            {/* Tappable header wrapper (drag is handled by the sheet itself) */}
             <View
-              {...panResponder.panHandlers}
               style={styles.sheetHeaderTouch}
             >
               <TouchableOpacity
@@ -550,7 +570,14 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                scrollOffsetY.current = e.nativeEvent.contentOffset.y;
+              }}>
               {/* Sensory meters dashboard */}
               <View style={[styles.modalSensoryContainer, { borderColor: palette.border, backgroundColor: palette.surface }]}>
                 <Text style={[styles.sensoryHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
@@ -562,7 +589,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                   <SensoryMeter level={route.smell} label="Smell" />
                 </View>
                 {route.sensory_description ? (
-                  <Text style={[styles.sensoryDescText, { color: palette.textSecondary }]}>
+                  <Text style={[styles.sensoryDescText, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
                     {route.sensory_description}
                   </Text>
                 ) : null}
@@ -596,7 +623,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
                         {/* Collapsible intermediate stops list */}
                         {leg.stops && leg.stops.length > 0 && (
-                          <View style={styles.stopsDropdown}>
+                          <View style={[styles.stopsDropdown, { borderLeftColor: linkColor }]}>
                             <TouchableOpacity
                               activeOpacity={0.7}
                               onPress={() => toggleStops(lIdx)}
@@ -627,9 +654,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
                         {/* Platform transfer / connection wait times */}
                         {leg.connection_waiting_mins && leg.connection_waiting_mins > 0 ? (
-                          <View style={[styles.waitWarningCard, { backgroundColor: isDark ? '#35241C' : '#FFF9F3', borderColor: isDark ? '#5C3820' : '#FFE0B2' }]}>
-                            <Ionicons name="warning" size={13} color="#FF9800" />
-                            <Text style={[styles.waitWarningText, { color: isDark ? '#FFB74D' : '#E65100' }]}>
+                          <View style={[styles.waitWarningCard, { backgroundColor: semantic.warningSurface, borderColor: semantic.warningBorder }]}>
+                            <Ionicons name="warning" size={13} color={semantic.warningIcon} />
+                            <Text style={[styles.waitWarningText, { color: semantic.warningText }]}>
                               {leg.connection_waiting_mins} min platform wait / transfer.
                             </Text>
                           </View>
@@ -810,7 +837,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 6,
     borderTopWidth: 1,
-    borderTopColor: '#DDD',
     paddingTop: 8,
   },
   timelineList: {
@@ -859,7 +885,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingLeft: 8,
     borderLeftWidth: 2,
-    borderLeftColor: '#4A90E2',
     gap: 3,
   },
   stopsDropdownHeader: {

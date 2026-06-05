@@ -28,14 +28,13 @@ import {
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
-import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
-import { ProfileModal } from '@/components/profile/profile-modal';
 
 // How many routes to show in the ungrouped (Google-Maps-style) list.
 const MAX_RESULTS = 8;
@@ -62,8 +61,9 @@ function statusChips(filters: RouteFilters): string[] {
 export default function RoutesScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const semantic = getSemanticColors(isDark);
   const routesService = useRoutesService();
-  const { username, isLoggedIn } = useAuth();
+  const { username, isLoggedIn, setProfileModalVisible } = useAuth();
   const { values: prefValues } = usePresets();
   const isFocused = useIsFocused();
 
@@ -73,9 +73,8 @@ export default function RoutesScreen() {
 
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
-  const [endLoc, setEndLoc] = useState('Imperial College London');
+  const [endLoc, setEndLoc] = useState('');
   const [loading, setLoading] = useState(false);
-  const [profileVisible, setProfileVisible] = useState(false);
 
   // Real-time coordinates state
   const [coords, setCoords] = useState<string | null>(null);
@@ -102,6 +101,12 @@ export default function RoutesScreen() {
       fetchCurrentLocation();
     }
   }, [isFocused, startLoc, coords]);
+
+  // Google-Maps-style swap of the start and end locations.
+  const handleSwapLocations = () => {
+    setStartLoc(endLoc);
+    setEndLoc(startLoc);
+  };
 
   // Filter states
   const [filters, setFilters] = useState<RouteFilters>(DEFAULT_FILTERS);
@@ -215,7 +220,7 @@ export default function RoutesScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Navigation Icons */}
-      <HeaderNav onProfilePress={() => setProfileVisible(true)} />
+      <HeaderNav onProfilePress={() => setProfileModalVisible(true)} />
 
       <RouteSearchInputs
         startLoc={startLoc}
@@ -223,24 +228,25 @@ export default function RoutesScreen() {
         loading={loading}
         onStartChange={setStartLoc}
         onEndChange={setEndLoc}
+        onSwap={handleSwapLocations}
       />
 
       {/* Personalization warning bar */}
       {!isLoggedIn && (
         <TouchableOpacity
-          onPress={() => setProfileVisible(true)}
+          onPress={() => setProfileModalVisible(true)}
           style={[
             styles.loginWarningBanner,
             {
-              backgroundColor: isDark ? '#2B2620' : '#FFF9F3',
-              borderColor: isDark ? '#5c4320' : '#FFE0B2',
+              backgroundColor: semantic.warningSurface,
+              borderColor: semantic.warningBorder,
             }
           ]}
           activeOpacity={0.8}
           accessibilityLabel="Click to log in and personalize routes"
         >
-          <Ionicons name="warning" size={16} color="#FF9800" />
-          <Text style={[styles.loginWarningText, { color: isDark ? '#FFB74D' : '#E65100' }]}>
+          <Ionicons name="warning" size={16} color={semantic.warningIcon} />
+          <Text style={[styles.loginWarningText, { color: semantic.warningText }]}>
             Viewing generic routes. <Text style={{ textDecorationLine: 'underline', fontWeight: 'bold' }}>Log in</Text> to personalize.
           </Text>
         </TouchableOpacity>
@@ -290,16 +296,22 @@ export default function RoutesScreen() {
 
         {loading ? (
           <View style={styles.loadingSpinner}>
-            <ActivityIndicator size="large" color="#4A90E2" />
+            <ActivityIndicator size="large" color={palette.textPrimary} />
             <Text style={[styles.loadingText, { color: palette.textSecondary }]}>
               Calculating calmest routes...
             </Text>
           </View>
         ) : pool.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="map" size={48} color={palette.textPrimary} />
+            <Ionicons
+              name={!endLoc.trim() ? 'location-outline' : 'map'}
+              size={48}
+              color={palette.textPrimary}
+            />
             <Text style={[styles.emptyText, { color: palette.textPrimary }]}>
-              {routes.length === 0
+              {!endLoc.trim()
+                ? 'Enter a destination to see calm routes.'
+                : routes.length === 0
                 ? 'No routes found. Please check location inputs.'
                 : 'No routes are air conditioned throughout. Try relaxing the A/C filter.'}
             </Text>
@@ -343,7 +355,7 @@ export default function RoutesScreen() {
         onClose={() => setFiltersVisible(false)}
       />
 
-      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
+
 
       <RouteDetailsModal
         visible={!!selectedRoute}
