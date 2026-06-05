@@ -21,6 +21,16 @@ _IS_REFRESHING_STATION_WORKS: bool = False
 
 
 def _parse_leg(leg: dict) -> dict:
+    path = leg.get("path", {})
+    line_string_str = path.get("lineString")
+    path_coords = None
+    if line_string_str:
+        try:
+            import json
+            path_coords = json.loads(line_string_str)
+        except Exception as e:
+            print(f"Error parsing TfL lineString: {e}")
+
     return {
         "mode":          leg.get("mode", {}).get("name", "unknown"),
         "departure":     leg.get("departurePoint", {}).get("commonName", ""),
@@ -39,6 +49,7 @@ def _parse_leg(leg: dict) -> dict:
                             .get("lineIdentifier", {})
                             .get("name", "") if leg.get("routeOptions") else "",
         "stops":         [sp.get("name") for sp in leg.get("path", {}).get("stopPoints", [])],
+        "path_coords":   path_coords,
     }
 
 
@@ -136,7 +147,6 @@ async def check_live_station_crowding(naptan_id: str) -> bool:
             
         _LIVE_CROWDING_CACHE[naptan_id] = (val, time.time() + CACHE_TTL_SECS)
         return val
-
 
 
 def _is_useless_bus_journey(journey: dict) -> bool:
@@ -340,4 +350,4 @@ async def get_live_station_works() -> list[str]:
         _IS_REFRESHING_STATION_WORKS = True
         asyncio.create_task(_refresh_live_station_works_task())
         
-    return _LIVE_STATION_WORKS_CACHE
+    return _LIVE_STATION_WORKS_CACHE

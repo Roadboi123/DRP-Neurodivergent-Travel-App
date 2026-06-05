@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { SensoryMeter } from '@/components/routes/sensory-meter';
 import {
@@ -57,14 +57,107 @@ function matchBadgeColors(
   return { bg: accents.pinkSoft, text };
 }
 
+export function getLegUIProps(
+  mode: string,
+  line: string,
+  instruction: string,
+  accents: Accents
+) {
+  const modeLower = mode.toLowerCase();
+  const lineLower = line ? line.toLowerCase() : '';
+  
+  let iconName: any = 'walk';
+  let bgColor: string = accents.cyan;
+  let textColor: string = BRAND.ink;
+  let displayName = 'Walk';
+
+  const isBusLike =
+    modeLower === 'bus' ||
+    modeLower === 'coach' ||
+    modeLower === 'national-coach' ||
+    modeLower === 'replacement-bus';
+
+  if (isBusLike) {
+    iconName = 'bus';
+    bgColor = accents.orange;
+    textColor = BRAND.ink;
+    displayName = line
+      ? `Bus ${line}`
+      : instruction
+      ? instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '')
+      : 'Bus';
+  } else if (
+    modeLower === 'tube' ||
+    modeLower === 'subway' ||
+    modeLower === 'underground' ||
+    modeLower.includes('elizabeth')
+  ) {
+    iconName = 'subway';
+    displayName = line || 'Elizabeth line';
+    
+    if (lineLower.includes('central')) {
+      bgColor = '#E32017';
+      textColor = '#FFF';
+    } else if (lineLower.includes('district')) {
+      bgColor = '#00782A';
+      textColor = '#FFF';
+    } else if (lineLower.includes('northern')) {
+      bgColor = '#000000';
+      textColor = '#FFF';
+    } else if (lineLower.includes('victoria')) {
+      bgColor = '#00A0E2';
+      textColor = '#FFF';
+    } else if (lineLower.includes('jubilee')) {
+      bgColor = '#868F98';
+      textColor = '#FFF';
+    } else if (lineLower.includes('piccadilly')) {
+      bgColor = '#003688';
+      textColor = '#FFF';
+    } else if (lineLower.includes('bakerloo')) {
+      bgColor = '#894E24';
+      textColor = '#FFF';
+    } else if (lineLower.includes('circle')) {
+      bgColor = '#FFD300';
+      textColor = '#000';
+    } else if (lineLower.includes('hammersmith') || lineLower.includes('city')) {
+      bgColor = '#F3A9C8';
+      textColor = '#000';
+    } else if (lineLower.includes('metropolitan')) {
+      bgColor = '#9B005A';
+      textColor = '#FFF';
+    } else if (lineLower.includes('elizabeth')) {
+      bgColor = '#7156A5';
+      textColor = '#FFF';
+    } else if (lineLower.includes('overground')) {
+      bgColor = '#E86300';
+      textColor = '#FFF';
+    } else if (lineLower.includes('dlr')) {
+      bgColor = '#00AFAD';
+      textColor = '#FFF';
+    } else {
+      bgColor = '#0D47A1';
+      textColor = '#FFF';
+    }
+  } else if (modeLower === 'train' || modeLower === 'national-rail') {
+    iconName = 'train';
+    displayName = line || 'Train';
+    bgColor = accents.green;
+    textColor = BRAND.ink;
+  }
+
+  return { iconName, bgColor, textColor, displayName };
+}
+
 function RouteCardBase({
   route,
   customTitle,
   hideTitle,
+  onPress,
 }: {
   route: RouteOption;
   customTitle?: string;
   hideTitle?: boolean;
+  onPress?: () => void;
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -86,85 +179,26 @@ function RouteCardBase({
         </Text>
       )}
 
-      <View
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={onPress}
         style={[
           styles.routeCard,
           { backgroundColor: palette.surface, borderColor: palette.border },
         ]}>
-        {/* Left column: journey timeline + sensory dashboard + description */}
+        
+        {/* Left column: journey timeline + sensory dashboard */}
         <View style={styles.leftContent}>
           <View style={styles.timelineWrapper}>
             {route.legs && route.legs.length > 0 && (
               <View style={styles.timelineRow}>
                 {route.legs.map((leg, lIdx) => {
-                  const mode = leg.mode.toLowerCase();
-                  const line = leg.line ? leg.line.toLowerCase() : '';
-                  
-                  let iconName: any = 'walk';
-                  let legBadgeColor: string = accents.cyan;
-                  let legTextColor: string = BRAND.ink;
-                  let displayName = 'Walk';
-
-                  const isBusLike = mode === 'bus' || mode === 'coach' || mode === 'national-coach' || mode === 'replacement-bus';
-
-                  if (isBusLike) {
-                    iconName = 'bus';
-                    legBadgeColor = accents.orange;
-                    legTextColor = BRAND.ink;
-                    displayName = leg.line ? `Bus ${leg.line}` : (leg.instruction ? leg.instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '') : 'Bus');
-                  } else if (mode === 'tube' || mode === 'subway' || mode === 'underground' || mode.includes('elizabeth')) {
-                    iconName = 'subway';
-                    displayName = leg.line || 'Elizabeth line';
-                    
-                    if (line.includes('central')) {
-                      legBadgeColor = '#E32017';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('district')) {
-                      legBadgeColor = '#00782A';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('northern')) {
-                      legBadgeColor = '#000000';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('victoria')) {
-                      legBadgeColor = '#00A0E2';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('jubilee')) {
-                      legBadgeColor = '#868F98';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('piccadilly')) {
-                      legBadgeColor = '#003688';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('bakerloo')) {
-                      legBadgeColor = '#894E24';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('circle')) {
-                      legBadgeColor = '#FFD300';
-                      legTextColor = '#000';
-                    } else if (line.includes('hammersmith') || line.includes('city')) {
-                      legBadgeColor = '#F3A9C8';
-                      legTextColor = '#000';
-                    } else if (line.includes('metropolitan')) {
-                      legBadgeColor = '#9B005A';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('elizabeth')) {
-                      legBadgeColor = '#7156A5';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('overground')) {
-                      legBadgeColor = '#E86300';
-                      legTextColor = '#FFF';
-                    } else if (line.includes('dlr')) {
-                      legBadgeColor = '#00AFAD';
-                      legTextColor = '#FFF';
-                    } else {
-                      legBadgeColor = '#0D47A1';
-                      legTextColor = '#FFF';
-                    }
-                  } else if (mode === 'train' || mode === 'national-rail') {
-                    iconName = 'train';
-                    displayName = leg.line || 'Train';
-                    legBadgeColor = accents.green;
-                    legTextColor = BRAND.ink;
-                  }
+                  const { iconName, bgColor: legBadgeColor, textColor: legTextColor, displayName } = getLegUIProps(
+                    leg.mode,
+                    leg.line,
+                    leg.instruction,
+                    accents
+                  );
 
                   return (
                     <View key={lIdx} style={styles.timelineItem}>
@@ -213,14 +247,25 @@ function RouteCardBase({
 
           {/* Sensory Dashboard - Wrapping Grid layout for 5 distinct meters */}
           <View style={[styles.sensoryRow, { borderTopColor: palette.divider }]}>
-          <SensoryMeter level={route.noise} label="Sound" />
-          <SensoryMeter level={route.crowds} label="Crowds" />
-          <SensoryMeter level={route.heat} label="Heat" />
-          <SensoryMeter level={route.light} label="Light" />
-          <SensoryMeter level={route.smell} label="Smell" />
-        </View>
-
-
+            <SensoryMeter level={route.noise} label="Sound" />
+            <SensoryMeter level={route.crowds} label="Crowds" />
+            <SensoryMeter level={route.heat} label="Heat" />
+            <SensoryMeter level={route.light} label="Light" />
+            <SensoryMeter level={route.smell} label="Smell" />
+          </View>
+          
+          {/* Action indicator at the bottom (Neo-brutalist hint) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: -2 }}>
+            <Text style={{ fontSize: 10.5, fontWeight: '800', fontFamily: Fonts?.display, textTransform: 'uppercase', color: palette.textMuted }}>
+              Tap to view details & map
+            </Text>
+            <Ionicons
+              name="arrow-forward"
+              size={11}
+              color={palette.textMuted}
+              style={{ marginLeft: 4 }}
+            />
+          </View>
         </View>
 
         {/* Right: big duration over tiny cost, full-height boxed widget */}
@@ -235,7 +280,7 @@ function RouteCardBase({
             £{route.price.toFixed(2)}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }

@@ -136,6 +136,12 @@ async def _create_walking_leg(
     duration_mins = max(1, round(walk_dist_m / speed_m_per_min))
     instruction = f"Walk from {from_name} to {to_name}"
     
+    # Query OSRM directly for detailed geometry of this walk leg
+    path_coords = await osm_client.get_osrm_geometry(from_lat, from_lon, to_lat, to_lon)
+    if not path_coords:
+        # fallback to straight line endpoints
+        path_coords = [[from_lat, from_lon], [to_lat, to_lon]]
+        
     return {
         "mode": "walking",
         "departure": from_name,
@@ -153,6 +159,7 @@ async def _create_walking_leg(
         "line": "",
         "stops": [],
         "connection_waiting_mins": 0,
+        "path_coords": path_coords,
     }
 
 
@@ -417,6 +424,11 @@ async def _build_route_option(index: int, journey: dict, temp: float) -> dict:
             "instruction": leg.get("instruction", ""),
             "stops": leg.get("stops", []),
             "connection_waiting_mins": leg.get("connection_waiting_mins", 0),
+            "departure_lat": leg.get("departure_lat"),
+            "departure_lon": leg.get("departure_lon"),
+            "arrival_lat": leg.get("arrival_lat"),
+            "arrival_lon": leg.get("arrival_lon"),
+            "path_coords": leg.get("path_coords"),
         })
 
     # Build features tag list for cleaner UI rendering
@@ -761,7 +773,14 @@ async def get_route_suggestions(
 
     # 5. Determine types: safest/calmest vs. quickest
     quickest_route = min(routes, key=lambda x: x["duration"])
-    best_route = min(routes, key=lambda x: x["sensory_score"])
+    best_route = min(
+        routes,
+        key=lambda x: (
+            -x.get("match_percentage", 100),
+            x["duration"],
+            x.get("sensory_score", 0.0)
+        )
+    )
 
     for r in routes:
         if r["id"] == best_route["id"]:

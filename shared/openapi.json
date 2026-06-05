@@ -21,6 +21,28 @@
             "title": "Arrival",
             "type": "string"
           },
+          "arrival_lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival Lat"
+          },
+          "arrival_lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival Lon"
+          },
           "connection_waiting_mins": {
             "anyOf": [
               {
@@ -37,6 +59,28 @@
             "title": "Departure",
             "type": "string"
           },
+          "departure_lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departure Lat"
+          },
+          "departure_lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departure Lon"
+          },
           "duration_mins": {
             "title": "Duration Mins",
             "type": "integer"
@@ -52,6 +96,23 @@
           "mode": {
             "title": "Mode",
             "type": "string"
+          },
+          "path_coords": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Coords"
           },
           "stops": {
             "anyOf": [

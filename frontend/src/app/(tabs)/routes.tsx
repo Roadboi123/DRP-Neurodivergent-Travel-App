@@ -10,10 +10,12 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { HeaderNav } from '@/components/ui/header-nav';
 import { RouteCard } from '@/components/routes/route-card';
+import { RouteDetailsModal } from '@/components/routes/route-details-modal';
 import { RouteFilterSheet } from '@/components/routes/route-filter-sheet';
 import {
   applyAcFilter,
@@ -75,12 +77,39 @@ export default function RoutesScreen() {
   const [loading, setLoading] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
 
+  // Real-time coordinates state
+  const [coords, setCoords] = useState<string | null>(null);
+
+  const fetchCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const currentCoords = `${loc.coords.latitude},${loc.coords.longitude}`;
+        setCoords(currentCoords);
+        return currentCoords;
+      }
+    } catch (e) {
+      console.warn('Could not retrieve real-time location:', e);
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    if (isFocused && startLoc === 'Current Location' && !coords) {
+      fetchCurrentLocation();
+    }
+  }, [isFocused, startLoc, coords]);
+
   // Filter states
   const [filters, setFilters] = useState<RouteFilters>(DEFAULT_FILTERS);
   const [filtersVisible, setFiltersVisible] = useState(false);
 
   // Routes state
   const [routes, setRoutes] = useState<RouteOption[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
 
   // Hydration fix
@@ -125,7 +154,17 @@ export default function RoutesScreen() {
 
       setLoading(true);
       try {
-        const data = await routesService.getRoutes(startLoc, endLoc, username);
+        let originQuery = startLoc;
+        if (startLoc === 'Current Location') {
+          let activeCoords = coords;
+          if (!activeCoords) {
+            activeCoords = await fetchCurrentLocation();
+          }
+          if (activeCoords) {
+            originQuery = activeCoords;
+          }
+        }
+        const data = await routesService.getRoutes(originQuery, endLoc, username);
         if (active) {
           setRoutes(data);
         }
@@ -147,7 +186,7 @@ export default function RoutesScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [startLoc, endLoc, username, routesService, prefKey, isFocused]);
+  }, [startLoc, endLoc, username, routesService, prefKey, isFocused, coords]);
 
   // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
@@ -273,7 +312,12 @@ export default function RoutesScreen() {
                   {group.changes} {group.changes === 1 ? 'change' : 'changes'}
                 </Text>
                 {group.routes.map((route) => (
-                  <RouteCard key={`g${group.changes}-${route.id}`} route={route} hideTitle />
+                  <RouteCard
+                    key={`g${group.changes}-${route.id}`}
+                    route={route}
+                    hideTitle
+                    onPress={() => setSelectedRoute(route)}
+                  />
                 ))}
               </View>
             ))}
@@ -281,7 +325,12 @@ export default function RoutesScreen() {
         ) : (
           <View style={styles.routesList}>
             {ranked.map((route) => (
-              <RouteCard key={route.id} route={route} hideTitle />
+              <RouteCard
+                key={route.id}
+                route={route}
+                hideTitle
+                onPress={() => setSelectedRoute(route)}
+              />
             ))}
           </View>
         )}
@@ -295,6 +344,12 @@ export default function RoutesScreen() {
       />
 
       <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
+
+      <RouteDetailsModal
+        visible={!!selectedRoute}
+        route={selectedRoute}
+        onClose={() => setSelectedRoute(null)}
+      />
     </SafeAreaView>
   );
 }

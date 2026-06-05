@@ -15,7 +15,7 @@ ORS_API_KEY = os.environ.get("ORS_API_KEY", "")
 # In-memory geocoding cache to minimize external API calls.
 # Pre-seeded with common local test/demo locations so they work instantly even if Nominatim rate limits you locally!
 _GEOCODE_CACHE = {
-    "current location": (51.4988, -0.1749),
+    "current location": (51.4944, -0.1829),
     "imperial college london": (51.4988, -0.1749),
     "south kensington": (51.4941, -0.1730),
     "south kensington station": (51.4941, -0.1730),
@@ -91,6 +91,29 @@ async def geocode(place: str) -> tuple[float, float] | None:
             print(f"Nominatim geocoding error for '{place}': {e}")
             
     return None
+    
+async def get_osrm_geometry(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> list[list[float]]:
+    """Get detailed walking coordinates between two lat/lon points from OSRM directly."""
+    osrm_url = f"https://router.project-osrm.org/route/v1/foot/{from_lon},{from_lat};{to_lon},{to_lat}"
+    params = {
+        "overview": "full",
+        "geometries": "geojson",
+        "steps": "false",
+        "alternatives": "false"
+    }
+    headers = {"User-Agent": "CalmTravelApp/1.0 (sivat@uniwork.drp)"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(osrm_url, params=params, headers=headers)
+            if res.status_code == 200:
+                data = res.json()
+                if data.get("code") == "Ok" and data.get("routes"):
+                    geom = data["routes"][0].get("geometry", {})
+                    coords = geom.get("coordinates", [])
+                    return [[lat, lon] for lon, lat in coords]
+    except Exception as e:
+        print(f"Error fetching OSRM geometry directly: {e}")
+    return []
 
 
 async def get_walking_routes(origin: str, destination: str) -> list[dict]:
@@ -161,6 +184,10 @@ async def get_walking_routes(origin: str, destination: str) -> list[dict]:
                     if idx > 0:
                         summary_title += f" (Alt {idx})"
                         
+                    geom = feature.get("geometry", {})
+                    coords = geom.get("coordinates", [])
+                    path_coords = [[lat, lon] for lon, lat in coords] if coords else None
+
                     formatted_routes.append({
                         "source": "google",
                         "duration_mins": duration_mins,
@@ -178,6 +205,11 @@ async def get_walking_routes(origin: str, destination: str) -> list[dict]:
                                 "duration_mins": duration_mins,
                                 "distance_m": round(distance_m),
                                 "instruction": f"Walk via {summary_title}",
+                                "departure_lat": origin_lat,
+                                "departure_lon": origin_lon,
+                                "arrival_lat": dest_lat,
+                                "arrival_lon": dest_lon,
+                                "path_coords": path_coords,
                             }
                         ]
                     })
@@ -188,7 +220,8 @@ async def get_walking_routes(origin: str, destination: str) -> list[dict]:
     # 3. Graceful Fallback: Call OSRM public routing API
     osrm_url = f"https://router.project-osrm.org/route/v1/foot/{origin_lon},{origin_lat};{dest_lon},{dest_lat}"
     params = {
-        "overview": "false",
+        "overview": "full",
+        "geometries": "geojson",
         "steps": "false",
         "alternatives": "true"
     }
@@ -217,6 +250,10 @@ async def get_walking_routes(origin: str, destination: str) -> list[dict]:
             if not summary or summary.strip() == "":
                 summary = f"Walking Route Option {idx + 1}"
             
+            geom = r.get("geometry", {})
+            coords = geom.get("coordinates", [])
+            path_coords = [[lat, lon] for lon, lat in coords] if coords else None
+
             formatted_routes.append({
                 "source": "google",  # Keep 'google' as the source identifier so existing scoring / models line up perfectly
                 "duration_mins": duration_mins,
@@ -234,6 +271,11 @@ async def get_walking_routes(origin: str, destination: str) -> list[dict]:
                         "duration_mins": duration_mins,
                         "distance_m": round(distance_m),
                         "instruction": f"Walk via {summary}" if summary else "Walk to your destination",
+                        "departure_lat": origin_lat,
+                        "departure_lon": origin_lon,
+                        "arrival_lat": dest_lat,
+                        "arrival_lon": dest_lon,
+                        "path_coords": path_coords,
                     }
                 ]
             })

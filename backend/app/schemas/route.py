@@ -19,6 +19,11 @@ class LegOption(BaseModel):
     instruction: str
     stops: Optional[List[str]] = None
     connection_waiting_mins: Optional[int] = 0
+    departure_lat: Optional[float] = None
+    departure_lon: Optional[float] = None
+    arrival_lat: Optional[float] = None
+    arrival_lon: Optional[float] = None
+    path_coords: Optional[List[List[float]]] = None
 
 
 class RouteFeature(BaseModel):
