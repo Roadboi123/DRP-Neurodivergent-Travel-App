@@ -39,6 +39,8 @@ interface PresetsContextValue {
   selectPreset: (id: PresetId) => void;
   /** Edit one sensory dimension of a specific preset and persist. */
   setPresetValue: (id: PresetId, key: SensoryKey, level: SensitivityLevel) => void;
+  /** Rename a preset (e.g. "Preset 1" → "Good Day") and persist. */
+  setPresetName: (id: PresetId, name: string) => void;
 }
 
 const PresetsContext = createContext<PresetsContextValue | null>(null);
@@ -139,6 +141,17 @@ export function PresetsProvider({ children }: { children: ReactNode }) {
     [activeId, persist]
   );
 
+  const setPresetName = useCallback(
+    (id: PresetId, name: string) => {
+      setPresets((prev) => {
+        const next = prev.map((p) => (p.id === id ? { ...p, name } : p));
+        void persist(next, activeId);
+        return next;
+      });
+    },
+    [activeId, persist]
+  );
+
   const activePreset = useMemo(
     () => presets.find((p) => p.id === activeId) ?? presets[0],
     [presets, activeId]
@@ -159,8 +172,9 @@ export function PresetsProvider({ children }: { children: ReactNode }) {
       saveStatus,
       selectPreset,
       setPresetValue,
+      setPresetName,
     }),
-    [presets, activeId, values, loading, saveStatus, selectPreset, setPresetValue]
+    [presets, activeId, values, loading, saveStatus, selectPreset, setPresetValue, setPresetName]
   );
 
   return <PresetsContext.Provider value={value}>{children}</PresetsContext.Provider>;
@@ -180,6 +194,7 @@ export function usePresets(): PresetsContextValue {
       saveStatus: 'idle',
       selectPreset: () => {},
       setPresetValue: () => {},
+      setPresetName: () => {},
     }
   );
 }

@@ -28,12 +28,22 @@ export const SENSORY_META: Record<SensoryKey, { label: string; short: string; em
 /** The three fixed preset slots, in display order. */
 export const PRESET_IDS: PresetId[] = ['p1', 'p2', 'p3'];
 
-/** Fixed, non-editable display names for each slot. */
+/** Default per-slot names, used until the user renames a preset. */
 export const PRESET_NAMES: Record<PresetId, string> = {
   p1: 'Preset 1',
   p2: 'Preset 2',
   p3: 'Preset 3',
 };
+
+/** Max characters allowed for a user-chosen preset name. */
+export const PRESET_NAME_MAX_LENGTH = 24;
+
+/**
+ * The name to show for a preset: the user's chosen name, falling back to the
+ * slot default when it's blank.
+ */
+export const presetDisplayName = (preset: Preset): string =>
+  preset.name?.trim() ? preset.name.trim() : PRESET_NAMES[preset.id];
 
 /** A complete set of sensitivities (every dimension set) backing one preset. */
 export type PresetValues = Record<SensoryKey, SensitivityLevel>;

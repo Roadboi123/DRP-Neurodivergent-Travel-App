@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
-import { PRESET_NAMES } from '@/constants/presets';
+import { presetDisplayName } from '@/constants/presets';
 import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePresets } from '@/context/presets-context';
@@ -22,7 +22,7 @@ export function PresetSwitcher() {
             onPress={() => selectPreset(preset.id)}
             accessibilityRole="button"
             accessibilityState={{ selected }}
-            accessibilityLabel={`${PRESET_NAMES[preset.id]} preset`}
+            accessibilityLabel={`${presetDisplayName(preset)} preset`}
             style={({ pressed }) => [
               styles.chip,
               {
@@ -38,7 +38,7 @@ export function PresetSwitcher() {
                 { color: selected ? '#ffffff' : palette.textPrimary },
               ]}
               numberOfLines={1}>
-              {PRESET_NAMES[preset.id]}
+              {presetDisplayName(preset)}
             </Text>
           </Pressable>
         );
