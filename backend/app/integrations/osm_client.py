@@ -90,6 +90,7 @@ async def geocode(place: str) -> tuple[float, float] | None:
         except Exception as e:
             print(f"Nominatim geocoding error for '{place}': {e}")
             
+    return None
     
 async def get_osrm_geometry(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> list[list[float]]:
     """Get detailed walking coordinates between two lat/lon points from OSRM directly."""
