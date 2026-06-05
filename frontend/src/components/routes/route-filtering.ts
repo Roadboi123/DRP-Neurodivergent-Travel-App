@@ -80,12 +80,18 @@ export function compareByMode(a: RouteOption, b: RouteOption, mode: BestByMode):
   if (mode === 'speed') {
     return a.duration - b.duration;
   }
-  const byScore = sensoryScoreOf(a) - sensoryScoreOf(b);
-  if (byScore !== 0) {
-    return byScore;
+  // Primary sort by match percentage (higher is better)
+  const aMatch = a.match_percentage ?? 100;
+  const bMatch = b.match_percentage ?? 100;
+  if (aMatch !== bMatch) {
+    return bMatch - aMatch;
   }
-  // Tie-break preference ranking by the higher match percentage.
-  return (b.match_percentage ?? 0) - (a.match_percentage ?? 0);
+  // If same preference match, fall back to speed/duration (lower is better/faster)
+  if (a.duration !== b.duration) {
+    return a.duration - b.duration;
+  }
+  // Finally, tie-break by sensory score (lower is calmer/better)
+  return sensoryScoreOf(a) - sensoryScoreOf(b);
 }
 
 /**

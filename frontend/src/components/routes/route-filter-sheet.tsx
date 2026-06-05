@@ -111,10 +111,9 @@ export function RouteFilterSheet({
 
 const styles = StyleSheet.create({
   backdrop: {
-    // No dark scrim (clashes with the bright gradient); the ink-bordered sheet
-    // defines itself. Still full-screen so tapping outside dismisses.
+    // Dim the background screen so the sheet stands out and text is easy to read
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(29, 28, 28, 0.65)',
     justifyContent: 'flex-end',
   },
   sheet: {

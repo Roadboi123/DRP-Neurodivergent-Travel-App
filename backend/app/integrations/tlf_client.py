@@ -16,6 +16,16 @@ _CROWDING_LOCKS: dict[str, asyncio.Lock] = {}
 
 
 def _parse_leg(leg: dict) -> dict:
+    path = leg.get("path", {})
+    line_string_str = path.get("lineString")
+    path_coords = None
+    if line_string_str:
+        try:
+            import json
+            path_coords = json.loads(line_string_str)
+        except Exception as e:
+            print(f"Error parsing TfL lineString: {e}")
+
     return {
         "mode":          leg.get("mode", {}).get("name", "unknown"),
         "departure":     leg.get("departurePoint", {}).get("commonName", ""),
@@ -34,6 +44,7 @@ def _parse_leg(leg: dict) -> dict:
                             .get("lineIdentifier", {})
                             .get("name", "") if leg.get("routeOptions") else "",
         "stops":         [sp.get("name") for sp in leg.get("path", {}).get("stopPoints", [])],
+        "path_coords":   path_coords,
     }
 
 
