@@ -28,7 +28,7 @@ import {
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
-import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
@@ -62,6 +62,7 @@ function statusChips(filters: RouteFilters): string[] {
 export default function RoutesScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const semantic = getSemanticColors(isDark);
   const routesService = useRoutesService();
   const { username, isLoggedIn } = useAuth();
   const { values: prefValues } = usePresets();
@@ -232,15 +233,15 @@ export default function RoutesScreen() {
           style={[
             styles.loginWarningBanner,
             {
-              backgroundColor: isDark ? '#2B2620' : '#FFF9F3',
-              borderColor: isDark ? '#5c4320' : '#FFE0B2',
+              backgroundColor: semantic.warningSurface,
+              borderColor: semantic.warningBorder,
             }
           ]}
           activeOpacity={0.8}
           accessibilityLabel="Click to log in and personalize routes"
         >
-          <Ionicons name="warning" size={16} color="#FF9800" />
-          <Text style={[styles.loginWarningText, { color: isDark ? '#FFB74D' : '#E65100' }]}>
+          <Ionicons name="warning" size={16} color={semantic.warningIcon} />
+          <Text style={[styles.loginWarningText, { color: semantic.warningText }]}>
             Viewing generic routes. <Text style={{ textDecorationLine: 'underline', fontWeight: 'bold' }}>Log in</Text> to personalize.
           </Text>
         </TouchableOpacity>
@@ -290,7 +291,7 @@ export default function RoutesScreen() {
 
         {loading ? (
           <View style={styles.loadingSpinner}>
-            <ActivityIndicator size="large" color="#4A90E2" />
+            <ActivityIndicator size="large" color={palette.textPrimary} />
             <Text style={[styles.loadingText, { color: palette.textSecondary }]}>
               Calculating calmest routes...
             </Text>

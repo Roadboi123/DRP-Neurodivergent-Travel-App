@@ -5,7 +5,7 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { RouteOption } from '@/types/route';
 
@@ -19,7 +19,8 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
-  const linkColor = isDark ? '#64b5f6' : '#003688';
+  const semantic = getSemanticColors(isDark);
+  const linkColor = semantic.link;
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
   const [isExpanded, setIsExpanded] = useState(false);
@@ -443,7 +444,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
           </View>
           <TouchableOpacity
             onPress={onClose}
-            style={[styles.closeBtn, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE', borderColor: palette.border }]}
+            style={[styles.closeBtn, { backgroundColor: semantic.neutralSurface, borderColor: palette.border }]}
             accessibilityLabel="Close detailed route overlay"
           >
             <Ionicons name="close" size={20} color={palette.textPrimary} />
@@ -560,7 +561,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                   <SensoryMeter level={route.smell} label="Smell" />
                 </View>
                 {route.sensory_description ? (
-                  <Text style={[styles.sensoryDescText, { color: palette.textSecondary }]}>
+                  <Text style={[styles.sensoryDescText, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
                     {route.sensory_description}
                   </Text>
                 ) : null}
@@ -594,7 +595,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
                         {/* Collapsible intermediate stops list */}
                         {leg.stops && leg.stops.length > 0 && (
-                          <View style={styles.stopsDropdown}>
+                          <View style={[styles.stopsDropdown, { borderLeftColor: linkColor }]}>
                             <TouchableOpacity
                               activeOpacity={0.7}
                               onPress={() => toggleStops(lIdx)}
@@ -625,9 +626,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
                         {/* Platform transfer / connection wait times */}
                         {leg.connection_waiting_mins && leg.connection_waiting_mins > 0 ? (
-                          <View style={[styles.waitWarningCard, { backgroundColor: isDark ? '#35241C' : '#FFF9F3', borderColor: isDark ? '#5C3820' : '#FFE0B2' }]}>
-                            <Ionicons name="warning" size={13} color="#FF9800" />
-                            <Text style={[styles.waitWarningText, { color: isDark ? '#FFB74D' : '#E65100' }]}>
+                          <View style={[styles.waitWarningCard, { backgroundColor: semantic.warningSurface, borderColor: semantic.warningBorder }]}>
+                            <Ionicons name="warning" size={13} color={semantic.warningIcon} />
+                            <Text style={[styles.waitWarningText, { color: semantic.warningText }]}>
                               {leg.connection_waiting_mins} min platform wait / transfer.
                             </Text>
                           </View>
@@ -808,7 +809,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 6,
     borderTopWidth: 1,
-    borderTopColor: '#DDD',
     paddingTop: 8,
   },
   timelineList: {
@@ -857,7 +857,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingLeft: 8,
     borderLeftWidth: 2,
-    borderLeftColor: '#4A90E2',
     gap: 3,
   },
   stopsDropdownHeader: {
