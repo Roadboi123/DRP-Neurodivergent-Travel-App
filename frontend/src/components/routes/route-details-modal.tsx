@@ -33,6 +33,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
   const panY = React.useRef(new Animated.Value(MAX_TRANSLATE_Y)).current;
   const lastTranslateY = React.useRef(MAX_TRANSLATE_Y);
+  // Current scroll offset of the inner list, so a downward drag at the very top
+  // collapses the sheet instead of being swallowed by the ScrollView.
+  const scrollOffsetY = React.useRef(0);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -75,12 +78,27 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
     });
   };
 
+  // A drag is "the sheet's" when it's a clear vertical move AND either we're
+  // pulling the sheet down while the list is already scrolled to the top, or
+  // pulling it up while it isn't fully expanded. Everything else stays with the
+  // inner ScrollView so normal content scrolling still works.
+  const shouldClaimDrag = (dy: number, dx: number) => {
+    const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+    if (!verticalEnough) return false;
+    if (dy > 0) return scrollOffsetY.current <= 0; // dragging down at the top → collapse
+    return lastTranslateY.current > 1; // dragging up while not fully expanded → expand
+  };
+
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dy) > 5;
-      },
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      // Capture phase: intercept the gesture before the inner ScrollView when it
+      // is genuinely the sheet being dragged (fixes the intermittent swipe-down).
+      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         panY.setOffset(lastTranslateY.current);
         panY.setValue(0);
@@ -507,10 +525,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
           )}
 
           {/* Timeline sheet panel overlapping the bottom of the map */}
-          <Animated.View style={[
-            styles.sheetPanel, 
-            { 
-              backgroundColor: palette.surface, 
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={[
+            styles.sheetPanel,
+            {
+              backgroundColor: palette.surface,
               borderColor: palette.border,
               height: SHEET_HEIGHT,
               position: 'absolute',
@@ -520,9 +540,8 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               transform: [{ translateY: panY }]
             }
           ]}>
-            {/* Tappable and draggable header wrapper */}
+            {/* Tappable header wrapper (drag is handled by the sheet itself) */}
             <View
-              {...panResponder.panHandlers}
               style={styles.sheetHeaderTouch}
             >
               <TouchableOpacity
@@ -549,7 +568,14 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                scrollOffsetY.current = e.nativeEvent.contentOffset.y;
+              }}>
               {/* Sensory meters dashboard */}
               <View style={[styles.modalSensoryContainer, { borderColor: palette.border, backgroundColor: palette.surface }]}>
                 <Text style={[styles.sensoryHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>

@@ -74,7 +74,7 @@ export default function RoutesScreen() {
 
   // Input states
   const [startLoc, setStartLoc] = useState('Current Location');
-  const [endLoc, setEndLoc] = useState('Imperial College London');
+  const [endLoc, setEndLoc] = useState('');
   const [loading, setLoading] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
 
@@ -103,6 +103,12 @@ export default function RoutesScreen() {
       fetchCurrentLocation();
     }
   }, [isFocused, startLoc, coords]);
+
+  // Google-Maps-style swap of the start and end locations.
+  const handleSwapLocations = () => {
+    setStartLoc(endLoc);
+    setEndLoc(startLoc);
+  };
 
   // Filter states
   const [filters, setFilters] = useState<RouteFilters>(DEFAULT_FILTERS);
@@ -224,6 +230,7 @@ export default function RoutesScreen() {
         loading={loading}
         onStartChange={setStartLoc}
         onEndChange={setEndLoc}
+        onSwap={handleSwapLocations}
       />
 
       {/* Personalization warning bar */}
@@ -298,9 +305,15 @@ export default function RoutesScreen() {
           </View>
         ) : pool.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="map" size={48} color={palette.textPrimary} />
+            <Ionicons
+              name={!endLoc.trim() ? 'location-outline' : 'map'}
+              size={48}
+              color={palette.textPrimary}
+            />
             <Text style={[styles.emptyText, { color: palette.textPrimary }]}>
-              {routes.length === 0
+              {!endLoc.trim()
+                ? 'Enter a destination to see calm routes.'
+                : routes.length === 0
                 ? 'No routes found. Please check location inputs.'
                 : 'No routes are air conditioned throughout. Try relaxing the A/C filter.'}
             </Text>
