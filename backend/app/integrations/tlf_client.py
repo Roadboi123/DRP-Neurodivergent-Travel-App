@@ -244,16 +244,16 @@ async def get_routes(
         fetch_preference("LeastTime", {"mode": "bus"})
     )
     
-    # Combine and de-duplicate based on departs_at, arrives_at and leg signatures
+    # Combine and de-duplicate based on physical leg signatures to avoid showing
+    # multiple schedule variations of the exact same train/line combinations
     combined = []
-    seen_keys = set()
+    seen_sigs = set()
     
     for j in results_least_time + results_least_interchange + results_bus_only:
         leg_sig = tuple((leg.get("mode"), leg.get("line"), leg.get("departure"), leg.get("arrival")) for leg in j.get("legs", []))
-        key = (j.get("departs_at"), j.get("arrives_at"), leg_sig)
         
-        if key not in seen_keys:
-            seen_keys.add(key)
+        if leg_sig not in seen_sigs:
+            seen_sigs.add(leg_sig)
             combined.append(j)
             
     # Filter out journeys with short/useless bus legs (<= 2 minutes)

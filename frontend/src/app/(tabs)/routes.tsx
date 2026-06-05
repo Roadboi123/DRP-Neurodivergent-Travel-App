@@ -38,7 +38,7 @@ import { usePresets } from '@/context/presets-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
 
 // How many routes to show in the ungrouped (Google-Maps-style) list.
-const MAX_RESULTS = 5;
+const MAX_RESULTS = 8;
 
 const SORT_TABS: SegmentOption<SortMode>[] = [
   { value: 'preference', label: 'Preference', icon: 'heart-outline' },
