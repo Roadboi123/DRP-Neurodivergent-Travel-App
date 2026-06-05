@@ -15,6 +15,7 @@ import {
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
+import { PresetNameEditor } from '@/components/preferences/preset-name-editor';
 import { GradientBackground } from '@/components/ui/gradient-background';
 import { HeaderNav } from '@/components/ui/header-nav';
 import { Fonts, getPalette, hardShadow } from '@/constants/theme';
@@ -30,6 +31,7 @@ export default function UserPreferencesScreen() {
   const { values, activeId, loading, saveStatus, setPresetValue } = usePresets();
   const [guideVisible, setGuideVisible] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -101,10 +103,31 @@ export default function UserPreferencesScreen() {
           </View>
         ) : (
           <>
-            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-              Select preset profile
-            </Text>
+            <View style={styles.presetHeaderRow}>
+              <Text style={[styles.sectionTitle, { color: palette.textPrimary, marginBottom: 0 }]}>
+                Select preset profile
+              </Text>
+              <TouchableOpacity
+                onPress={() => setRenaming((r) => !r)}
+                accessibilityRole="button"
+                accessibilityLabel={renaming ? 'Finish renaming presets' : 'Rename presets'}
+                style={[
+                  styles.renameButton,
+                  { backgroundColor: palette.surface, borderColor: palette.border },
+                ]}>
+                <Ionicons
+                  name={renaming ? 'checkmark' : 'pencil'}
+                  size={13}
+                  color={palette.textPrimary}
+                />
+                <Text style={[styles.renameButtonLabel, { color: palette.textPrimary }]}>
+                  {renaming ? 'Done' : 'Edit names'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <PresetSwitcher />
+
+            {renaming && <PresetNameEditor />}
 
             <View style={[styles.loggedInHeaderRow, styles.rowsHeader]}>
               <Text style={[styles.sectionTitle, { color: palette.textPrimary, marginBottom: 0 }]}>
@@ -192,6 +215,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     marginBottom: 12,
   },
+
+  presetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  } as ViewStyle,
+
+  renameButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 2,
+    ...hardShadow(3),
+  } as ViewStyle,
+
+  renameButtonLabel: {
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  } as TextStyle,
 
   statusText: {
     fontSize: 13,
