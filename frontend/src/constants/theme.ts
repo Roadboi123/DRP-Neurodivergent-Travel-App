@@ -104,6 +104,94 @@ const DARK_ACCENTS: Accents = {
 export const getAccents = (isDark: boolean): Accents => (isDark ? DARK_ACCENTS : LIGHT_ACCENTS);
 
 /**
+ * Official TfL line liveries, used to colour transit legs (route-card timeline,
+ * route-details nodes, map polylines). These are deliberate transport-brand
+ * colours — not Wero accents — so they live in one named token instead of being
+ * scattered as literals across components. Keyed by a substring of the line
+ * name; `resolveLineColor` matches case-insensitively.
+ */
+export const TFL_LINE_COLORS: Record<string, { bg: string; text: string }> = {
+  central: { bg: '#E32017', text: '#FFFFFF' },
+  district: { bg: '#00782A', text: '#FFFFFF' },
+  northern: { bg: '#000000', text: '#FFFFFF' },
+  victoria: { bg: '#00A0E2', text: '#FFFFFF' },
+  jubilee: { bg: '#868F98', text: '#FFFFFF' },
+  piccadilly: { bg: '#003688', text: '#FFFFFF' },
+  bakerloo: { bg: '#894E24', text: '#FFFFFF' },
+  circle: { bg: '#FFD300', text: '#000000' },
+  hammersmith: { bg: '#F3A9C8', text: '#000000' },
+  metropolitan: { bg: '#9B005A', text: '#FFFFFF' },
+  elizabeth: { bg: '#7156A5', text: '#FFFFFF' },
+  // New London Overground line names (Nov 2024). Each TfL livery is distinct;
+  // checked before the generic `overground` key below.
+  mildmay: { bg: '#0071BC', text: '#FFFFFF' },
+  lioness: { bg: '#FAA61A', text: '#000000' },
+  weaver: { bg: '#823A62', text: '#FFFFFF' },
+  suffragette: { bg: '#18A95D', text: '#000000' },
+  windrush: { bg: '#DC241F', text: '#FFFFFF' },
+  liberty: { bg: '#61686B', text: '#FFFFFF' },
+  overground: { bg: '#E86300', text: '#FFFFFF' },
+  dlr: { bg: '#00AFAD', text: '#FFFFFF' },
+  tram: { bg: '#5FB526', text: '#000000' },
+};
+
+/** Fallback livery for an unknown rail line (deep-blue, ink-readable). */
+export const TFL_LINE_FALLBACK = { bg: '#0D47A1', text: '#FFFFFF' } as const;
+
+/**
+ * Resolve a line name to its TfL livery, or `null` if unrecognised. Insertion
+ * order matters: specific new-Overground names are checked before the generic
+ * `overground` key.
+ */
+export const resolveLineColor = (line: string): { bg: string; text: string } | null => {
+  const l = (line || '').toLowerCase();
+  if (!l) {
+    return null;
+  }
+  for (const key of Object.keys(TFL_LINE_COLORS)) {
+    if (l.includes(key)) {
+      return TFL_LINE_COLORS[key];
+    }
+  }
+  return null;
+};
+
+/**
+ * Scheme-aware semantic colours for recurring non-accent UI: warning banners
+ * (platform-wait card, login prompt), hyperlinks, and neutral chip/button
+ * surfaces. Centralised so these stop being copy-pasted Material hex per file.
+ */
+export type SemanticColors = {
+  warningSurface: string;
+  warningBorder: string;
+  warningText: string;
+  warningIcon: string;
+  link: string;
+  neutralSurface: string;
+};
+
+const LIGHT_SEMANTIC: SemanticColors = {
+  warningSurface: '#FFF9F3',
+  warningBorder: '#FFE0B2',
+  warningText: '#E65100',
+  warningIcon: '#FF9800',
+  link: '#003688',
+  neutralSurface: '#F0F0EE',
+};
+
+const DARK_SEMANTIC: SemanticColors = {
+  warningSurface: '#2E241C',
+  warningBorder: '#5C3820',
+  warningText: '#FFB74D',
+  warningIcon: '#FF9800',
+  link: '#64B5F6',
+  neutralSurface: '#2E3543',
+};
+
+export const getSemanticColors = (isDark: boolean): SemanticColors =>
+  isDark ? DARK_SEMANTIC : LIGHT_SEMANTIC;
+
+/**
  * The signature Wero shadow: a hard, un-blurred offset block in ink. On web
  * (react-native-web) this maps to `box-shadow: 0 {offset}px 0 #1d1c1c`. Use a
  * smaller offset (e.g. 2) for the pressed state.

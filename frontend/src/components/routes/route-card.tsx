@@ -9,33 +9,23 @@ import {
   getAccents,
   getPalette,
   hardShadow,
+  resolveLineColor,
+  TFL_LINE_FALLBACK,
   type Accents,
   type ThemePalette,
 } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { RouteOption } from '@/types/route';
 
-/** Group heading + accent colors derived from a route's classification. */
-function getGroupStyling(type: RouteOption['type'], isDark: boolean) {
+/** Group heading derived from a route's classification. */
+function getGroupTitle(type: RouteOption['type']): string {
   if (type === 'best') {
-    return {
-      title: 'Best by preference',
-      badgeColor: isDark ? '#1C3224' : '#E8F5E9',
-      badgeTextColor: isDark ? '#66BB6A' : '#2E7D32',
-    };
+    return 'Best by preference';
   }
   if (type === 'quickest') {
-    return {
-      title: 'Quickest',
-      badgeColor: isDark ? '#351C1C' : '#FFEBEE',
-      badgeTextColor: isDark ? '#EF5350' : '#C62828',
-    };
+    return 'Quickest';
   }
-  return {
-    title: 'Suggested',
-    badgeColor: isDark ? '#2E3543' : '#F0F0EE',
-    badgeTextColor: isDark ? '#CCC' : '#666',
-  };
+  return 'Suggested';
 }
 
 // Wero "word-bg" highlight: scheme-aware fill with on-surface text + a palette border.
@@ -57,6 +47,15 @@ function matchBadgeColors(
   return { bg: accents.pinkSoft, text };
 }
 
+/** Title-case a raw mode string for display ("national-rail" → "National Rail"). */
+function prettifyMode(mode: string): string {
+  return mode
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export function getLegUIProps(
   mode: string,
   line: string,
@@ -64,12 +63,15 @@ export function getLegUIProps(
   accents: Accents
 ) {
   const modeLower = mode.toLowerCase();
-  const lineLower = line ? line.toLowerCase() : '';
-  
-  let iconName: any = 'walk';
-  let bgColor: string = accents.cyan;
-  let textColor: string = BRAND.ink;
-  let displayName = 'Walk';
+
+  // Walking is the only mode that should ever read as "Walk". Every other mode
+  // is transit and must keep its line/mode name — mirrors the backend route
+  // naming in services/routes.py (line || mode.capitalize()). Falling through
+  // to "Walk" was why Overground/DLR legs (e.g. the Mildmay line) showed as a
+  // walk on the route card while the details screen read correctly.
+  if (modeLower === 'walking' || modeLower === 'walk') {
+    return { iconName: 'walk' as any, bgColor: accents.cyan, textColor: BRAND.ink, displayName: 'Walk' };
+  }
 
   const isBusLike =
     modeLower === 'bus' ||
@@ -78,74 +80,51 @@ export function getLegUIProps(
     modeLower === 'replacement-bus';
 
   if (isBusLike) {
-    iconName = 'bus';
-    bgColor = accents.orange;
-    textColor = BRAND.ink;
-    displayName = line
+    const displayName = line
       ? `Bus ${line}`
       : instruction
       ? instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '')
       : 'Bus';
-  } else if (
-    modeLower === 'tube' ||
-    modeLower === 'subway' ||
-    modeLower === 'underground' ||
-    modeLower.includes('elizabeth')
-  ) {
-    iconName = 'subway';
-    displayName = line || 'Elizabeth line';
-    
-    if (lineLower.includes('central')) {
-      bgColor = '#E32017';
-      textColor = '#FFF';
-    } else if (lineLower.includes('district')) {
-      bgColor = '#00782A';
-      textColor = '#FFF';
-    } else if (lineLower.includes('northern')) {
-      bgColor = '#000000';
-      textColor = '#FFF';
-    } else if (lineLower.includes('victoria')) {
-      bgColor = '#00A0E2';
-      textColor = '#FFF';
-    } else if (lineLower.includes('jubilee')) {
-      bgColor = '#868F98';
-      textColor = '#FFF';
-    } else if (lineLower.includes('piccadilly')) {
-      bgColor = '#003688';
-      textColor = '#FFF';
-    } else if (lineLower.includes('bakerloo')) {
-      bgColor = '#894E24';
-      textColor = '#FFF';
-    } else if (lineLower.includes('circle')) {
-      bgColor = '#FFD300';
-      textColor = '#000';
-    } else if (lineLower.includes('hammersmith') || lineLower.includes('city')) {
-      bgColor = '#F3A9C8';
-      textColor = '#000';
-    } else if (lineLower.includes('metropolitan')) {
-      bgColor = '#9B005A';
-      textColor = '#FFF';
-    } else if (lineLower.includes('elizabeth')) {
-      bgColor = '#7156A5';
-      textColor = '#FFF';
-    } else if (lineLower.includes('overground')) {
-      bgColor = '#E86300';
-      textColor = '#FFF';
-    } else if (lineLower.includes('dlr')) {
-      bgColor = '#00AFAD';
-      textColor = '#FFF';
-    } else {
-      bgColor = '#0D47A1';
-      textColor = '#FFF';
-    }
-  } else if (modeLower === 'train' || modeLower === 'national-rail') {
-    iconName = 'train';
-    displayName = line || 'Train';
-    bgColor = accents.green;
-    textColor = BRAND.ink;
+    return { iconName: 'bus' as any, bgColor: accents.orange, textColor: BRAND.ink, displayName };
   }
 
-  return { iconName, bgColor, textColor, displayName };
+  // Resolve the official transport livery from the line name first, then the
+  // mode (so a mode-only "overground"/"dlr" leg still gets the right colour).
+  const livery = resolveLineColor(line) ?? resolveLineColor(modeLower) ?? TFL_LINE_FALLBACK;
+
+  const isUnderground =
+    modeLower === 'tube' || modeLower === 'subway' || modeLower === 'underground';
+  const isElizabeth = modeLower.includes('elizabeth');
+  const isOverground = modeLower === 'overground';
+  const isDlr = modeLower === 'dlr';
+  const isTram = modeLower === 'tram';
+  const isTrain = modeLower === 'train' || modeLower === 'national-rail';
+
+  let iconName: any = 'train';
+  let displayName: string;
+
+  if (isUnderground || isElizabeth) {
+    iconName = 'subway';
+    displayName = line || (isElizabeth ? 'Elizabeth line' : 'Underground');
+  } else if (isOverground) {
+    iconName = 'train';
+    displayName = line || 'Overground';
+  } else if (isDlr) {
+    iconName = 'subway';
+    displayName = line || 'DLR';
+  } else if (isTram) {
+    iconName = 'train';
+    displayName = line || 'Tram';
+  } else if (isTrain) {
+    iconName = 'train';
+    displayName = line || 'Train';
+  } else {
+    // Unknown transit mode: keep it labelled as transit, never as a walk.
+    iconName = 'train';
+    displayName = line || prettifyMode(mode) || 'Transit';
+  }
+
+  return { iconName, bgColor: livery.bg, textColor: livery.text, displayName };
 }
 
 function RouteCardBase({
@@ -162,14 +141,14 @@ function RouteCardBase({
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
-  const group = getGroupStyling(route.type, isDark);
+  const groupTitle = getGroupTitle(route.type);
   const matchColors = matchBadgeColors(route.match_percentage, accents, palette);
 
   return (
     <View style={styles.routeGroupWrapper}>
       {!hideTitle && (
         <Text style={[styles.groupHeaderLabel, { color: palette.textPrimary }]}>
-          {customTitle || group.title}
+          {customTitle || groupTitle}
           {route.sensory_score != null && (
             <Text style={{ fontSize: 11, fontWeight: '400', color: palette.textMuted }}>
               {' '}
@@ -206,7 +185,7 @@ function RouteCardBase({
                         <Ionicons
                           name="chevron-forward"
                           size={12}
-                          color={isDark ? '#555' : '#BBB'}
+                          color={palette.textMuted}
                           style={styles.timelineArrow}
                         />
                       )}

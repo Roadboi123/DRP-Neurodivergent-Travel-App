@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { getPalette, hardShadow } from '@/constants/theme';
+import { getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useAuth } from '@/context/auth-context';
@@ -15,6 +15,7 @@ export interface HeaderNavProps {
 export function HeaderNav({ onProfilePress }: HeaderNavProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
+  const accents = getAccents(isDark);
   const { isLoggedIn } = useAuth();
   const btnStyle = [
     styles.iconBtn,
@@ -48,9 +49,9 @@ export function HeaderNav({ onProfilePress }: HeaderNavProps) {
             <Ionicons
               name={isLoggedIn ? "person" : "person-outline"}
               size={18}
-              color={isLoggedIn ? "#E91E63" : palette.textPrimary}
+              color={isLoggedIn ? accents.pink : palette.textPrimary}
             />
-            {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: palette.surface }]} />}
+            {isLoggedIn && <View style={[styles.profileActiveDot, { backgroundColor: accents.green, borderColor: palette.surface }]} />}
           </TouchableOpacity>
         )}
       </View>
@@ -92,7 +93,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#2E7D32',
     borderWidth: 1.5,
   },
 });

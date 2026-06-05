@@ -2,17 +2,22 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { BRAND, Fonts, getAccents, getPalette, hardShadow, type Accents } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const SEVERITY_COLORS: Record<WarningItem['severity'], string> = {
-  high: '#FF4D4D',
-  medium: '#FF944D',
-  info: '#4DA6FF',
-};
+/** Wero severity fills (ink icon sits on the bright accent, per the design system). */
+function severityColor(severity: WarningItem['severity'], accents: Accents): string {
+  if (severity === 'high') {
+    return accents.pink;
+  }
+  if (severity === 'medium') {
+    return accents.orange;
+  }
+  return accents.cyan;
+}
 
 export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
   const isDark = useColorScheme() === 'dark';
@@ -55,8 +60,8 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
           {warnings.map((w, index) => (
             <View key={w.id}>
               <View style={styles.warningItemRow}>
-                <View style={[styles.warningBullet, { backgroundColor: SEVERITY_COLORS[w.severity] }]}>
-                  <Ionicons name={w.icon as IoniconName} size={14} color="#FFF" />
+                <View style={[styles.warningBullet, { backgroundColor: severityColor(w.severity, accents), borderColor: palette.border }]}>
+                  <Ionicons name={w.icon as IoniconName} size={14} color={BRAND.ink} />
                 </View>
                 <View style={styles.warningItemText}>
                   <Text style={[styles.warningItemTitle, { color: palette.textPrimary }]}>
@@ -71,7 +76,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
                 <View
                   style={[
                     styles.warningSeparator,
-                    { backgroundColor: isDark ? '#2E3543' : '#F0EEED' },
+                    { backgroundColor: palette.divider },
                   ]}
                 />
               )}
@@ -125,6 +130,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },

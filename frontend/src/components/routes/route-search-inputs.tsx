@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface RouteSearchInputsProps {
@@ -21,7 +21,8 @@ export function RouteSearchInputs({
 }: RouteSearchInputsProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const placeholderColor = isDark ? '#555' : '#999';
+  const accents = getAccents(isDark);
+  const placeholderColor = palette.textMuted;
 
   return (
     <View style={styles.headerSpacer}>
@@ -34,8 +35,8 @@ export function RouteSearchInputs({
         {/* Start Location Input */}
         <View style={styles.inputRow}>
           <View style={styles.inputIconContainer}>
-            <View style={[styles.dotCircle, { backgroundColor: '#4A90E2' }]} />
-            <View style={styles.dotLine} />
+            <View style={[styles.dotCircle, { backgroundColor: accents.green, borderColor: palette.border }]} />
+            <View style={[styles.dotLine, { backgroundColor: palette.divider }]} />
           </View>
           <View style={styles.inputTextContainer}>
             <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>Start Location</Text>
@@ -56,7 +57,7 @@ export function RouteSearchInputs({
         {/* End Location Input */}
         <View style={styles.inputRow}>
           <View style={styles.inputIconContainer}>
-            <Ionicons name="location" size={20} color="#E04F5F" />
+            <Ionicons name="location" size={20} color={accents.pink} />
           </View>
           <View style={styles.inputTextContainer}>
             <Text style={[styles.fieldLabel, { color: palette.textPrimary }]}>End Destination</Text>
@@ -127,11 +128,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+    borderWidth: 1,
   },
   dotLine: {
     width: 2,
     height: 24,
-    backgroundColor: '#CCC',
     position: 'absolute',
     bottom: -22,
   },
