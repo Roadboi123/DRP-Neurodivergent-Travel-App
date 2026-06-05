@@ -90,10 +90,23 @@ export function getLegUIProps(
     modeLower === 'tube' ||
     modeLower === 'subway' ||
     modeLower === 'underground' ||
-    modeLower.includes('elizabeth')
+    modeLower === 'overground' ||
+    modeLower === 'dlr' ||
+    modeLower.includes('elizabeth') ||
+    lineLower.includes('overground') ||
+    lineLower.includes('elizabeth') ||
+    lineLower.includes('dlr')
   ) {
     iconName = 'subway';
-    displayName = line || 'Elizabeth line';
+    displayName = line || (
+      modeLower === 'overground' || lineLower.includes('overground')
+        ? 'London Overground'
+        : modeLower === 'dlr' || lineLower.includes('dlr')
+        ? 'DLR'
+        : modeLower.includes('elizabeth') || lineLower.includes('elizabeth')
+        ? 'Elizabeth line'
+        : 'Underground'
+    );
     
     if (lineLower.includes('central')) {
       bgColor = '#E32017';
@@ -128,10 +141,10 @@ export function getLegUIProps(
     } else if (lineLower.includes('elizabeth')) {
       bgColor = '#7156A5';
       textColor = '#FFF';
-    } else if (lineLower.includes('overground')) {
+    } else if (lineLower.includes('overground') || modeLower === 'overground') {
       bgColor = '#E86300';
       textColor = '#FFF';
-    } else if (lineLower.includes('dlr')) {
+    } else if (lineLower.includes('dlr') || modeLower === 'dlr') {
       bgColor = '#00AFAD';
       textColor = '#FFF';
     } else {
