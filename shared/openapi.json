@@ -753,6 +753,45 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WarningItemSchema": {
+        "description": "Client-facing live warning item schema, filtered by user sensory sensitivities.",
+        "properties": {
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "high",
+              "medium",
+              "info"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "desc",
+          "severity",
+          "icon"
+        ],
+        "title": "WarningItemSchema",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1162,6 +1201,82 @@
           }
         ],
         "summary": "Get Routes",
+        "tags": [
+          "routes"
+        ]
+      }
+    },
+    "/routes/warnings": {
+      "get": {
+        "description": "Return live warnings tailored to the user's sensory sensitivities.",
+        "operationId": "get_routes_warnings_routes_warnings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "username",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Username"
+            }
+          },
+          {
+            "in": "query",
+            "name": "generic",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": false,
+              "title": "Generic"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WarningItemSchema"
+                  },
+                  "title": "Response Get Routes Warnings Routes Warnings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Routes Warnings",
         "tags": [
           "routes"
         ]

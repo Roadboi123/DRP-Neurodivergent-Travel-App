@@ -32,7 +32,7 @@ import { Fonts, getPalette, hardShadow } from '@/constants/theme';
 import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
-import type { RouteOption } from '@/types/route';
+import type { RouteOption, WarningItem } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
@@ -110,12 +110,36 @@ export default function RoutesScreen() {
   // Routes state
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
+  const [warnings, setWarnings] = useState<WarningItem[]>([]);
 
   // Hydration fix
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Fetch warnings dynamically
+  useEffect(() => {
+    let active = true;
+    async function fetchWarnings() {
+      if (!isFocused) return;
+      try {
+        const data = await routesService.getWarnings(username, false);
+        if (active) {
+          setWarnings(data);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch live warnings:', error);
+        if (active) {
+          setWarnings([]);
+        }
+      }
+    }
+    fetchWarnings();
+    return () => {
+      active = false;
+    };
+  }, [username, routesService, isFocused]);
 
   // Fetch routes from the backend (debounced) with preference scoring
   useEffect(() => {
@@ -225,7 +249,7 @@ export default function RoutesScreen() {
       <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Warnings Banner */}
-        <WarningsPanel />
+        <WarningsPanel warnings={warnings} />
 
         {/* Sort tab (Preference | Speed) + Filters button */}
         <View style={styles.controlsRow}>

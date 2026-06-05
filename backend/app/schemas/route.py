@@ -65,3 +65,12 @@ class RouteOption(BaseModel):
     # Always populated by the route service before the response is built.
     type: RouteType
 
+
+class WarningItemSchema(BaseModel):
+    """Client-facing live warning item schema, filtered by user sensory sensitivities."""
+    id: str
+    title: str
+    desc: str
+    severity: Literal["high", "medium", "info"]
+    icon: str
+
