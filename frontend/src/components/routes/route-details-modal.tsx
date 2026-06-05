@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, Modal, PanResponder, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
@@ -23,6 +23,109 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Bottom Sheet animations and dimensions
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
+  const COLLAPSED_HEIGHT = 105;
+  const MAX_TRANSLATE_Y = SHEET_HEIGHT - COLLAPSED_HEIGHT;
+
+  const panY = React.useRef(new Animated.Value(MAX_TRANSLATE_Y)).current;
+  const lastTranslateY = React.useRef(MAX_TRANSLATE_Y);
+
+  React.useEffect(() => {
+    const listenerId = panY.addListener(({ value }) => {
+      lastTranslateY.current = value;
+    });
+    return () => {
+      panY.removeListener(listenerId);
+    };
+  }, [panY]);
+
+  React.useEffect(() => {
+    if (visible) {
+      panY.setValue(MAX_TRANSLATE_Y);
+      setIsExpanded(false);
+      lastTranslateY.current = MAX_TRANSLATE_Y;
+    }
+  }, [visible, route, panY, MAX_TRANSLATE_Y]);
+
+  const toggleExpanded = () => {
+    const shouldExpand = !isExpanded;
+    const toValue = shouldExpand ? 0 : MAX_TRANSLATE_Y;
+    Animated.spring(panY, {
+      toValue,
+      useNativeDriver: Platform.OS !== 'web',
+      tension: 50,
+      friction: 8,
+    }).start(() => {
+      setIsExpanded(shouldExpand);
+    });
+  };
+
+  const collapseSheet = () => {
+    Animated.spring(panY, {
+      toValue: MAX_TRANSLATE_Y,
+      useNativeDriver: Platform.OS !== 'web',
+      tension: 50,
+      friction: 8,
+    }).start(() => {
+      setIsExpanded(false);
+    });
+  };
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderGrant: () => {
+        panY.setOffset(lastTranslateY.current);
+        panY.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const newY = gestureState.dy;
+        const minVal = -lastTranslateY.current;
+        const maxVal = MAX_TRANSLATE_Y - lastTranslateY.current;
+        panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        panY.flattenOffset();
+        const currentY = lastTranslateY.current;
+        const velocityY = gestureState.vy;
+        
+        let targetY = MAX_TRANSLATE_Y;
+        let shouldExpand = false;
+        
+        if (velocityY < -0.3) {
+          targetY = 0;
+          shouldExpand = true;
+        } else if (velocityY > 0.3) {
+          targetY = MAX_TRANSLATE_Y;
+          shouldExpand = false;
+        } else {
+          const halfway = MAX_TRANSLATE_Y / 2;
+          if (currentY < halfway) {
+            targetY = 0;
+            shouldExpand = true;
+          } else {
+            targetY = MAX_TRANSLATE_Y;
+            shouldExpand = false;
+          }
+        }
+        
+        Animated.spring(panY, {
+          toValue: targetY,
+          useNativeDriver: Platform.OS !== 'web',
+          tension: 50,
+          friction: 8,
+        }).start(() => {
+          setIsExpanded(shouldExpand);
+        });
+      },
+    })
+  ).current;
 
   if (!route) return null;
 
@@ -397,47 +500,53 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
           {isExpanded && (
             <TouchableOpacity
               activeOpacity={1}
-              onPress={() => setIsExpanded(false)}
+              onPress={collapseSheet}
               style={styles.mapTapOverlay}
             />
           )}
 
           {/* Timeline sheet panel overlapping the bottom of the map */}
-          <View style={[
+          <Animated.View style={[
             styles.sheetPanel, 
             { 
               backgroundColor: palette.surface, 
               borderColor: palette.border,
-              height: isExpanded ? '75%' : 105,
+              height: SHEET_HEIGHT,
               position: 'absolute',
               bottom: 0,
               left: 0,
               right: 0,
+              transform: [{ translateY: panY }]
             }
           ]}>
-            {/* Tappable header wrapper for expanding/collapsing */}
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => setIsExpanded(!isExpanded)}
+            {/* Tappable and draggable header wrapper */}
+            <View
+              {...panResponder.panHandlers}
               style={styles.sheetHeaderTouch}
             >
-              {/* Sheet drag indicator bar */}
-              <View style={styles.sheetHandleContainer}>
-                <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
-              </View>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={toggleExpanded}
+                style={{ width: '100%' }}
+              >
+                {/* Sheet drag indicator bar */}
+                <View style={styles.sheetHandleContainer}>
+                  <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
+                </View>
 
-              {/* Quick stats panel */}
-              <View style={styles.quickStatsRow}>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
-                  <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
+                {/* Quick stats panel */}
+                <View style={styles.quickStatsRow}>
+                  <View style={styles.statBox}>
+                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
+                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
+                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+                  </View>
                 </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
-                  <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
               {/* Sensory meters dashboard */}
@@ -548,7 +657,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                 )}
               </View>
             </ScrollView>
-          </View>
+          </Animated.View>
         </View>
       </SafeAreaView>
     </Modal>
