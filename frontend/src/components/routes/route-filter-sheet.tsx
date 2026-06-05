@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   backdrop: {
     // Dim the background screen so the sheet stands out and text is easy to read
     flex: 1,
-    backgroundColor: 'rgba(29, 28, 28, 0.65)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   sheet: {

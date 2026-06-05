@@ -32,6 +32,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
   const panY = React.useRef(new Animated.Value(MAX_TRANSLATE_Y)).current;
   const lastTranslateY = React.useRef(MAX_TRANSLATE_Y);
+  const startTranslateY = React.useRef(MAX_TRANSLATE_Y);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -81,13 +82,14 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         return Math.abs(gestureState.dy) > 5;
       },
       onPanResponderGrant: () => {
-        panY.setOffset(lastTranslateY.current);
+        startTranslateY.current = lastTranslateY.current;
+        panY.setOffset(startTranslateY.current);
         panY.setValue(0);
       },
       onPanResponderMove: (_, gestureState) => {
         const newY = gestureState.dy;
-        const minVal = -lastTranslateY.current;
-        const maxVal = MAX_TRANSLATE_Y - lastTranslateY.current;
+        const minVal = -startTranslateY.current;
+        const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
         panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
       },
       onPanResponderRelease: (_, gestureState) => {
