@@ -1,22 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { DailyTips } from '@/components/home/daily-tips';
 import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
 import { GradientBackground } from '@/components/ui/gradient-background';
-import { StatusBadge, type BackendStatus } from '@/components/ui/status-badge';
+import { type BackendStatus } from '@/components/ui/status-badge';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { BRAND, Fonts, getAccents, getPalette } from '@/constants/theme';
+import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useHealthService, useRoutesService } from '@/services/services-context';
+import { useHealthService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
-import type { WarningItem } from '@/types/route';
-import { useIsFocused } from '@react-navigation/native';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
@@ -26,12 +23,8 @@ export default function HomeScreen() {
   const health = useHealthService();
   const { username, isLoggedIn } = useAuth();
 
-  const routesService = useRoutesService();
-  const isFocused = useIsFocused();
-
   const [backendState, setBackendState] = useState<BackendStatus>('Checking');
   const [profileVisible, setProfileVisible] = useState(false);
-  const [warnings, setWarnings] = useState<WarningItem[]>([]);
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
@@ -51,28 +44,6 @@ export default function HomeScreen() {
     }
     checkBackend();
   }, [health]);
-
-  useEffect(() => {
-    let active = true;
-    async function fetchWarnings() {
-      if (!isFocused) return;
-      try {
-        const data = await routesService.getWarnings('', true);
-        if (active) {
-          setWarnings(data);
-        }
-      } catch (error) {
-        console.warn('Failed to fetch warnings on home screen:', error);
-        if (active) {
-          setWarnings([]);
-        }
-      }
-    }
-    fetchWarnings();
-    return () => {
-      active = false;
-    };
-  }, [username, routesService, isFocused]);
 
   if (!mounted) {
     return null;
@@ -113,62 +84,46 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Backend status (sits where the welcome banner used to)
-        <View style={styles.statusRow}>
-          <StatusBadge status={backendState} />
-        </View> */}
-        
-          <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-            Plan a route
-          </Text>
+        {/* Plan a route — the single primary action, full-width. */}
+        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+          Plan a route
+        </Text>
+        <QuickActionCard
+          iconName="navigate"
+          iconColor={BRAND.ink}
+          iconBackground={accents.cyan}
+          title="Plan Calm Route"
+          description="Find sensory friendly paths"
+          onPress={() => router.push('/routes')}
+          style={styles.planCard}
+        />
 
         {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
-            active profile's sensory levels. */}
+            active profile's sensory levels. An Edit button opens the full editor. */}
         {isLoggedIn && (
           <View style={styles.presetSection}>
-            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-              Select preset profile
-            </Text>
+            <Pressable
+              onPress={() => router.push('/preferences')}
+              accessibilityRole="button"
+              accessibilityLabel="Edit sensory preferences"
+              style={({ pressed }) => [
+                styles.editButton,
+                {
+                  backgroundColor: palette.surface,
+                  borderColor: palette.border,
+                },
+                hardShadow(pressed ? 2 : 3),
+                pressed ? styles.editButtonPressed : null,
+              ]}>
+              <Ionicons name="build" size={14} color={palette.textPrimary} />
+              <Text style={[styles.editButtonLabel, { color: palette.textPrimary }]}>
+                Edit
+              </Text>
+            </Pressable>
             <PresetSwitcher />
             <PresetGlimpse />
           </View>
         )}
-
-        {/* Quick Actions Grid */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-          Quick Actions
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollRow}
-        >
-          <QuickActionCard
-            iconName="navigate"
-            iconColor={BRAND.ink}
-            iconBackground={accents.cyan}
-            title="Plan Calm Route"
-            description="Find sensory friendly paths"
-            onPress={() => router.push('/routes')}
-            style={styles.gridCard}
-          />
-          <QuickActionCard
-            iconName="settings-sharp"
-            iconColor={BRAND.ink}
-            iconBackground={accents.green}
-            title="Sensory Sensitivities"
-            description="Update comfort thresholds"
-            onPress={() => router.push('/preferences')}
-            style={styles.gridCard}
-          />
-        </ScrollView>
-
-        {/* Daily Travel Tips */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-          Daily Travel Tips
-        </Text>
-        <DailyTips warnings={warnings} />
       </ScrollView>
 
       {/* Global Profile/Login Modal */}
@@ -240,21 +195,35 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.2,
   },
-  scrollContainer: {
-    marginHorizontal: -20,
+  planCard: {
+    width: '100%',
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
     marginBottom: 24,
-  },
-  scrollRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  gridCard: {
-    width: 175,
-    flex: undefined,
   },
   presetSection: {
     marginBottom: 24,
+  },
+  editButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 2,
+    marginBottom: 12,
+  },
+  editButtonPressed: {
+    transform: [{ translateY: 2 }],
+  },
+  editButtonLabel: {
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
 });
