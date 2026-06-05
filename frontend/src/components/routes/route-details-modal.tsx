@@ -83,9 +83,22 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   // pulling the sheet down while the list is already scrolled to the top, or
   // pulling it up while it isn't fully expanded. Everything else stays with the
   // inner ScrollView so normal content scrolling still works.
-  const shouldClaimDrag = (dy: number, dx: number) => {
+  const shouldClaimDrag = (e: any, dy: number, dx: number) => {
     const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
     if (!verticalEnough) return false;
+
+    // Check if the touch originated in the header/handle region of the sheet.
+    // The sheet sits absolutely at the bottom with height SHEET_HEIGHT.
+    // Its top edge pageY is: SCREEN_HEIGHT - SHEET_HEIGHT + lastTranslateY.current.
+    // The header region height is COLLAPSED_HEIGHT (105).
+    const sheetTopY = SCREEN_HEIGHT - SHEET_HEIGHT + lastTranslateY.current;
+    const touchY = e.nativeEvent.pageY;
+    const isTouchInHeader = touchY >= sheetTopY && touchY <= sheetTopY + COLLAPSED_HEIGHT + 10;
+
+    if (isTouchInHeader) {
+      return true;
+    }
+
     if (dy > 0) return scrollOffsetY.current <= 0; // dragging down at the top → collapse
     return lastTranslateY.current > 1; // dragging up while not fully expanded → expand
   };
@@ -93,12 +106,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      onMoveShouldSetPanResponder: (e, gestureState) =>
+        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
       // Capture phase: intercept the gesture before the inner ScrollView when it
       // is genuinely the sheet being dragged (fixes the intermittent swipe-down).
-      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
-        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      onMoveShouldSetPanResponderCapture: (e, gestureState) =>
+        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         startTranslateY.current = lastTranslateY.current;
