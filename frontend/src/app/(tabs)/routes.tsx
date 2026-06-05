@@ -35,7 +35,6 @@ import { useRoutesService } from '@/services/services-context';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
-import { ProfileModal } from '@/components/profile/profile-modal';
 
 // How many routes to show in the ungrouped (Google-Maps-style) list.
 const MAX_RESULTS = 8;
@@ -64,7 +63,7 @@ export default function RoutesScreen() {
   const palette = getPalette(isDark);
   const semantic = getSemanticColors(isDark);
   const routesService = useRoutesService();
-  const { username, isLoggedIn } = useAuth();
+  const { username, isLoggedIn, setProfileModalVisible } = useAuth();
   const { values: prefValues } = usePresets();
   const isFocused = useIsFocused();
 
@@ -76,7 +75,6 @@ export default function RoutesScreen() {
   const [startLoc, setStartLoc] = useState('Current Location');
   const [endLoc, setEndLoc] = useState('');
   const [loading, setLoading] = useState(false);
-  const [profileVisible, setProfileVisible] = useState(false);
 
   // Real-time coordinates state
   const [coords, setCoords] = useState<string | null>(null);
@@ -222,7 +220,7 @@ export default function RoutesScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Navigation Icons */}
-      <HeaderNav onProfilePress={() => setProfileVisible(true)} />
+      <HeaderNav onProfilePress={() => setProfileModalVisible(true)} />
 
       <RouteSearchInputs
         startLoc={startLoc}
@@ -236,7 +234,7 @@ export default function RoutesScreen() {
       {/* Personalization warning bar */}
       {!isLoggedIn && (
         <TouchableOpacity
-          onPress={() => setProfileVisible(true)}
+          onPress={() => setProfileModalVisible(true)}
           style={[
             styles.loginWarningBanner,
             {
@@ -357,7 +355,7 @@ export default function RoutesScreen() {
         onClose={() => setFiltersVisible(false)}
       />
 
-      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
+
 
       <RouteDetailsModal
         visible={!!selectedRoute}

@@ -23,14 +23,12 @@ import { SENSORY_KEYS, SENSORY_META, type SensoryKey } from '@/constants/presets
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePresets } from '@/context/presets-context';
 import { useAuth } from '@/context/auth-context';
-import { ProfileModal } from '@/components/profile/profile-modal';
 import type { Preference, SensitivityLevel } from '@/types/preference';
 
 export default function UserPreferencesScreen() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, setProfileModalVisible } = useAuth();
   const { values, activeId, loading, saveStatus, setPresetValue } = usePresets();
   const [guideVisible, setGuideVisible] = useState(false);
-  const [profileVisible, setProfileVisible] = useState(false);
   const [renaming, setRenaming] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
@@ -61,7 +59,7 @@ export default function UserPreferencesScreen() {
         backgroundColor={palette.background}
       />
 
-      <HeaderNav onProfilePress={() => setProfileVisible(true)} />
+      <HeaderNav onProfilePress={() => setProfileModalVisible(true)} />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
@@ -95,7 +93,7 @@ export default function UserPreferencesScreen() {
             
             <TouchableOpacity
               style={[styles.loginBtn, { backgroundColor: '#E91E63' }]}
-              onPress={() => setProfileVisible(true)}
+              onPress={() => setProfileModalVisible(true)}
               activeOpacity={0.8}
             >
               <Text style={styles.loginBtnText}>Sign In / Register</Text>
@@ -166,7 +164,6 @@ export default function UserPreferencesScreen() {
       </ScrollView>
 
       <PreferencesGuideSheet visible={guideVisible} onClose={() => setGuideVisible(false)} />
-      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </SafeAreaView>
   );
 }

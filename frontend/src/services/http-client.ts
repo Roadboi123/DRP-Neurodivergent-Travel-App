@@ -50,6 +50,10 @@ export function createHttpClient({ baseUrl }: HttpClientOptions): HttpClient {
   };
 
   async function parse<T>(res: Response, path: string): Promise<T> {
+    if (res.status === 401) {
+      authStore.triggerUnauthorized();
+      throw new HttpError(res.status, path);
+    }
     if (!res.ok) {
       throw new HttpError(res.status, path);
     }
@@ -73,10 +77,14 @@ export function createHttpClient({ baseUrl }: HttpClientOptions): HttpClient {
       return parse<T>(res, path);
     },
 
-    getResponse(path: string): Promise<Response> {
-      return fetch(url(path), {
+    async getResponse(path: string): Promise<Response> {
+      const res = await fetch(url(path), {
         headers: getHeaders(),
       });
+      if (res.status === 401) {
+        authStore.triggerUnauthorized();
+      }
+      return res;
     },
   };
 }

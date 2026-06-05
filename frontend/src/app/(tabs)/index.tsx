@@ -7,43 +7,23 @@ import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
 import { GradientBackground } from '@/components/ui/gradient-background';
-import { type BackendStatus } from '@/components/ui/status-badge';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useHealthService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
-import { ProfileModal } from '@/components/profile/profile-modal';
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
   const router = useRouter();
-  const health = useHealthService();
-  const { username, isLoggedIn } = useAuth();
-
-  const [backendState, setBackendState] = useState<BackendStatus>('Checking');
-  const [profileVisible, setProfileVisible] = useState(false);
+  const { username, isLoggedIn, setProfileModalVisible } = useAuth();
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    async function checkBackend() {
-      try {
-        const ok = await health.checkBackendHealth();
-        setBackendState(ok ? 'Online' : 'Offline');
-      } catch (error) {
-        console.warn('Backend checking failed, falling back to offline state:', error);
-        setBackendState('Offline');
-      }
-    }
-    checkBackend();
-  }, [health]);
 
   if (!mounted) {
     return null;
@@ -66,7 +46,7 @@ export default function HomeScreen() {
           <View style={styles.headerRightActions}>
             <ThemeToggle />
             <TouchableOpacity
-              onPress={() => setProfileVisible(true)}
+              onPress={() => setProfileModalVisible(true)}
               style={[
                 styles.profileIconBtn,
                 { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }
@@ -126,8 +106,6 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* Global Profile/Login Modal */}
-      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} />
     </SafeAreaView>
   );
 }
