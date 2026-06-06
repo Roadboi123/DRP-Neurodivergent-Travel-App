@@ -23,7 +23,6 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const linkColor = semantic.link;
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
-  const [isExpanded, setIsExpanded] = useState(false);
 
   // Bottom Sheet animations and dimensions
   const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -37,10 +36,6 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   // Current scroll offset of the inner list, so a downward drag at the very top
   // collapses the sheet instead of being swallowed by the ScrollView.
   const scrollOffsetY = React.useRef(0);
-  const touchStartedInHeader = React.useRef(false);
-  const contentRef = React.useRef<View>(null);
-  const contentPageY = React.useRef(0);
-  const contentHeight = React.useRef(0);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -54,104 +49,104 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   React.useEffect(() => {
     if (visible) {
       panY.setValue(MAX_TRANSLATE_Y);
-      setIsExpanded(false);
       lastTranslateY.current = MAX_TRANSLATE_Y;
     }
   }, [visible, route, panY, MAX_TRANSLATE_Y]);
 
+  const onPanResponderGrant = () => {
+    startTranslateY.current = lastTranslateY.current;
+    panY.setOffset(startTranslateY.current);
+    panY.setValue(0);
+  };
 
+  const onPanResponderMove = (_: any, gestureState: any) => {
+    const newY = gestureState.dy;
+    const minVal = -startTranslateY.current;
+    const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
+    panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
+  };
 
-  const collapseSheet = () => {
+  const onPanResponderRelease = (_: any, gestureState: any) => {
+    panY.flattenOffset();
+    const currentY = lastTranslateY.current;
+    const velocityY = gestureState.vy;
+    
+    let targetY = MAX_TRANSLATE_Y;
+    
+    if (velocityY < -0.3) {
+      targetY = 0;
+    } else if (velocityY > 0.3) {
+      targetY = MAX_TRANSLATE_Y;
+    } else {
+      const halfway = MAX_TRANSLATE_Y / 2;
+      if (currentY < halfway) {
+        targetY = 0;
+      } else {
+        targetY = MAX_TRANSLATE_Y;
+      }
+    }
+    
     Animated.spring(panY, {
-      toValue: MAX_TRANSLATE_Y,
+      toValue: targetY,
       useNativeDriver: Platform.OS !== 'web',
       tension: 50,
       friction: 8,
-    }).start(() => {
-      setIsExpanded(false);
-    });
+    }).start();
   };
 
-  // A drag is "the sheet's" when it's a clear vertical move AND either we're
-  // pulling the sheet down while the list is already scrolled to the top, or
-  // pulling it up while it isn't fully expanded. Everything else stays with the
-  // inner ScrollView so normal content scrolling still works.
-  const shouldClaimDrag = (e: any, dy: number, dx: number) => {
-    const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
-    if (!verticalEnough) return false;
+  const headerPanResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant,
+      onPanResponderMove,
+      onPanResponderRelease,
+      onPanResponderTerminate: () => {},
+    })
+  ).current;
 
-    // Check Y coordinates relative to the absolutely measured content area
-    const sheetTopY = contentPageY.current + contentHeight.current - SHEET_HEIGHT + lastTranslateY.current;
-    const touchY = e.nativeEvent.pageY;
-    const isTouchInHeaderCoord = touchY >= sheetTopY && touchY <= sheetTopY + COLLAPSED_HEIGHT + 15;
-
-    if (isTouchInHeaderCoord || touchStartedInHeader.current) {
-      return true;
-    }
-
-    if (dy > 0) return scrollOffsetY.current <= 0; // dragging down at the top → collapse
-    return lastTranslateY.current > 1; // dragging up while not fully expanded → expand
-  };
-
-  const panResponder = React.useRef(
+  const sheetPanResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (e, gestureState) =>
-        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
-      // Capture phase: intercept the gesture before the inner ScrollView when it
-      // is genuinely the sheet being dragged (fixes the intermittent swipe-down).
-      onMoveShouldSetPanResponderCapture: (e, gestureState) =>
-        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => {
-        startTranslateY.current = lastTranslateY.current;
-        panY.setOffset(startTranslateY.current);
-        panY.setValue(0);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        const newY = gestureState.dy;
-        const minVal = -startTranslateY.current;
-        const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
-        panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        touchStartedInHeader.current = false;
-        panY.flattenOffset();
-        const currentY = lastTranslateY.current;
-        const velocityY = gestureState.vy;
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        if (!verticalEnough) return false;
         
-        let targetY = MAX_TRANSLATE_Y;
-        let shouldExpand = false;
-        
-        if (velocityY < -0.3) {
-          targetY = 0;
-          shouldExpand = true;
-        } else if (velocityY > 0.3) {
-          targetY = MAX_TRANSLATE_Y;
-          shouldExpand = false;
-        } else {
-          const halfway = MAX_TRANSLATE_Y / 2;
-          if (currentY < halfway) {
-            targetY = 0;
-            shouldExpand = true;
-          } else {
-            targetY = MAX_TRANSLATE_Y;
-            shouldExpand = false;
-          }
+        // If dragging down and at the top of the scroll view, claim it
+        if (dy > 0 && scrollOffsetY.current <= 0) {
+          return true;
         }
+        // If dragging up and not fully expanded, claim it so we expand
+        if (dy < 0 && lastTranslateY.current > 1) {
+          return true;
+        }
+        return false;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        if (!verticalEnough) return false;
         
-        Animated.spring(panY, {
-          toValue: targetY,
-          useNativeDriver: Platform.OS !== 'web',
-          tension: 50,
-          friction: 8,
-        }).start(() => {
-          setIsExpanded(shouldExpand);
-        });
+        // If dragging down and at the top of the scroll view, capture it
+        if (dy > 0 && scrollOffsetY.current <= 0) {
+          return true;
+        }
+        // If dragging up and not fully expanded, capture it
+        if (dy < 0 && lastTranslateY.current > 1) {
+          return true;
+        }
+        return false;
       },
-      onPanResponderTerminate: () => {
-        touchStartedInHeader.current = false;
-      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant,
+      onPanResponderMove,
+      onPanResponderRelease,
+      onPanResponderTerminate: () => {},
     })
   ).current;
 
@@ -479,18 +474,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         </View>
 
         {/* Content Area - Map fills the screen, sheet Panel sits absolutely at the bottom */}
-        <View
-          ref={contentRef}
-          style={{ flex: 1, position: 'relative' }}
-          onLayout={(event) => {
-            contentHeight.current = event.nativeEvent.layout.height;
-            if (contentRef.current) {
-              contentRef.current.measure((x, y, width, height, pageX, pageY) => {
-                contentPageY.current = pageY;
-              });
-            }
-          }}
-        >
+        <View style={{ flex: 1, position: 'relative' }}>
           {/* Map container fixed to background */}
           <View style={StyleSheet.absoluteFill}>
             {!hasMapCoords ? (
@@ -535,18 +519,8 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
             )}
           </View>
 
-          {/* Transparent click-to-collapse overlay above the sheet when expanded */}
-          {isExpanded && (
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={collapseSheet}
-              style={styles.mapTapOverlay}
-            />
-          )}
-
           {/* Timeline sheet panel overlapping the bottom of the map */}
           <Animated.View
-            {...panResponder.panHandlers}
             style={[
             styles.sheetPanel,
             {
@@ -563,15 +537,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
             {/* Drag handle header wrapper */}
             <View
               style={styles.sheetHeaderTouch}
-              onTouchStart={() => {
-                touchStartedInHeader.current = true;
-              }}
-              onTouchEnd={() => {
-                touchStartedInHeader.current = false;
-              }}
-              onTouchCancel={() => {
-                touchStartedInHeader.current = false;
-              }}
+              {...headerPanResponder.panHandlers}
             >
               {/* Sheet drag indicator bar */}
               <View style={styles.sheetHandleContainer}>
@@ -591,125 +557,124 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               </View>
             </View>
 
-            <ScrollView
-              style={{ flex: 1 }}
-              onTouchStart={() => {
-                touchStartedInHeader.current = false;
-              }}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              scrollEventThrottle={16}
-              onScroll={(e) => {
-                scrollOffsetY.current = e.nativeEvent.contentOffset.y;
-              }}>
-              {/* Sensory meters dashboard */}
-              <View style={[styles.modalSensoryContainer, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                <Text style={[styles.sensoryHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
-                <View style={styles.sensoryDashboard}>
-                  <SensoryMeter level={route.noise} label="Sound" />
-                  <SensoryMeter level={route.crowds} label="Crowds" />
-                  <SensoryMeter level={route.heat} label="Heat" />
-                  <SensoryMeter level={route.light} label="Light" />
-                  <SensoryMeter level={route.smell} label="Smell" />
+            <View style={{ flex: 1 }} {...sheetPanResponder.panHandlers}>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={(e) => {
+                  scrollOffsetY.current = e.nativeEvent.contentOffset.y;
+                }}>
+                {/* Sensory meters dashboard */}
+                <View style={[styles.modalSensoryContainer, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+                  <Text style={[styles.sensoryHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
+                  <View style={styles.sensoryDashboard}>
+                    <SensoryMeter level={route.noise} label="Sound" />
+                    <SensoryMeter level={route.crowds} label="Crowds" />
+                    <SensoryMeter level={route.heat} label="Heat" />
+                    <SensoryMeter level={route.light} label="Light" />
+                    <SensoryMeter level={route.smell} label="Smell" />
+                  </View>
+                  {route.sensory_description ? (
+                    <Text style={[styles.sensoryDescText, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
+                      {route.sensory_description}
+                    </Text>
+                  ) : null}
                 </View>
-                {route.sensory_description ? (
-                  <Text style={[styles.sensoryDescText, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
-                    {route.sensory_description}
-                  </Text>
-                ) : null}
-              </View>
 
-              {/* Step timeline list */}
-              <View style={styles.timelineList}>
-                {route.legs && route.legs.map((leg, lIdx) => {
-                  const { iconName, bgColor: lineBgColor, textColor: lineTextColor } = getLegUIProps(
-                    leg.mode,
-                    leg.line,
-                    leg.instruction,
-                    accents
-                  );
+                {/* Step timeline list */}
+                <View style={styles.timelineList}>
+                  {route.legs && route.legs.map((leg, lIdx) => {
+                    const { iconName, bgColor: lineBgColor, textColor: lineTextColor } = getLegUIProps(
+                      leg.mode,
+                      leg.line,
+                      leg.instruction,
+                      accents
+                    );
 
-                  return (
-                    <View key={lIdx} style={styles.detailStepContainer}>
-                      <View style={styles.stepIndicatorCol}>
-                        <View style={[styles.stepNode, { backgroundColor: lineBgColor, borderColor: palette.border }]}>
-                          <Ionicons name={iconName} size={11} color={lineTextColor} />
+                    return (
+                      <View key={lIdx} style={styles.detailStepContainer}>
+                        <View style={styles.stepIndicatorCol}>
+                          <View style={[styles.stepNode, { backgroundColor: lineBgColor, borderColor: palette.border }]}>
+                            <Ionicons name={iconName} size={11} color={lineTextColor} />
+                          </View>
+                          <View style={[styles.stepLine, { backgroundColor: lineBgColor }]} />
                         </View>
-                        <View style={[styles.stepLine, { backgroundColor: lineBgColor }]} />
+                        <View style={styles.stepContentCol}>
+                          <Text style={[styles.stationText, { color: palette.textPrimary }]}>
+                            {leg.departure}
+                          </Text>
+                          <Text style={[styles.instructionText, { color: palette.textSecondary }]}>
+                            {leg.instruction} ({leg.duration_mins} mins)
+                          </Text>
+
+                          {/* Collapsible intermediate stops list */}
+                          {leg.stops && leg.stops.length > 0 && (
+                            <View style={[styles.stopsDropdown, { borderLeftColor: linkColor }]}>
+                              <TouchableOpacity
+                                activeOpacity={0.7}
+                                onPress={() => toggleStops(lIdx)}
+                                style={styles.stopsDropdownHeader}
+                              >
+                                <Text style={[styles.stopsHeader, { color: linkColor }]}>
+                                  {stopsExpanded[lIdx] ? 'Hide' : 'Show'} {leg.stops.length} intermediate stop{leg.stops.length > 1 ? 's' : ''}
+                                </Text>
+                                <Ionicons
+                                  name={stopsExpanded[lIdx] ? 'chevron-up' : 'chevron-down'}
+                                  size={10}
+                                  color={linkColor}
+                                  style={{ marginLeft: 4 }}
+                                />
+                              </TouchableOpacity>
+
+                              {stopsExpanded[lIdx] && (
+                                <View style={styles.stopsList}>
+                                  {leg.stops.map((stop, sIdx) => (
+                                    <Text key={sIdx} style={[styles.stopItemText, { color: palette.textMuted }]}>
+                                      • {stop}
+                                    </Text>
+                                  ))}
+                                </View>
+                              )}
+                            </View>
+                          )}
+
+                          {/* Platform transfer / connection wait times */}
+                          {leg.connection_waiting_mins && leg.connection_waiting_mins > 0 ? (
+                            <View style={[styles.waitWarningCard, { backgroundColor: semantic.warningSurface, borderColor: semantic.warningBorder }]}>
+                              <Ionicons name="warning" size={13} color={semantic.warningIcon} />
+                              <Text style={[styles.waitWarningText, { color: semantic.warningText }]}>
+                                {leg.connection_waiting_mins} min platform wait / transfer.
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+
+                  {/* Terminal Destination Node */}
+                  {route.legs && route.legs.length > 0 && (
+                    <View style={styles.detailStepContainer}>
+                      <View style={styles.stepIndicatorCol}>
+                        <View style={[styles.stepNode, { backgroundColor: palette.textPrimary, borderColor: palette.border }]}>
+                          <Ionicons name="pin" size={11} color={palette.surface} />
+                        </View>
                       </View>
                       <View style={styles.stepContentCol}>
                         <Text style={[styles.stationText, { color: palette.textPrimary }]}>
-                          {leg.departure}
+                          {route.legs[route.legs.length - 1].arrival}
                         </Text>
                         <Text style={[styles.instructionText, { color: palette.textSecondary }]}>
-                          {leg.instruction} ({leg.duration_mins} mins)
+                          Arrive at destination
                         </Text>
-
-                        {/* Collapsible intermediate stops list */}
-                        {leg.stops && leg.stops.length > 0 && (
-                          <View style={[styles.stopsDropdown, { borderLeftColor: linkColor }]}>
-                            <TouchableOpacity
-                              activeOpacity={0.7}
-                              onPress={() => toggleStops(lIdx)}
-                              style={styles.stopsDropdownHeader}
-                            >
-                              <Text style={[styles.stopsHeader, { color: linkColor }]}>
-                                {stopsExpanded[lIdx] ? 'Hide' : 'Show'} {leg.stops.length} intermediate stop{leg.stops.length > 1 ? 's' : ''}
-                              </Text>
-                              <Ionicons
-                                name={stopsExpanded[lIdx] ? 'chevron-up' : 'chevron-down'}
-                                size={10}
-                                color={linkColor}
-                                style={{ marginLeft: 4 }}
-                              />
-                            </TouchableOpacity>
-
-                            {stopsExpanded[lIdx] && (
-                              <View style={styles.stopsList}>
-                                {leg.stops.map((stop, sIdx) => (
-                                  <Text key={sIdx} style={[styles.stopItemText, { color: palette.textMuted }]}>
-                                    • {stop}
-                                  </Text>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-                        )}
-
-                        {/* Platform transfer / connection wait times */}
-                        {leg.connection_waiting_mins && leg.connection_waiting_mins > 0 ? (
-                          <View style={[styles.waitWarningCard, { backgroundColor: semantic.warningSurface, borderColor: semantic.warningBorder }]}>
-                            <Ionicons name="warning" size={13} color={semantic.warningIcon} />
-                            <Text style={[styles.waitWarningText, { color: semantic.warningText }]}>
-                              {leg.connection_waiting_mins} min platform wait / transfer.
-                            </Text>
-                          </View>
-                        ) : null}
                       </View>
                     </View>
-                  );
-                })}
-
-                {/* Terminal Destination Node */}
-                {route.legs && route.legs.length > 0 && (
-                  <View style={styles.detailStepContainer}>
-                    <View style={styles.stepIndicatorCol}>
-                      <View style={[styles.stepNode, { backgroundColor: palette.textPrimary, borderColor: palette.border }]}>
-                        <Ionicons name="pin" size={11} color={palette.surface} />
-                      </View>
-                    </View>
-                    <View style={styles.stepContentCol}>
-                      <Text style={[styles.stationText, { color: palette.textPrimary }]}>
-                        {route.legs[route.legs.length - 1].arrival}
-                      </Text>
-                      <Text style={[styles.instructionText, { color: palette.textSecondary }]}>
-                        Arrive at destination
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
           </Animated.View>
         </View>
       </SafeAreaView>

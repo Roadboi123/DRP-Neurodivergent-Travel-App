@@ -12,19 +12,26 @@ import time
 # OpenRouteService API Key (optional premium upgrade for realistic walking directions & alternatives)
 ORS_API_KEY = os.environ.get("ORS_API_KEY", "")
 
+def normalize_query(query: str) -> str:
+    """Standardize search query for robust cache matching (strips periods, apostrophes, double spaces)."""
+    # 1. Lowercase and strip
+    q = query.lower().strip()
+    # 2. Replace curly apostrophes with straight ones
+    q = q.replace("’", "'")
+    # 3. Replace abbreviation "st." with "st" (ensuring word boundaries)
+    q = re.sub(r'\bst\.\b', 'st', q)
+    # 4. Remove all dots
+    q = q.replace(".", "")
+    # 5. Collapse multiple spaces into one
+    q = re.sub(r'\s+', ' ', q)
+    return q
+
 # In-memory geocoding cache to minimize external API calls.
-# Pre-seeded with common local test/demo locations so they work instantly even if Nominatim rate limits you locally!
+# Pre-seeded with the virtual 'current location' fallback coordinates.
 _GEOCODE_CACHE = {
-    "current location": (51.4944, -0.1829),
-    "imperial college london": (51.4988, -0.1749),
-    "south kensington": (51.4941, -0.1730),
-    "south kensington station": (51.4941, -0.1730),
-    "gloucester road": (51.4944, -0.1829),
-    "gloucester road station": (51.4944, -0.1829),
-    "holborn": (51.5173, -0.1200),
-    "holborn station": (51.5173, -0.1200),
-    "wimbledon": (51.4214, -0.2054),
-    "wimbledon station": (51.4214, -0.2054),
+    normalize_query(k): v for k, v in {
+        "current location": (51.4944, -0.1829),
+    }.items()
 }
 
 # Strict rate-limiting lock and tracker to respect Nominatim's 1 req/sec policy
@@ -38,8 +45,8 @@ async def geocode(place: str) -> tuple[float, float] | None:
     if not place:
         return None
         
-    # Check cache first
-    cache_key = place.lower()
+    # Check cache first (fully normalized)
+    cache_key = normalize_query(place)
     if cache_key in _GEOCODE_CACHE:
         return _GEOCODE_CACHE[cache_key]
     

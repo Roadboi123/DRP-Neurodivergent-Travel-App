@@ -31,6 +31,21 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 def _looks_off_road(destination: str) -> bool:
     """Check if the destination string suggests an off-road/park location."""
     dest_lower = destination.lower()
+    
+    # Urban areas/stations containing "wood", "park", "forest", etc. should NOT be treated as off-road parks.
+    urban_exclusions = (
+        "st john's wood", "st johns wood", "st. john's wood",
+        "wood green", "colliers wood", "abbey wood", "wood street", "woodford",
+        "forest hill", "forest gate", "manor park", "stonebridge park", "park royal",
+        "regents park", "regents park station", "finchley road & regents park",
+        "peckham rye", "royal oak", "white city"
+    )
+    if any(ex in dest_lower for ex in urban_exclusions):
+        return False
+        
+    if "station" in dest_lower or "underground" in dest_lower or "transit" in dest_lower:
+        return False
+        
     return any(keyword in dest_lower for keyword in OFF_ROAD_KEYWORDS)
 
 
@@ -51,15 +66,10 @@ async def resolve_source(
         "walking_only": bool,
       }
     """
-    # Check destination string for off-road keywords
-    if _looks_off_road(destination):
-        return {
-            "strategy":     "google",
-            "reason":       "Destination appears to be off-road or inside a park",
-            "walking_only": True,
-        }
-
-    # Try to geocode both points to check distance
+    # 1. Try to geocode both points to check distance first
+    origin_coords = None
+    destination_coords = None
+    distance = None
     try:
         origin_coords      = await _geocode(origin)
         destination_coords = await _geocode(destination)
@@ -69,17 +79,28 @@ async def resolve_source(
                 origin_coords[0], origin_coords[1],
                 destination_coords[0], destination_coords[1],
             )
-
-            if distance < WALKING_DISTANCE_THRESHOLD_M:
-                return {
-                    "strategy":     "google",
-                    "reason":       f"Straight-line distance is {int(distance)}m — likely walkable",
-                    "walking_only": True,
-                }
     except Exception:
-        pass  # If geocoding fails, fall back to TfL + Google both
+        pass
 
-    # Default — use both and let the frontend show all options
+    # 2. If close enough, it's walkable — skip TfL entirely
+    if distance is not None and distance < WALKING_DISTANCE_THRESHOLD_M:
+        return {
+            "strategy":     "google",
+            "reason":       f"Straight-line distance is {int(distance)}m — likely walkable",
+            "walking_only": True,
+        }
+
+    # 3. Check destination string for off-road keywords, but only if they are close enough to walk
+    # (if it's far away, we must use transit even if it's a park!)
+    if _looks_off_road(destination):
+        if distance is None or distance <= 1500:
+            return {
+                "strategy":     "google",
+                "reason":       "Destination appears to be off-road or inside a park",
+                "walking_only": True,
+            }
+
+    # 4. Default — use both and let the frontend show all options
     return {
         "strategy":     "both",
         "reason":       "Returning TfL and walking routes",
