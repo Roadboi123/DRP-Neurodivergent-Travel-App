@@ -150,3 +150,61 @@ def test_offline_match_percentage_prompts_for_username():
         == "Enter a username to view personalized sensory alignment ratings."
         for r in routes
     )
+
+
+def test_custom_fare_calculations():
+    # 1. Mock an outer Elizabeth Line journey
+    outer_elizabeth_journey = {
+        "source": "tfl",
+        "duration_mins": 45,
+        "startDateTime": "2026-06-03T16:00:00",
+        "arrivalDateTime": "2026-06-03T16:45:00",
+        "legs": [
+            {
+                "mode": "elizabeth-line",
+                "line": "Elizabeth line",
+                "duration_mins": 45,
+                "departure": "Burnham (Berks) Rail Station",
+                "arrival": "London Paddington",
+                "departure_naptan": "",
+                "arrival_naptan": "",
+                "instruction": "Take Elizabeth line",
+                "stops": [],
+                "connection_waiting_mins": 0,
+            }
+        ]
+    }
+
+    # 2. Mock a non-TfL bus journey
+    non_tfl_bus_journey = {
+        "source": "tfl",
+        "duration_mins": 20,
+        "startDateTime": "2026-06-03T16:00:00",
+        "arrivalDateTime": "2026-06-03T16:20:00",
+        "legs": [
+            {
+                "mode": "bus",
+                "line": "Green Line 702",
+                "duration_mins": 20,
+                "departure": "Slough High Street",
+                "arrival": "Windsor Castle",
+                "departure_naptan": "",
+                "arrival_naptan": "",
+                "instruction": "Take Green Line 702",
+                "stops": [],
+                "connection_waiting_mins": 0,
+            }
+        ]
+    }
+
+    with patch("app.services.routes.tlf_client.get_routes", new_callable=AsyncMock) as mock_tfl:
+        mock_tfl.return_value = [outer_elizabeth_journey, non_tfl_bus_journey]
+        routes = asyncio.run(get_route_suggestions("Burnham", "Windsor"))
+        
+        # Burnham to Paddington (outer Elizabeth) should cost 10.50
+        elizabeth_route = next(r for r in routes if "Elizabeth" in r["name"])
+        assert elizabeth_route["price"] == 10.50
+        
+        # Slough to Windsor via Green Line 702 (non-TfL bus) should cost 3.00
+        bus_route = next(r for r in routes if "Green Line 702" in r["name"])
+        assert bus_route["price"] == 3.00

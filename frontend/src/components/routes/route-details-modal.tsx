@@ -37,6 +37,10 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   // Current scroll offset of the inner list, so a downward drag at the very top
   // collapses the sheet instead of being swallowed by the ScrollView.
   const scrollOffsetY = React.useRef(0);
+  const touchStartedInHeader = React.useRef(false);
+  const contentRef = React.useRef<View>(null);
+  const contentPageY = React.useRef(0);
+  const contentHeight = React.useRef(0);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -87,15 +91,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
     const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
     if (!verticalEnough) return false;
 
-    // Check if the touch originated in the header/handle region of the sheet.
-    // The sheet sits absolutely at the bottom with height SHEET_HEIGHT.
-    // Its top edge pageY is: SCREEN_HEIGHT - SHEET_HEIGHT + lastTranslateY.current.
-    // The header region height is COLLAPSED_HEIGHT (105).
-    const sheetTopY = SCREEN_HEIGHT - SHEET_HEIGHT + lastTranslateY.current;
+    // Check Y coordinates relative to the absolutely measured content area
+    const sheetTopY = contentPageY.current + contentHeight.current - SHEET_HEIGHT + lastTranslateY.current;
     const touchY = e.nativeEvent.pageY;
-    const isTouchInHeader = touchY >= sheetTopY && touchY <= sheetTopY + COLLAPSED_HEIGHT + 10;
+    const isTouchInHeaderCoord = touchY >= sheetTopY && touchY <= sheetTopY + COLLAPSED_HEIGHT + 15;
 
-    if (isTouchInHeader) {
+    if (isTouchInHeaderCoord || touchStartedInHeader.current) {
       return true;
     }
 
@@ -125,6 +126,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
       },
       onPanResponderRelease: (_, gestureState) => {
+        touchStartedInHeader.current = false;
         panY.flattenOffset();
         const currentY = lastTranslateY.current;
         const velocityY = gestureState.vy;
@@ -157,6 +159,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         }).start(() => {
           setIsExpanded(shouldExpand);
         });
+      },
+      onPanResponderTerminate: () => {
+        touchStartedInHeader.current = false;
       },
     })
   ).current;
@@ -485,7 +490,18 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         </View>
 
         {/* Content Area - Map fills the screen, sheet Panel sits absolutely at the bottom */}
-        <View style={{ flex: 1, position: 'relative' }}>
+        <View
+          ref={contentRef}
+          style={{ flex: 1, position: 'relative' }}
+          onLayout={(event) => {
+            contentHeight.current = event.nativeEvent.layout.height;
+            if (contentRef.current) {
+              contentRef.current.measure((x, y, width, height, pageX, pageY) => {
+                contentPageY.current = pageY;
+              });
+            }
+          }}
+        >
           {/* Map container fixed to background */}
           <View style={StyleSheet.absoluteFill}>
             {!hasMapCoords ? (
@@ -564,20 +580,33 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                 onPress={toggleExpanded}
                 style={{ width: '100%' }}
               >
-                {/* Sheet drag indicator bar */}
-                <View style={styles.sheetHandleContainer}>
-                  <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
-                </View>
-
-                {/* Quick stats panel */}
-                <View style={styles.quickStatsRow}>
-                  <View style={styles.statBox}>
-                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
-                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
+                <View
+                  style={{ width: '100%' }}
+                  onTouchStart={() => {
+                    touchStartedInHeader.current = true;
+                  }}
+                  onTouchEnd={() => {
+                    touchStartedInHeader.current = false;
+                  }}
+                  onTouchCancel={() => {
+                    touchStartedInHeader.current = false;
+                  }}
+                >
+                  {/* Sheet drag indicator bar */}
+                  <View style={styles.sheetHandleContainer}>
+                    <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
                   </View>
-                  <View style={styles.statBox}>
-                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
-                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+
+                  {/* Quick stats panel */}
+                  <View style={styles.quickStatsRow}>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
+                      <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
+                      <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+                    </View>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -585,6 +614,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
             <ScrollView
               style={{ flex: 1 }}
+              onTouchStart={() => {
+                touchStartedInHeader.current = false;
+              }}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
