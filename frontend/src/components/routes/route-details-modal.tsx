@@ -37,6 +37,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   // Current scroll offset of the inner list, so a downward drag at the very top
   // collapses the sheet instead of being swallowed by the ScrollView.
   const scrollOffsetY = React.useRef(0);
+  const touchStartedInHeader = React.useRef(false);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -83,19 +84,11 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   // pulling the sheet down while the list is already scrolled to the top, or
   // pulling it up while it isn't fully expanded. Everything else stays with the
   // inner ScrollView so normal content scrolling still works.
-  const shouldClaimDrag = (e: any, dy: number, dx: number) => {
+  const shouldClaimDrag = (dy: number, dx: number) => {
     const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
     if (!verticalEnough) return false;
 
-    // Check if the touch originated in the header/handle region of the sheet.
-    // The sheet sits absolutely at the bottom with height SHEET_HEIGHT.
-    // Its top edge pageY is: SCREEN_HEIGHT - SHEET_HEIGHT + lastTranslateY.current.
-    // The header region height is COLLAPSED_HEIGHT (105).
-    const sheetTopY = SCREEN_HEIGHT - SHEET_HEIGHT + lastTranslateY.current;
-    const touchY = e.nativeEvent.pageY;
-    const isTouchInHeader = touchY >= sheetTopY && touchY <= sheetTopY + COLLAPSED_HEIGHT + 10;
-
-    if (isTouchInHeader) {
+    if (touchStartedInHeader.current) {
       return true;
     }
 
@@ -106,12 +99,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (e, gestureState) =>
-        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        shouldClaimDrag(gestureState.dy, gestureState.dx),
       // Capture phase: intercept the gesture before the inner ScrollView when it
       // is genuinely the sheet being dragged (fixes the intermittent swipe-down).
-      onMoveShouldSetPanResponderCapture: (e, gestureState) =>
-        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
+      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
+        shouldClaimDrag(gestureState.dy, gestureState.dx),
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         startTranslateY.current = lastTranslateY.current;
@@ -125,6 +118,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
       },
       onPanResponderRelease: (_, gestureState) => {
+        touchStartedInHeader.current = false;
         panY.flattenOffset();
         const currentY = lastTranslateY.current;
         const velocityY = gestureState.vy;
@@ -157,6 +151,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         }).start(() => {
           setIsExpanded(shouldExpand);
         });
+      },
+      onPanResponderTerminate: () => {
+        touchStartedInHeader.current = false;
       },
     })
   ).current;
@@ -558,6 +555,15 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
             {/* Tappable header wrapper (drag is handled by the sheet itself) */}
             <View
               style={styles.sheetHeaderTouch}
+              onTouchStart={() => {
+                touchStartedInHeader.current = true;
+              }}
+              onTouchEnd={() => {
+                touchStartedInHeader.current = false;
+              }}
+              onTouchCancel={() => {
+                touchStartedInHeader.current = false;
+              }}
             >
               <TouchableOpacity
                 activeOpacity={0.9}
@@ -585,6 +591,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
             <ScrollView
               style={{ flex: 1 }}
+              onTouchStart={() => {
+                touchStartedInHeader.current = false;
+              }}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
