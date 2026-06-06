@@ -358,20 +358,66 @@ async def _build_route_option(index: int, journey: dict, temp: float) -> dict:
     else:
         route_name = "Walk"
 
-    # Compute a realistic price (bus: £1.75, tube/train: £2.80 base zone caps)
+    # Helper to check if a bus leg is non-TfL
+    def is_non_tfl_bus(bus_line: str, departure_name: str, arrival_name: str) -> bool:
+        dep_l = departure_name.lower()
+        arr_l = arrival_name.lower()
+        line_l = bus_line.lower()
+        
+        # Non-TfL places outside Greater London
+        outer_places = ["slough", "burnham", "reading", "maidenhead", "windsor", "watford", "st albans", "guildford", "woking", "bracknell"]
+        if any(place in dep_l or place in arr_l for place in outer_places):
+            return True
+            
+        # Commercial operators
+        if any(op in line_l for op in ["green line", "first berkshire", "thames valley", "arriva click", "carousel", "stagecoach"]):
+            return True
+            
+        # Non-standard TfL bus lines (TfL routes are usually short, e.g. 24, 345, C1, N9, SL1)
+        if len(bus_line) > 5 and " " in bus_line:
+            return True
+            
+        return False
+
+    # Compute a realistic price
     price = 0.0
-    has_bus = False
-    has_rail = False
+    has_tfl_bus = False
+    has_non_tfl_bus = False
+    has_london_rail = False
+    has_outer_elizabeth = False
+
     for leg in legs:
         mode = str(leg.get("mode", "")).lower()
+        line = str(leg.get("line", ""))
+        dep = str(leg.get("departure", ""))
+        arr = str(leg.get("arrival", ""))
+
         if mode == "bus":
-            has_bus = True
+            if is_non_tfl_bus(line, dep, arr):
+                has_non_tfl_bus = True
+            else:
+                has_tfl_bus = True
         elif mode in ("tube", "subway", "underground", "train", "dlr", "overground", "elizabeth-line", "national-rail"):
-            has_rail = True
-            
-    if has_rail:
+            is_elizabeth = (mode == "elizabeth-line" or "elizabeth" in line.lower())
+            is_outer = False
+            if is_elizabeth:
+                outer_stations = ["burnham", "slough", "reading", "twyford", "maidenhead", "taplow", "langley", "iver", "shenfield", "brentwood"]
+                if any(st in dep.lower() or st in arr.lower() for st in outer_stations):
+                    is_outer = True
+
+            if is_outer:
+                has_outer_elizabeth = True
+            else:
+                has_london_rail = True
+
+    if has_outer_elizabeth:
+        price += 10.50
+    elif has_london_rail:
         price += 2.80
-    if has_bus:
+
+    if has_non_tfl_bus:
+        price += 3.00
+    if has_tfl_bus:
         price += 1.75
         
     duration = int(journey.get("duration_mins", 0))
