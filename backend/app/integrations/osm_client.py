@@ -27,44 +27,10 @@ def normalize_query(query: str) -> str:
     return q
 
 # In-memory geocoding cache to minimize external API calls.
-# Pre-seeded with common local test/demo locations so they work instantly even if Nominatim rate limits you locally!
+# Pre-seeded with the virtual 'current location' fallback coordinates.
 _GEOCODE_CACHE = {
     normalize_query(k): v for k, v in {
         "current location": (51.4944, -0.1829),
-        "imperial college london": (51.4988, -0.1749),
-        "south kensington": (51.4941, -0.1730),
-        "south kensington station": (51.4941, -0.1730),
-        "gloucester road": (51.4944, -0.1829),
-        "gloucester road station": (51.4944, -0.1829),
-        "holborn": (51.5173, -0.1200),
-        "holborn station": (51.5173, -0.1200),
-        "wimbledon": (51.4214, -0.2054),
-        "wimbledon station": (51.4214, -0.2054),
-        "st john's wood": (51.5347, -0.1740),
-        "st johns wood": (51.5347, -0.1740),
-        "st. john's wood": (51.5347, -0.1740),
-        "st john's wood station": (51.5347, -0.1740),
-        "st johns wood station": (51.5347, -0.1740),
-        "st. john's wood station": (51.5347, -0.1740),
-        "london st john's wood": (51.5347, -0.1740),
-        "london st johns wood": (51.5347, -0.1740),
-        "london st john's wood station": (51.5347, -0.1740),
-        "london st johns wood station": (51.5347, -0.1740),
-        "st john's wood underground station": (51.5347, -0.1740),
-        "st johns wood underground station": (51.5347, -0.1740),
-        "st. john's wood underground station": (51.5347, -0.1740),
-        "st. johns wood underground station": (51.5347, -0.1740),
-        "burnham": (51.5228, -0.6441),
-        "burnham station": (51.5228, -0.6441),
-        "burnham (berks) rail station": (51.5228, -0.6441),
-        "slough": (51.5118, -0.5915),
-        "slough station": (51.5118, -0.5915),
-        "reading": (51.4586, -0.9714),
-        "reading station": (51.4586, -0.9714),
-        "reading rail station": (51.4586, -0.9714),
-        "paddington": (51.5173, -0.1782),
-        "london paddington": (51.5173, -0.1782),
-        "paddington station": (51.5173, -0.1782),
     }.items()
 }
 
