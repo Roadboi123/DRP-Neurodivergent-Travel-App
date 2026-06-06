@@ -38,6 +38,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   // collapses the sheet instead of being swallowed by the ScrollView.
   const scrollOffsetY = React.useRef(0);
   const touchStartedInHeader = React.useRef(false);
+  const contentRef = React.useRef<View>(null);
+  const contentPageY = React.useRef(0);
+  const contentHeight = React.useRef(0);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -84,11 +87,16 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   // pulling the sheet down while the list is already scrolled to the top, or
   // pulling it up while it isn't fully expanded. Everything else stays with the
   // inner ScrollView so normal content scrolling still works.
-  const shouldClaimDrag = (dy: number, dx: number) => {
+  const shouldClaimDrag = (e: any, dy: number, dx: number) => {
     const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
     if (!verticalEnough) return false;
 
-    if (touchStartedInHeader.current) {
+    // Check Y coordinates relative to the absolutely measured content area
+    const sheetTopY = contentPageY.current + contentHeight.current - SHEET_HEIGHT + lastTranslateY.current;
+    const touchY = e.nativeEvent.pageY;
+    const isTouchInHeaderCoord = touchY >= sheetTopY && touchY <= sheetTopY + COLLAPSED_HEIGHT + 15;
+
+    if (isTouchInHeaderCoord || touchStartedInHeader.current) {
       return true;
     }
 
@@ -99,12 +107,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const panResponder = React.useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      onMoveShouldSetPanResponder: (e, gestureState) =>
+        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
       // Capture phase: intercept the gesture before the inner ScrollView when it
       // is genuinely the sheet being dragged (fixes the intermittent swipe-down).
-      onMoveShouldSetPanResponderCapture: (_, gestureState) =>
-        shouldClaimDrag(gestureState.dy, gestureState.dx),
+      onMoveShouldSetPanResponderCapture: (e, gestureState) =>
+        shouldClaimDrag(e, gestureState.dy, gestureState.dx),
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         startTranslateY.current = lastTranslateY.current;
@@ -482,7 +490,18 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         </View>
 
         {/* Content Area - Map fills the screen, sheet Panel sits absolutely at the bottom */}
-        <View style={{ flex: 1, position: 'relative' }}>
+        <View
+          ref={contentRef}
+          style={{ flex: 1, position: 'relative' }}
+          onLayout={(event) => {
+            contentHeight.current = event.nativeEvent.layout.height;
+            if (contentRef.current) {
+              contentRef.current.measure((x, y, width, height, pageX, pageY) => {
+                contentPageY.current = pageY;
+              });
+            }
+          }}
+        >
           {/* Map container fixed to background */}
           <View style={StyleSheet.absoluteFill}>
             {!hasMapCoords ? (
@@ -555,35 +574,39 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
             {/* Tappable header wrapper (drag is handled by the sheet itself) */}
             <View
               style={styles.sheetHeaderTouch}
-              onTouchStart={() => {
-                touchStartedInHeader.current = true;
-              }}
-              onTouchEnd={() => {
-                touchStartedInHeader.current = false;
-              }}
-              onTouchCancel={() => {
-                touchStartedInHeader.current = false;
-              }}
             >
               <TouchableOpacity
                 activeOpacity={0.9}
                 onPress={toggleExpanded}
                 style={{ width: '100%' }}
               >
-                {/* Sheet drag indicator bar */}
-                <View style={styles.sheetHandleContainer}>
-                  <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
-                </View>
-
-                {/* Quick stats panel */}
-                <View style={styles.quickStatsRow}>
-                  <View style={styles.statBox}>
-                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
-                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
+                <View
+                  style={{ width: '100%' }}
+                  onTouchStart={() => {
+                    touchStartedInHeader.current = true;
+                  }}
+                  onTouchEnd={() => {
+                    touchStartedInHeader.current = false;
+                  }}
+                  onTouchCancel={() => {
+                    touchStartedInHeader.current = false;
+                  }}
+                >
+                  {/* Sheet drag indicator bar */}
+                  <View style={styles.sheetHandleContainer}>
+                    <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
                   </View>
-                  <View style={styles.statBox}>
-                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
-                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+
+                  {/* Quick stats panel */}
+                  <View style={styles.quickStatsRow}>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
+                      <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                      <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
+                      <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+                    </View>
                   </View>
                 </View>
               </TouchableOpacity>
