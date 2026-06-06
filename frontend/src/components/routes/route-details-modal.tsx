@@ -59,18 +59,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
     }
   }, [visible, route, panY, MAX_TRANSLATE_Y]);
 
-  const toggleExpanded = () => {
-    const shouldExpand = !isExpanded;
-    const toValue = shouldExpand ? 0 : MAX_TRANSLATE_Y;
-    Animated.spring(panY, {
-      toValue,
-      useNativeDriver: Platform.OS !== 'web',
-      tension: 50,
-      friction: 8,
-    }).start(() => {
-      setIsExpanded(shouldExpand);
-    });
-  };
+
 
   const collapseSheet = () => {
     Animated.spring(panY, {
@@ -571,45 +560,35 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               transform: [{ translateY: panY }]
             }
           ]}>
-            {/* Tappable header wrapper (drag is handled by the sheet itself) */}
+            {/* Drag handle header wrapper */}
             <View
               style={styles.sheetHeaderTouch}
+              onTouchStart={() => {
+                touchStartedInHeader.current = true;
+              }}
+              onTouchEnd={() => {
+                touchStartedInHeader.current = false;
+              }}
+              onTouchCancel={() => {
+                touchStartedInHeader.current = false;
+              }}
             >
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={toggleExpanded}
-                style={{ width: '100%' }}
-              >
-                <View
-                  style={{ width: '100%' }}
-                  onTouchStart={() => {
-                    touchStartedInHeader.current = true;
-                  }}
-                  onTouchEnd={() => {
-                    touchStartedInHeader.current = false;
-                  }}
-                  onTouchCancel={() => {
-                    touchStartedInHeader.current = false;
-                  }}
-                >
-                  {/* Sheet drag indicator bar */}
-                  <View style={styles.sheetHandleContainer}>
-                    <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
-                  </View>
+              {/* Sheet drag indicator bar */}
+              <View style={styles.sheetHandleContainer}>
+                <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
+              </View>
 
-                  {/* Quick stats panel */}
-                  <View style={styles.quickStatsRow}>
-                    <View style={styles.statBox}>
-                      <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
-                      <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
-                    </View>
-                    <View style={styles.statBox}>
-                      <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
-                      <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
-                    </View>
-                  </View>
+              {/* Quick stats panel */}
+              <View style={styles.quickStatsRow}>
+                <View style={styles.statBox}>
+                  <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
+                  <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
                 </View>
-              </TouchableOpacity>
+                <View style={styles.statBox}>
+                  <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
+                  <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+                </View>
+              </View>
             </View>
 
             <ScrollView
