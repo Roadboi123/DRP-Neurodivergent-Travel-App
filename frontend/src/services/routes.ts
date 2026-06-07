@@ -1,5 +1,5 @@
 import type { HttpClient } from '@/services/http-client';
-import type { RouteOption, WarningItem } from '@/types/route';
+import type { LocationSuggestion, RouteOption, WarningItem } from '@/types/route';
 
 /** Build the `/routes/` query string, applying a username only when provided. */
 function buildRoutesQuery(start: string, end: string, username: string): string {
@@ -34,6 +34,11 @@ export interface RoutesService {
    * Fetch live warnings tailored to the user's sensory sensitivities.
    */
   getWarnings(username: string, generic?: boolean): Promise<WarningItem[]>;
+
+  /**
+   * Fetch location suggestions based on search text query.
+   */
+  suggestLocations(query: string): Promise<LocationSuggestion[]>;
 }
 
 /**
@@ -51,6 +56,10 @@ export function createRoutesService(client: HttpClient): RoutesService {
     getWarnings(username, generic) {
       const query = buildWarningsQuery(username, generic);
       return client.get<WarningItem[]>(`/${query}`);
+    },
+    suggestLocations(query) {
+      const queryParam = encodeURIComponent(query.trim());
+      return client.get<LocationSuggestion[]>(`/routes/suggest-locations?q=${queryParam}`);
     },
   };
 }

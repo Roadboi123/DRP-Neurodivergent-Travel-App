@@ -140,6 +140,46 @@
         "title": "LegOption",
         "type": "object"
       },
+      "LocationSuggestion": {
+        "description": "Schema for autocomplete location suggestions.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          }
+        },
+        "required": [
+          "name",
+          "display_name",
+          "lat",
+          "lon"
+        ],
+        "title": "LocationSuggestion",
+        "type": "object"
+      },
       "PreferenceResponse": {
         "description": "Response body for ``GET /preferences/{username}``.\n\nSensitivity fields are always one of the ``SensitivityLevel`` labels (the\nservice maps stored integers back through ``REVERSE_SENSITIVITY_MAP``) or\n``None`` when a column is unset.",
         "properties": {
@@ -1201,6 +1241,53 @@
           }
         ],
         "summary": "Get Routes",
+        "tags": [
+          "routes"
+        ]
+      }
+    },
+    "/routes/suggest-locations": {
+      "get": {
+        "description": "Return autocomplete location suggestions prioritizing Greater London and correcting typos.",
+        "operationId": "suggest_locations_routes_suggest_locations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LocationSuggestion"
+                  },
+                  "title": "Response Suggest Locations Routes Suggest Locations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suggest Locations",
         "tags": [
           "routes"
         ]
