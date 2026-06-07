@@ -21,16 +21,6 @@ _STATION_WORKS_LOCK = asyncio.Lock()
 _IS_REFRESHING_STATION_WORKS: bool = False
 
 
-def _parse_leg(leg: dict) -> dict:
-    path = leg.get("path", {})
-    line_string_str = path.get("lineString")
-    path_coords = None
-    if line_string_str:
-        try:
-            import json
-            path_coords = json.loads(line_string_str)
-        except Exception as e:
-            print(f"Error parsing TfL lineString: {e}")
 
 def clean_station_name(name: str) -> str:
     n = name.lower()
