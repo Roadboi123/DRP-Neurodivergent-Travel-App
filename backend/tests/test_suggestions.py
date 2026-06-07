@@ -101,4 +101,15 @@ def test_suggest_locations_api_endpoint():
         assert len(data) == 1
         assert data[0]["name"] == "Test Suggestion"
         assert data[0]["lat"] == 51.5
-        mock_suggest.assert_called_once_with("test")
+        mock_suggest.assert_called_once_with("test", None, None)
+
+
+@pytest.mark.anyio
+async def test_suggest_locations_proximity_sorting():
+    # Both Slough Station and St. John's Wood Underground Station contain "s".
+    # User in Slough (lat: 51.51, lon: -0.59) should get Slough Station ranked higher
+    # than St. John's Wood Underground Station (lat: 51.53, lon: -0.17).
+    res = await suggest_locations("station", user_lat=51.51, user_lon=-0.59)
+    names = [s["name"] for s in res]
+    assert names.index("Slough Station") < names.index("St. John's Wood Underground Station")
+

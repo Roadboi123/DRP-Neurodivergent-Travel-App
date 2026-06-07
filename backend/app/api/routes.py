@@ -52,8 +52,18 @@ async def get_routes_warnings(
 
 
 @router.get("/suggest-locations", response_model=List[LocationSuggestion])
-async def suggest_locations(q: str):
+async def suggest_locations(q: str, user_coords: Optional[str] = None):
     """Return autocomplete location suggestions prioritizing Greater London and correcting typos."""
     from app.integrations.osm_client import suggest_locations as osm_suggest_locations
-    return await osm_suggest_locations(q)
+    user_lat, user_lon = None, None
+    if user_coords:
+        try:
+            parts = user_coords.split(",")
+            if len(parts) == 2:
+                user_lat = float(parts[0])
+                user_lon = float(parts[1])
+        except ValueError:
+            pass
+    return await osm_suggest_locations(q, user_lat, user_lon)
+
 

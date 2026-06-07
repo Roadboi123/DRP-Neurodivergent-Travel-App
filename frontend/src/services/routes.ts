@@ -38,7 +38,7 @@ export interface RoutesService {
   /**
    * Fetch location suggestions based on search text query.
    */
-  suggestLocations(query: string): Promise<LocationSuggestion[]>;
+  suggestLocations(query: string, userCoords?: string | null): Promise<LocationSuggestion[]>;
 }
 
 /**
@@ -57,9 +57,10 @@ export function createRoutesService(client: HttpClient): RoutesService {
       const query = buildWarningsQuery(username, generic);
       return client.get<WarningItem[]>(`/${query}`);
     },
-    suggestLocations(query) {
+    suggestLocations(query, userCoords) {
       const queryParam = encodeURIComponent(query.trim());
-      return client.get<LocationSuggestion[]>(`/routes/suggest-locations?q=${queryParam}`);
+      const coordParam = userCoords ? `&user_coords=${encodeURIComponent(userCoords.trim())}` : '';
+      return client.get<LocationSuggestion[]>(`/routes/suggest-locations?q=${queryParam}${coordParam}`);
     },
   };
 }

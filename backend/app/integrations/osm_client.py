@@ -8,6 +8,8 @@ import httpx
 import re
 import asyncio
 import time
+from typing import Optional
+
 
 # OpenRouteService API Key (optional premium upgrade for realistic walking directions & alternatives)
 ORS_API_KEY = os.environ.get("ORS_API_KEY", "")
@@ -465,16 +467,21 @@ def correct_common_typos(query: str) -> str:
     return q
 
 
-async def suggest_locations(query: str) -> list[dict]:
-    """Provide location suggestions, prioritizing Greater London and correcting common typos."""
+async def suggest_locations(
+    query: str,
+    user_lat: Optional[float] = None,
+    user_lon: Optional[float] = None
+) -> list[dict]:
+    """Provide location suggestions, prioritizing proximity to user location or Greater London, and correcting typos."""
     query = query.strip()
     if len(query) < 3:
         return []
 
     # Check suggestions cache first
     norm_query = normalize_query(query)
-    if norm_query in _SUGGESTIONS_CACHE:
-        return _SUGGESTIONS_CACHE[norm_query]
+    cache_key = f"{norm_query}:{user_lat}:{user_lon}" if (user_lat is not None and user_lon is not None) else norm_query
+    if cache_key in _SUGGESTIONS_CACHE:
+        return _SUGGESTIONS_CACHE[cache_key]
 
     suggestions = []
     seen_coords = set()
@@ -563,9 +570,13 @@ async def suggest_locations(query: str) -> list[dict]:
         except Exception as e:
             print(f"Nominatim suggestions error for '{query}': {e}")
 
-    # 3. Sort suggestions: London results first, then by importance descending
-    suggestions.sort(key=lambda x: x.get("importance", 0.0), reverse=True)
-    suggestions.sort(key=lambda x: x.get("in_london", False), reverse=True)
+    # 3. Sort suggestions: by proximity if user coordinates are available,
+    # otherwise London results first, then by importance descending.
+    if user_lat is not None and user_lon is not None:
+        suggestions.sort(key=lambda s: (s["lat"] - user_lat) ** 2 + (s["lon"] - user_lon) ** 2)
+    else:
+        suggestions.sort(key=lambda x: x.get("importance", 0.0), reverse=True)
+        suggestions.sort(key=lambda x: x.get("in_london", False), reverse=True)
 
     # 4. Strip sorting helper keys before returning/caching
     final_suggestions = []
@@ -588,6 +599,7 @@ async def suggest_locations(query: str) -> list[dict]:
             _GEOCODE_CACHE[full_key] = (s["lat"], s["lon"])
 
     # Cache suggestions
-    _SUGGESTIONS_CACHE[norm_query] = final_suggestions
+    _SUGGESTIONS_CACHE[cache_key] = final_suggestions
     return final_suggestions
+
 

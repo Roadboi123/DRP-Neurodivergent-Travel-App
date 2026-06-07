@@ -229,6 +229,7 @@ export default function RoutesScreen() {
         onStartChange={setStartLoc}
         onEndChange={setEndLoc}
         onSwap={handleSwapLocations}
+        userCoords={coords}
       />
 
       {/* Personalization warning bar */}
