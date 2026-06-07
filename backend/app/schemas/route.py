@@ -74,3 +74,13 @@ class WarningItemSchema(BaseModel):
     severity: Literal["high", "medium", "info"]
     icon: str
 
+
+class LocationSuggestion(BaseModel):
+    """Schema for autocomplete location suggestions."""
+    name: str
+    display_name: str
+    subtitle: Optional[str] = None
+    lat: float
+    lon: float
+
+

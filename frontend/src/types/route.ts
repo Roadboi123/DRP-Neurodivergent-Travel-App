@@ -17,3 +17,6 @@ export type RouteType = RouteOption['type'];
 
 // Regenerated from the backend Pydantic schema
 export type WarningItem = components['schemas']['WarningItemSchema'];
+
+export type LocationSuggestion = components['schemas']['LocationSuggestion'];
+

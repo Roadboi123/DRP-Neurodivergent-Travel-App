@@ -2,7 +2,7 @@ from typing import List, Optional
 import jwt
 from fastapi import APIRouter, Depends
 
-from app.schemas.route import RouteOption, WarningItemSchema
+from app.schemas.route import RouteOption, WarningItemSchema, LocationSuggestion
 from app.services.routes import get_route_suggestions, get_user_warnings
 from app.api.auth import oauth2_scheme, ALGORITHM, JWT_SECRET
 
@@ -49,3 +49,21 @@ async def get_routes_warnings(
             pass
             
     return await get_user_warnings(resolved_username, generic=bool(generic))
+
+
+@router.get("/suggest-locations", response_model=List[LocationSuggestion])
+async def suggest_locations(q: str, user_coords: Optional[str] = None):
+    """Return autocomplete location suggestions prioritizing Greater London and correcting typos."""
+    from app.integrations.osm_client import suggest_locations as osm_suggest_locations
+    user_lat, user_lon = None, None
+    if user_coords:
+        try:
+            parts = user_coords.split(",")
+            if len(parts) == 2:
+                user_lat = float(parts[0])
+                user_lon = float(parts[1])
+        except ValueError:
+            pass
+    return await osm_suggest_locations(q, user_lat, user_lon)
+
+
