@@ -8,7 +8,7 @@ import httpx
 import re
 import asyncio
 import time
-from typing import Optional
+from typing import Optional, Any
 
 
 # OpenRouteService API Key (optional premium upgrade for realistic walking directions & alternatives)
@@ -38,7 +38,7 @@ _GEOCODE_CACHE = {
 
 _SUGGESTIONS_CACHE: dict[str, list[dict]] = {}
 
-_COMMON_LONDON_PLACES = [
+_COMMON_LONDON_PLACES: list[dict[str, Any]] = [
     {
         "name": "St. John's Wood Underground Station",
         "display_name": "St. John's Wood Underground Station, London, NW8 6DR, United Kingdom",
