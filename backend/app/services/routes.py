@@ -298,7 +298,7 @@ async def _calculate_leg_sensory_live(leg: dict, temp: float) -> tuple[int, int,
     return noise, crowds, heat, light, smell
 
 
-async def _build_route_option(index: int, journey: dict, temp: float) -> dict:
+async def _build_route_option(index: int, journey: dict, temp: float, destination_name: str) -> dict:
     """
     Format a fetched API journey route to match the frontend RouteOption model schema.
     """
@@ -476,6 +476,14 @@ async def _build_route_option(index: int, journey: dict, temp: float) -> dict:
             "arrival_lon": leg.get("arrival_lon"),
             "path_coords": leg.get("path_coords"),
         })
+
+    # Override final destination leg arrival name and instruction if it is walking
+    if formatted_legs and str(formatted_legs[-1].get("mode", "")).lower() == "walking":
+        old_arr = formatted_legs[-1].get("arrival", "")
+        formatted_legs[-1]["arrival"] = destination_name
+        inst = formatted_legs[-1].get("instruction", "")
+        if old_arr and inst and old_arr in inst:
+            formatted_legs[-1]["instruction"] = inst.replace(old_arr, destination_name)
 
     # Build features tag list for cleaner UI rendering
     features = []
@@ -721,7 +729,7 @@ async def get_route_suggestions(
     temp = await get_current_london_temp()
 
     # Map raw journeys to frontend schema asynchronously in parallel
-    tasks = [_build_route_option(i, j, temp) for i, j in enumerate(raw_journeys)]
+    tasks = [_build_route_option(i, j, temp, end) for i, j in enumerate(raw_journeys)]
     route_options = await asyncio.gather(*tasks, return_exceptions=True)
     routes = [r for r in route_options if isinstance(r, dict)]
 

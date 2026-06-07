@@ -609,6 +609,23 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                             {leg.instruction} ({leg.duration_mins} mins)
                           </Text>
 
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                            <Ionicons
+                              name={leg.mode.toLowerCase() === 'walking' || leg.mode.toLowerCase() === 'walk' ? 'walk-outline' : 'exit-outline'}
+                              size={13}
+                              color={palette.textSecondary}
+                              style={{ marginRight: 4 }}
+                            />
+                            <Text style={[styles.arrivalText, { color: palette.textSecondary }]}>
+                              {leg.mode.toLowerCase() === 'walking' || leg.mode.toLowerCase() === 'walk'
+                                ? 'Walk to '
+                                : 'Get off at '}
+                              <Text style={{ fontWeight: '800', color: palette.textPrimary }}>
+                                {leg.arrival}
+                              </Text>
+                            </Text>
+                          </View>
+
                           {/* Collapsible intermediate stops list */}
                           {leg.stops && leg.stops.length > 0 && (
                             <View style={[styles.stopsDropdown, { borderLeftColor: linkColor }]}>
@@ -869,6 +886,11 @@ const styles = StyleSheet.create({
   instructionText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  arrivalText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    marginTop: 2,
   },
   stopsDropdown: {
     marginTop: 4,
