@@ -2,6 +2,7 @@ import httpx
 import os
 import time
 import asyncio
+import json
 
 TFL_BASE = "https://api.tfl.gov.uk"
 APP_KEY  = os.environ.get("TFL_APP_KEY", "")
@@ -31,10 +32,42 @@ def _parse_leg(leg: dict) -> dict:
         except Exception as e:
             print(f"Error parsing TfL lineString: {e}")
 
+def clean_station_name(name: str) -> str:
+    n = name.lower()
+    for suffix in [" underground station", " railway station", " rail station", " dlr station", " station"]:
+        if n.endswith(suffix):
+            n = n[:-len(suffix)]
+    return n.strip()
+
+
+def _parse_leg(leg: dict) -> dict:
+    # Resolve geometry from lineString
+    path_coords = []
+    line_string_str = leg.get("path", {}).get("lineString")
+    if line_string_str:
+        try:
+            path_coords = json.loads(line_string_str)
+        except Exception as e:
+            print(f"Error parsing TfL lineString: {e}")
+
+    departure = leg.get("departurePoint", {}).get("commonName", "")
+    arrival = leg.get("arrivalPoint", {}).get("commonName", "")
+
+    dep_c = clean_station_name(departure)
+    arr_c = clean_station_name(arrival)
+
+    raw_stops = [sp.get("name") for sp in leg.get("path", {}).get("stopPoints", [])]
+    stops = []
+    for stop in raw_stops:
+        stop_name = stop or ""
+        stop_c = clean_station_name(stop_name)
+        if stop_c != dep_c and stop_c != arr_c:
+            stops.append(stop_name)
+
     return {
         "mode":          leg.get("mode", {}).get("name", "unknown"),
-        "departure":     leg.get("departurePoint", {}).get("commonName", ""),
-        "arrival":       leg.get("arrivalPoint", {}).get("commonName", ""),
+        "departure":     departure,
+        "arrival":       arrival,
         "departure_naptan": leg.get("departurePoint", {}).get("naptanId", ""),
         "arrival_naptan":   leg.get("arrivalPoint", {}).get("naptanId", ""),
         "departure_lat":    leg.get("departurePoint", {}).get("lat"),
@@ -48,7 +81,7 @@ def _parse_leg(leg: dict) -> dict:
         "line":          leg.get("routeOptions", [{}])[0]
                             .get("lineIdentifier", {})
                             .get("name", "") if leg.get("routeOptions") else "",
-        "stops":         [sp.get("name") for sp in leg.get("path", {}).get("stopPoints", [])],
+        "stops":         stops,
         "path_coords":   path_coords,
     }
 
