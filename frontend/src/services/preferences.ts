@@ -1,4 +1,4 @@
-import type { HttpClient } from '@/services/http-client';
+import { HttpError, type HttpClient } from '@/services/http-client';
 import type { PreferenceResponse, SensitivityLevel } from '@/types/preference';
 
 export interface SavePreferencesPayload {
@@ -23,8 +23,11 @@ export function createPreferencesService(client: HttpClient): PreferencesService
     async getPreferences(username) {
       // 404 (no saved preferences) is data, not an error — use the raw response.
       const res = await client.getResponse(`/preferences/${username.trim()}`);
-      if (!res.ok) {
+      if (res.status === 404) {
         return null;
+      }
+      if (!res.ok) {
+        throw new HttpError(res.status, `/preferences/${username}`);
       }
       return (await res.json()) as PreferenceResponse;
     },

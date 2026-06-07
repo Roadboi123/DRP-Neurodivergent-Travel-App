@@ -1,4 +1,4 @@
-import type { HttpClient } from '@/services/http-client';
+import { HttpError, type HttpClient } from '@/services/http-client';
 import type { PresetsPayload, PresetsResponse } from '@/types/preset';
 
 export interface PresetsService {
@@ -14,8 +14,11 @@ export function createPresetsService(client: HttpClient): PresetsService {
     async getPresets(username) {
       // 404 (no saved presets) is data, not an error — use the raw response.
       const res = await client.getResponse(`/presets/${username.trim()}`);
-      if (!res.ok) {
+      if (res.status === 404) {
         return null;
+      }
+      if (!res.ok) {
+        throw new HttpError(res.status, `/presets/${username}`);
       }
       return (await res.json()) as PresetsResponse;
     },

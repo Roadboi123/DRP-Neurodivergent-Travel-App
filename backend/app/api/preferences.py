@@ -14,15 +14,16 @@ def save_preferences(
     token: Optional[str] = Depends(oauth2_scheme)
 ):
     """Save sensory preferences from the user preferences screen."""
-    if token:
-        try:
-            token_username = get_current_username(token)
-            # Override username in payload to enforce authentication integrity
-            prefs.username = token_username
-        except HTTPException:
-            raise
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid authentication token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication token required")
+    try:
+        token_username = get_current_username(token)
+        # Override username in payload to enforce authentication integrity
+        prefs.username = token_username
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
             
     try:
         username = preferences_service.save_preferences(prefs)

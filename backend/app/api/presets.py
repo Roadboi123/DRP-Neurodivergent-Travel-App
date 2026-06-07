@@ -15,14 +15,15 @@ def save_presets(
     token: Optional[str] = Depends(oauth2_scheme),
 ):
     """Replace the signed-in user's three preset profiles and active selection."""
-    if token:
-        try:
-            # Override username from the token to enforce authentication integrity.
-            payload.username = get_current_username(token)
-        except HTTPException:
-            raise
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid authentication token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication token required")
+    try:
+        # Override username from the token to enforce authentication integrity.
+        payload.username = get_current_username(token)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
 
     try:
         return presets_service.save_presets(payload)
