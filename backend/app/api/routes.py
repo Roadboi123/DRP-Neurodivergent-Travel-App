@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from app.schemas.route import RouteOption, WarningItemSchema, LocationSuggestion
 from app.services.routes import get_route_suggestions, get_user_warnings
 from app.api.auth import oauth2_scheme, ALGORITHM, JWT_SECRET
+from app.integrations.tlf_client import clean_station_name
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 
@@ -35,9 +36,16 @@ async def get_routes(
 async def get_routes_warnings(
     username: Optional[str] = None,
     generic: Optional[bool] = False,
+    lines: Optional[str] = None,
+    stations: Optional[str] = None,
     token: Optional[str] = Depends(oauth2_scheme),
 ):
-    """Return live warnings tailored to the user's sensory sensitivities."""
+    """Return live warnings tailored to the user's sensory sensitivities.
+    
+    Pass `lines` (comma-separated TfL line names, e.g. "Elizabeth,Piccadilly") and
+    `stations` (comma-separated station names) from the fetched route legs so that
+    disruption and works warnings are filtered to only those relevant to the journey.
+    """
     resolved_username = username
     if token:
         try:
@@ -47,8 +55,28 @@ async def get_routes_warnings(
                 resolved_username = token_username
         except Exception:
             pass
-            
-    return await get_user_warnings(resolved_username, generic=bool(generic))
+
+    # Only include non-empty line names (walking legs produce an empty string).
+    route_lines: set[str] = set()
+    if lines:
+        route_lines = {l.strip().lower() for l in lines.split(",") if l.strip()}
+
+    # Apply the same name-cleaning that get_live_station_works uses so that
+    # "Stanmore Underground Station" → "stanmore" matches "Stanmore" → "stanmore".
+    route_stations: set[str] = set()
+    if stations:
+        route_stations = {
+            clean_station_name(s.strip())
+            for s in stations.split(",")
+            if s.strip()
+        }
+
+    return await get_user_warnings(
+        resolved_username,
+        generic=bool(generic),
+        route_lines=route_lines,
+        route_stations=route_stations,
+    )
 
 
 @router.get("/suggest-locations", response_model=List[LocationSuggestion])

@@ -11,13 +11,23 @@ function buildRoutesQuery(start: string, end: string, username: string): string 
   return `routes/?start=${startParam}&end=${endParam}${userParam}`;
 }
 
-function buildWarningsQuery(username: string, generic?: boolean): string {
+function buildWarningsQuery(
+  username: string,
+  generic?: boolean,
+  routeContext?: { lines: string[]; stations: string[] },
+): string {
   const params: string[] = [];
   if (username.trim()) {
     params.push(`username=${encodeURIComponent(username.trim())}`);
   }
   if (generic) {
     params.push(`generic=true`);
+  }
+  if (routeContext?.lines?.length) {
+    params.push(`lines=${encodeURIComponent(routeContext.lines.join(','))}`);
+  }
+  if (routeContext?.stations?.length) {
+    params.push(`stations=${encodeURIComponent(routeContext.stations.join(','))}`);
   }
   const queryStr = params.length > 0 ? `?${params.join('&')}` : '';
   return `routes/warnings${queryStr}`;
@@ -32,8 +42,14 @@ export interface RoutesService {
   
   /**
    * Fetch live warnings tailored to the user's sensory sensitivities.
+   * Pass `routeContext` (lines/stations from the fetched route legs) so the
+   * backend can filter warnings to those relevant to the actual journey.
    */
-  getWarnings(username: string, generic?: boolean): Promise<WarningItem[]>;
+  getWarnings(
+    username: string,
+    generic?: boolean,
+    routeContext?: { lines: string[]; stations: string[] },
+  ): Promise<WarningItem[]>;
 
   /**
    * Fetch location suggestions based on search text query.
@@ -53,8 +69,8 @@ export function createRoutesService(client: HttpClient): RoutesService {
       // Trailing slash is already part of the query to avoid an HTTP redirect.
       return client.get<RouteOption[]>(`/${query}`);
     },
-    getWarnings(username, generic) {
-      const query = buildWarningsQuery(username, generic);
+    getWarnings(username, generic, routeContext) {
+      const query = buildWarningsQuery(username, generic, routeContext);
       return client.get<WarningItem[]>(`/${query}`);
     },
     suggestLocations(query, userCoords) {

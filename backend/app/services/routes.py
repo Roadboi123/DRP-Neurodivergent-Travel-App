@@ -850,10 +850,19 @@ async def get_route_suggestions(
     return routes
 
 
-async def get_user_warnings(username: Optional[str] = None, generic: bool = False) -> List[Dict[str, Any]]:
+async def get_user_warnings(
+    username: Optional[str] = None,
+    generic: bool = False,
+    route_lines: Optional[set] = None,
+    route_stations: Optional[set] = None,
+) -> List[Dict[str, Any]]:
     """
     Generate dynamic live warning items tailored to the user's specific sensitivities
     by querying real-time TfL disruptions and London weather forecasts.
+
+    When `route_lines` / `route_stations` are provided (non-empty sets of lowercase
+    strings extracted from the fetched route legs), line-disruption and station-works
+    warnings are filtered to only those relevant to the actual journey.
     """
     # 1. Fetch user preferences if username is provided and not generic request
     u_noise = 2
@@ -920,13 +929,14 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
             })
             warning_id_counter += 1
 
-    # 3. Live line disruptions check from TfL Status API
+    # 3. Live line disruptions check from TfL Status API.
+    # Suspensions and closures are safety-critical and must always be fetched;
+    # crowding/noise secondary warnings remain gated on the user's sensitivity level.
     tfl_disruptions = []
-    if u_crowds >= 3 or u_noise >= 3 or generic:
-        try:
-            tfl_disruptions = await tlf_client.get_live_line_disruptions()
-        except Exception as e:
-            print(f"Error getting live line disruptions: {e}")
+    try:
+        tfl_disruptions = await tlf_client.get_live_line_disruptions()
+    except Exception as e:
+        print(f"Error getting live line disruptions: {e}")
 
     # Categorize disruptions
     suspended_lines = []
@@ -939,7 +949,11 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
     for d in tfl_disruptions:
         line_name = d["line"]
         status_desc = str(d.get("status_desc", "")).lower()
-        
+
+        # If the caller supplied route context, skip lines not on the journey.
+        if route_lines and line_name.lower() not in route_lines:
+            continue
+
         # Categorize
         if "suspend" in status_desc:
             if line_name not in suspended_lines:
@@ -1067,6 +1081,11 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
     if u_noise >= 3:
         try:
             works_stations = await tlf_client.get_live_station_works()
+            # Filter to stations actually on this route (if context was supplied).
+            if route_stations and works_stations:
+                works_stations = [
+                    s for s in works_stations if s.lower() in route_stations
+                ]
             if works_stations:
                 if len(works_stations) == 1:
                     desc = f"Drilling works reported at {works_stations[0]} station."
@@ -1074,7 +1093,7 @@ async def get_user_warnings(username: Optional[str] = None, generic: bool = Fals
                     desc = f"Drilling works reported at {works_stations[0]} and {works_stations[1]} stations."
                 else:
                     desc = f"Drilling works reported at {works_stations[0]}, {works_stations[1]}, and {len(works_stations)-2} other stations."
-                
+
                 warnings.append({
                     "id": f"w_station_works_{warning_id_counter}",
                     "title": "Drilling & Works",
