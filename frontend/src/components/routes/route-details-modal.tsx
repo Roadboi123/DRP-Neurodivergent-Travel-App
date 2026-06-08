@@ -278,6 +278,30 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         let polylinePointsStr = '';
         if (leg.path_coords && leg.path_coords.length > 0) {
           const pathPoints = [...leg.path_coords];
+          // Some providers return a leg's geometry in the opposite order to the
+          // leg's own dep→arr direction. Snapping the endpoints (below) onto
+          // reversed geometry makes the drawn line shoot across to the far end
+          // and trace back — the "dots going round in circles" artifact. Flip
+          // the path first when that orientation reduces the endpoint mismatch.
+          if (
+            pathPoints.length > 1 &&
+            leg.dep_lat != null && leg.dep_lon != null &&
+            leg.arr_lat != null && leg.arr_lon != null
+          ) {
+            const sq = (aLat: number, aLon: number, bLat: number, bLon: number) =>
+              (aLat - bLat) ** 2 + (aLon - bLon) ** 2;
+            const head = pathPoints[0];
+            const tail = pathPoints[pathPoints.length - 1];
+            const asIs =
+              sq(head[0], head[1], leg.dep_lat, leg.dep_lon) +
+              sq(tail[0], tail[1], leg.arr_lat, leg.arr_lon);
+            const flipped =
+              sq(head[0], head[1], leg.arr_lat, leg.arr_lon) +
+              sq(tail[0], tail[1], leg.dep_lat, leg.dep_lon);
+            if (flipped < asIs) {
+              pathPoints.reverse();
+            }
+          }
           if (leg.dep_lat != null && leg.dep_lon != null && pathPoints.length > 0) {
             pathPoints[0] = [leg.dep_lat, leg.dep_lon];
           }
@@ -290,7 +314,9 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         }
 
         if (isWalking) {
-          // Walking represented as outlined pink dots!
+          // Walking: ink-outlined dotted line in the leg's own colour, so it
+          // matches the walk badge on the route card (cyan) instead of reusing
+          // the End marker's pink — keeps the map legible without a legend.
           leafletJS += `
             L.polyline(${polylinePointsStr}, {
               color: '#1d1c1c',
@@ -301,7 +327,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
             }).addTo(map);
 
             L.polyline(${polylinePointsStr}, {
-              color: '#ff158a', // Wero Pink
+              color: '${bgColor}',
               weight: 6,
               dashArray: '1, 15',
               lineCap: 'round',
