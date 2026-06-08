@@ -131,29 +131,6 @@ export default function RoutesScreen() {
     setMounted(true);
   }, []);
 
-  // Fetch warnings dynamically
-  useEffect(() => {
-    let active = true;
-    async function fetchWarnings() {
-      if (!isFocused) return;
-      try {
-        const data = await routesService.getWarnings(username, false);
-        if (active) {
-          setWarnings(data);
-        }
-      } catch (error) {
-        console.warn('Failed to fetch live warnings:', error);
-        if (active) {
-          setWarnings([]);
-        }
-      }
-    }
-    fetchWarnings();
-    return () => {
-      active = false;
-    };
-  }, [username, routesService, isFocused]);
-
   // Fetch routes from the backend with preference scoring (only when active/submitted queries change)
   useEffect(() => {
     let active = true;
@@ -166,6 +143,8 @@ export default function RoutesScreen() {
       }
 
       setLoading(true);
+      // Clear stale warnings when starting a new journey search
+      setWarnings([]);
       try {
         let originQuery = activeStart;
         if (activeStart === 'Current Location') {
@@ -177,14 +156,35 @@ export default function RoutesScreen() {
             originQuery = activeCoords;
           }
         }
-        const data = await routesService.getRoutes(originQuery, activeEnd, username);
+        const routeData = await routesService.getRoutes(originQuery, activeEnd, username);
+
+        // Extract every line name and station name from all legs of all routes
+        // so the warnings endpoint can filter to only journey-relevant disruptions.
+        const lineSet = new Set<string>();
+        const stationSet = new Set<string>();
+        for (const route of routeData) {
+          for (const leg of route.legs ?? []) {
+            if (leg.line) lineSet.add(leg.line);
+            if (leg.departure) stationSet.add(leg.departure);
+            if (leg.arrival) stationSet.add(leg.arrival);
+            for (const stop of leg.stops ?? []) stationSet.add(stop);
+          }
+        }
+        const routeContext = {
+          lines: Array.from(lineSet),
+          stations: Array.from(stationSet),
+        };
+
+        const warningData = await routesService.getWarnings(username, false, routeContext);
         if (active) {
-          setRoutes(data);
+          setRoutes(routeData);
+          setWarnings(warningData);
         }
       } catch (error) {
         console.warn('Local backend unavailable...', error);
         if (active) {
           setRoutes([]);
+          setWarnings([]);
         }
       } finally {
         if (active) {
@@ -267,8 +267,8 @@ export default function RoutesScreen() {
 
       <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-        {/* Warnings Banner */}
-        <WarningsPanel warnings={warnings} />
+        {/* Warnings Banner — only shown once routes are loaded for a specific journey */}
+        {pool.length > 0 && <WarningsPanel warnings={warnings} />}
 
         {/* Sort tab (Preference | Speed) + Filters button */}
         <View style={styles.controlsRow}>

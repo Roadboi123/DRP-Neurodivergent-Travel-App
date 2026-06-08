@@ -45,6 +45,8 @@ export function RouteSearchInputs({
 
   const startInputRef = useRef<TextInput>(null);
   const endInputRef = useRef<TextInput>(null);
+  // Tracks when a suggestion tap initiated the blur so handleBlur skips its own onSubmit.
+  const selectingRef = useRef(false);
 
   // Parse user coords for proximity sorting
   let userLat: number | null = null;
@@ -200,16 +202,22 @@ export function RouteSearchInputs({
   }, [startLoc, endLoc, focusedInput, routesService, userCoords, userLat, userLon, recents]);
 
   const handleBlur = () => {
-    // Delay closing suggestions dropdown so taps can register
+    // Delay closing suggestions dropdown so taps can register.
+    // Skip the submit if a suggestion tap already called onSubmit with the correct values.
     setTimeout(() => {
       setFocusedInput(null);
-      onSubmit(startLoc, endLoc);
+      if (!selectingRef.current) {
+        onSubmit(startLoc, endLoc);
+      }
+      selectingRef.current = false;
     }, 250);
   };
 
   const handleSelectSuggestion = async (sug: LocationSuggestion) => {
     let newStart = startLoc;
     let newEnd = endLoc;
+    // Raise the flag before blur so handleBlur's delayed submit is suppressed.
+    selectingRef.current = true;
     if (focusedInput === 'start') {
       newStart = sug.name;
       onStartChange(sug.name);
@@ -221,6 +229,7 @@ export function RouteSearchInputs({
     }
     setFocusedInput(null);
     setSuggestions([]);
+    // Submit immediately with the correct, freshly-resolved values.
     onSubmit(newStart, newEnd);
 
     // Save to recents if not Current Location
