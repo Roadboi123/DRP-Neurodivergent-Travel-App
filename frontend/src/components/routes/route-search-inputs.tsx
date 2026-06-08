@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -17,8 +18,7 @@ interface RouteSearchInputsProps {
   userCoords?: string | null;
 }
 
-// In-memory cache to make frontend suggestions repeat searches instantaneous
-const FRONTEND_SUGGESTIONS_CACHE: Record<string, LocationSuggestion[]> = {};
+const RECENTS_KEY = 'calm_travel_recent_locations';
 
 // Pre-seeded coordinate-precise list of major London transport hubs
 const LOCAL_COMMON_PLACES: LocationSuggestion[] = [
@@ -199,6 +199,8 @@ const LOCAL_COMMON_PLACES: LocationSuggestion[] = [
   }
 ];
 
+const FRONTEND_SUGGESTIONS_CACHE: Record<string, LocationSuggestion[]> = {};
+
 export function RouteSearchInputs({
   startLoc,
   endLoc,
@@ -217,6 +219,7 @@ export function RouteSearchInputs({
   const [focusedInput, setFocusedInput] = useState<'start' | 'end' | null>(null);
   const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [recents, setRecents] = useState<LocationSuggestion[]>([]);
 
   const startInputRef = useRef<TextInput>(null);
   const endInputRef = useRef<TextInput>(null);
@@ -232,6 +235,21 @@ export function RouteSearchInputs({
     }
   }
 
+  // Load recents on mount
+  useEffect(() => {
+    async function loadRecents() {
+      try {
+        const data = await AsyncStorage.getItem(RECENTS_KEY);
+        if (data) {
+          setRecents(JSON.parse(data));
+        }
+      } catch (e) {
+        console.warn('Failed to load recent locations:', e);
+      }
+    }
+    loadRecents();
+  }, []);
+
   // Debounced autocomplete suggestions search with instant local prefix filtering
   useEffect(() => {
     if (focusedInput === null) {
@@ -245,7 +263,7 @@ export function RouteSearchInputs({
     const normalize = (s: string) => s.toLowerCase().replace(/['’.\s]+/g, '');
     const normQuery = normalize(cleanQuery);
 
-    // 1. Get default choices if query is empty or is "Current Location"
+    // 1. Get recent choices if query is empty or is "Current Location"
     if (cleanQuery === '' || query === 'Current Location') {
       const defaults: LocationSuggestion[] = [];
       if (focusedInput === 'start' && startLoc !== 'Current Location') {
@@ -258,38 +276,63 @@ export function RouteSearchInputs({
         });
       }
       
-      const copyDefaults = [...LOCAL_COMMON_PLACES];
-      if (userLat !== null && userLon !== null) {
-        const lat = userLat;
-        const lon = userLon;
-        copyDefaults.sort((a, b) => {
-          const distA = (a.lat - lat) ** 2 + (a.lon - lon) ** 2;
-          const distB = (b.lat - lat) ** 2 + (b.lon - lon) ** 2;
-          return distA - distB;
-        });
+      // If we have recent locations, display them!
+      if (recents.length > 0) {
+        defaults.push(...recents.map(r => ({ ...r, isRecent: true } as LocationSuggestion & { isRecent?: boolean })));
+      } else {
+        // Fallback to local common list sorted by proximity
+        const copyDefaults = [...LOCAL_COMMON_PLACES];
+        if (userLat !== null && userLon !== null) {
+          const lat = userLat;
+          const lon = userLon;
+          copyDefaults.sort((a, b) => {
+            const distA = (a.lat - lat) ** 2 + (a.lon - lon) ** 2;
+            const distB = (b.lat - lat) ** 2 + (b.lon - lon) ** 2;
+            return distA - distB;
+          });
+        }
+        defaults.push(...copyDefaults.slice(0, 5));
       }
-      defaults.push(...copyDefaults.slice(0, 5));
       setSuggestions(defaults);
       return;
     }
 
-    // 2. Perform Instant Local Filter (0ms delay!)
-    const localMatches = LOCAL_COMMON_PLACES.filter(place => {
+    // 2. Perform Instant Local/Recent Filter (0ms delay!)
+    const matchingRecents = recents
+      .filter(place => normalize(place.name).includes(normQuery))
+      .map(r => ({ ...r, isRecent: true }));
+
+    const matchingLocal = LOCAL_COMMON_PLACES.filter(place => {
       const normName = normalize(place.name);
       return normName.includes(normQuery);
     });
 
-    if (userLat !== null && userLon !== null) {
-      const lat = userLat;
-      const lon = userLon;
-      localMatches.sort((a, b) => {
-        const distA = (a.lat - lat) ** 2 + (a.lon - lon) ** 2;
-        const distB = (b.lat - lat) ** 2 + (b.lon - lon) ** 2;
-        return distA - distB;
-      });
+    // Merge and de-duplicate (prefer recents)
+    const mergedList: (LocationSuggestion & { isRecent?: boolean })[] = [...matchingRecents];
+    const seenCoords = new Set(mergedList.map(s => `${s.lat.toFixed(4)},${s.lon.toFixed(4)}`));
+
+    for (const item of matchingLocal) {
+      const coordKey = `${item.lat.toFixed(4)},${item.lon.toFixed(4)}`;
+      if (!seenCoords.has(coordKey)) {
+        mergedList.push(item);
+        seenCoords.add(coordKey);
+      }
     }
 
-    setSuggestions(localMatches);
+    // Sort: Recents first, then sort remaining by proximity
+    mergedList.sort((a, b) => {
+      if (a.isRecent && !b.isRecent) return -1;
+      if (!a.isRecent && b.isRecent) return 1;
+
+      if (userLat !== null && userLon !== null) {
+        const distA = (a.lat - userLat) ** 2 + (a.lon - userLon) ** 2;
+        const distB = (b.lat - userLat) ** 2 + (b.lon - userLon) ** 2;
+        return distA - distB;
+      }
+      return 0;
+    });
+
+    setSuggestions(mergedList);
 
     // If query is too short, don't query backend
     if (cleanQuery.length < 3) {
@@ -309,29 +352,30 @@ export function RouteSearchInputs({
       try {
         const data = await routesService.suggestLocations(query, userCoords);
         
-        // Merge and de-duplicate suggestions
         setSuggestions(prev => {
           const merged = [...prev];
-          const seenCoords = new Set(merged.map(s => `${s.lat.toFixed(4)},${s.lon.toFixed(4)}`));
+          const currentSeen = new Set(merged.map(s => `${s.lat.toFixed(4)},${s.lon.toFixed(4)}`));
           
           for (const item of data) {
             const coordKey = `${item.lat.toFixed(4)},${item.lon.toFixed(4)}`;
-            if (!seenCoords.has(coordKey)) {
+            if (!currentSeen.has(coordKey)) {
               merged.push(item);
-              seenCoords.add(coordKey);
+              currentSeen.add(coordKey);
             }
           }
 
-          // Re-sort complete merged suggestions by proximity if user coordinates are available
-          if (userLat !== null && userLon !== null) {
-            const lat = userLat;
-            const lon = userLon;
-            merged.sort((a, b) => {
-              const distA = (a.lat - lat) ** 2 + (a.lon - lon) ** 2;
-              const distB = (b.lat - lat) ** 2 + (b.lon - lon) ** 2;
+          // Re-sort: Recents first, then others by proximity
+          merged.sort((a: any, b: any) => {
+            if (a.isRecent && !b.isRecent) return -1;
+            if (!a.isRecent && b.isRecent) return 1;
+
+            if (userLat !== null && userLon !== null) {
+              const distA = (a.lat - userLat) ** 2 + (a.lon - userLon) ** 2;
+              const distB = (b.lat - userLat) ** 2 + (b.lon - userLon) ** 2;
               return distA - distB;
-            });
-          }
+            }
+            return 0;
+          });
 
           // Save to frontend cache
           FRONTEND_SUGGESTIONS_CACHE[cacheKey] = merged;
@@ -345,7 +389,7 @@ export function RouteSearchInputs({
     }, 150);
 
     return () => clearTimeout(delayDebounce);
-  }, [startLoc, endLoc, focusedInput, routesService, userCoords, userLat, userLon]);
+  }, [startLoc, endLoc, focusedInput, routesService, userCoords, userLat, userLon, recents]);
 
   const handleBlur = () => {
     // Delay closing suggestions dropdown so taps can register
@@ -354,7 +398,7 @@ export function RouteSearchInputs({
     }, 250);
   };
 
-  const handleSelectSuggestion = (sug: LocationSuggestion) => {
+  const handleSelectSuggestion = async (sug: LocationSuggestion) => {
     if (focusedInput === 'start') {
       onStartChange(sug.name);
       startInputRef.current?.blur();
@@ -364,10 +408,23 @@ export function RouteSearchInputs({
     }
     setFocusedInput(null);
     setSuggestions([]);
+
+    // Save to recents if not Current Location
+    if (sug.name !== 'Current Location') {
+      try {
+        const filtered = recents.filter(item => item.name.toLowerCase() !== sug.name.toLowerCase());
+        const updated = [sug, ...filtered].slice(0, 10);
+        setRecents(updated);
+        await AsyncStorage.setItem(RECENTS_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Failed to save recent location:', e);
+      }
+    }
   };
 
-  const getSuggestionIcon = (name: string) => {
+  const getSuggestionIcon = (name: string, isRecent?: boolean) => {
     if (name === 'Current Location') return 'location-sharp';
+    if (isRecent) return 'time-outline';
     const lower = name.toLowerCase();
     if (lower.includes('station') || lower.includes('underground') || lower.includes('dlr') || lower.includes('overground')) {
       return 'subway-outline';
@@ -460,7 +517,7 @@ export function RouteSearchInputs({
               style={styles.suggestionsList}
               showsVerticalScrollIndicator={false}
             >
-              {suggestions.map((sug, idx) => (
+              {suggestions.map((sug: any, idx) => (
                 <View key={idx}>
                   <TouchableOpacity
                     style={styles.suggestionItem}
@@ -468,7 +525,7 @@ export function RouteSearchInputs({
                   >
                     <View style={styles.suggestionIconWrapper}>
                       <Ionicons
-                        name={getSuggestionIcon(sug.name) as any}
+                        name={getSuggestionIcon(sug.name, sug.isRecent) as any}
                         size={18}
                         color={sug.name === 'Current Location' ? accents.green : palette.textSecondary}
                       />
