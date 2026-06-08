@@ -1311,7 +1311,7 @@
     },
     "/routes/warnings": {
       "get": {
-        "description": "Return live warnings tailored to the user's sensory sensitivities.",
+        "description": "Return live warnings tailored to the user's sensory sensitivities.\n\nPass `lines` (comma-separated TfL line names, e.g. \"Elizabeth,Piccadilly\") and\n`stations` (comma-separated station names) from the fetched route legs so that\ndisruption and works warnings are filtered to only those relevant to the journey.",
         "operationId": "get_routes_warnings_routes_warnings_get",
         "parameters": [
           {
@@ -1345,6 +1345,38 @@
               ],
               "default": false,
               "title": "Generic"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lines",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lines"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stations",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stations"
             }
           }
         ],
