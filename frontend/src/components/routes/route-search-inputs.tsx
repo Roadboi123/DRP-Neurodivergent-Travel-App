@@ -15,6 +15,7 @@ interface RouteSearchInputsProps {
   onStartChange: (text: string) => void;
   onEndChange: (text: string) => void;
   onSwap: () => void;
+  onSubmit: (start: string, end: string) => void;
   userCoords?: string | null;
 }
 
@@ -28,6 +29,7 @@ export function RouteSearchInputs({
   onStartChange,
   onEndChange,
   onSwap,
+  onSubmit,
   userCoords,
 }: RouteSearchInputsProps) {
   const isDark = useColorScheme() === 'dark';
@@ -201,19 +203,25 @@ export function RouteSearchInputs({
     // Delay closing suggestions dropdown so taps can register
     setTimeout(() => {
       setFocusedInput(null);
+      onSubmit(startLoc, endLoc);
     }, 250);
   };
 
   const handleSelectSuggestion = async (sug: LocationSuggestion) => {
+    let newStart = startLoc;
+    let newEnd = endLoc;
     if (focusedInput === 'start') {
+      newStart = sug.name;
       onStartChange(sug.name);
       startInputRef.current?.blur();
     } else if (focusedInput === 'end') {
+      newEnd = sug.name;
       onEndChange(sug.name);
       endInputRef.current?.blur();
     }
     setFocusedInput(null);
     setSuggestions([]);
+    onSubmit(newStart, newEnd);
 
     // Save to recents if not Current Location
     if (sug.name !== 'Current Location') {
@@ -264,6 +272,8 @@ export function RouteSearchInputs({
               placeholder="Enter starting location..."
               placeholderTextColor={placeholderColor}
               clearButtonMode="while-editing"
+              returnKeyType="search"
+              onSubmitEditing={() => onSubmit(startLoc, endLoc)}
             />
           </View>
         </View>
@@ -288,6 +298,8 @@ export function RouteSearchInputs({
               placeholder="Enter destination..."
               placeholderTextColor={placeholderColor}
               clearButtonMode="while-editing"
+              returnKeyType="search"
+              onSubmitEditing={() => onSubmit(startLoc, endLoc)}
             />
           </View>
         </View>

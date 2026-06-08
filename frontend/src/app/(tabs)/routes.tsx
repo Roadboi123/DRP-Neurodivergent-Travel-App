@@ -76,6 +76,10 @@ export default function RoutesScreen() {
   const [endLoc, setEndLoc] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Active search query states (used for fetching routes only after user commits search)
+  const [activeStart, setActiveStart] = useState('Current Location');
+  const [activeEnd, setActiveEnd] = useState('');
+
   // Real-time coordinates state
   const [coords, setCoords] = useState<string | null>(null);
 
@@ -104,8 +108,12 @@ export default function RoutesScreen() {
 
   // Google-Maps-style swap of the start and end locations.
   const handleSwapLocations = () => {
-    setStartLoc(endLoc);
-    setEndLoc(startLoc);
+    const newStart = endLoc;
+    const newEnd = startLoc;
+    setStartLoc(newStart);
+    setEndLoc(newEnd);
+    setActiveStart(newStart);
+    setActiveEnd(newEnd);
   };
 
   // Filter states
@@ -146,21 +154,21 @@ export default function RoutesScreen() {
     };
   }, [username, routesService, isFocused]);
 
-  // Fetch routes from the backend (debounced) with preference scoring
+  // Fetch routes from the backend with preference scoring (only when active/submitted queries change)
   useEffect(() => {
     let active = true;
 
     async function fetchRoutes() {
       if (!isFocused) return;
-      if (!startLoc.trim() || !endLoc.trim()) {
+      if (!activeStart.trim() || !activeEnd.trim()) {
         setRoutes([]);
         return;
       }
 
       setLoading(true);
       try {
-        let originQuery = startLoc;
-        if (startLoc === 'Current Location') {
+        let originQuery = activeStart;
+        if (activeStart === 'Current Location') {
           let activeCoords = coords;
           if (!activeCoords) {
             activeCoords = await fetchCurrentLocation();
@@ -169,7 +177,7 @@ export default function RoutesScreen() {
             originQuery = activeCoords;
           }
         }
-        const data = await routesService.getRoutes(originQuery, endLoc, username);
+        const data = await routesService.getRoutes(originQuery, activeEnd, username);
         if (active) {
           setRoutes(data);
         }
@@ -185,13 +193,13 @@ export default function RoutesScreen() {
       }
     }
 
-    const timer = setTimeout(fetchRoutes, 800);
+    const timer = setTimeout(fetchRoutes, 50);
 
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [startLoc, endLoc, username, routesService, prefKey, isFocused, coords]);
+  }, [activeStart, activeEnd, username, routesService, prefKey, isFocused, coords]);
 
   // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
@@ -229,6 +237,10 @@ export default function RoutesScreen() {
         onStartChange={setStartLoc}
         onEndChange={setEndLoc}
         onSwap={handleSwapLocations}
+        onSubmit={(start, end) => {
+          setActiveStart(start);
+          setActiveEnd(end);
+        }}
         userCoords={coords}
       />
 
