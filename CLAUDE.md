@@ -48,7 +48,19 @@ TestClient baseline diff.
 
 ## Conventions
 
-- Branch off `main`; never commit straight to it. Granular, scoped commits.
+### Task workflow (follow for every task)
+
+1. **Sync first.** `git checkout main && git pull origin main` — branch from the
+   latest `origin/main`, never start on a stale tree.
+2. **Branch; never commit to `main`.** Create a branch named `type/kebab-summary`
+   where `type` is one of `feat` / `fix` / `refactor` / `chore`
+   (e.g. `fix/route-map-colours`).
+3. **Commit regularly.** Granular, scoped commits as you go — one logical change
+   each, with a clear message — not a single dump at the end.
+4. **Open a PR at the end.** Push the branch and open a pull request into `main`,
+   filling in `.github/PULL_REQUEST_TEMPLATE.md` and ticking its checklist. Don't
+   merge straight to `main` — let CI and review run.
+
 - CI runs per-area (`.github/workflows/{backend,frontend}.yml`) on path triggers.
 - Dependabot (`.github/dependabot.yml`) opens grouped weekly dependency-update PRs
   for pip, npm, and GitHub Actions.
