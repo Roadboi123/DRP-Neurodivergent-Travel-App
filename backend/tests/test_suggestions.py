@@ -26,21 +26,39 @@ async def test_suggest_locations_short_query():
 
 @pytest.mark.anyio
 async def test_suggest_locations_local_match():
-    # Query matching local pre-seeded St. John's Wood
-    res = await suggest_locations("st johns")
-    assert len(res) >= 2
-    # First item should be the station or suburb in London
-    names = [s["name"] for s in res]
-    assert "St. John's Wood Underground Station" in names
-    assert "St. John's Wood" in names
+    mock_nominatim_response = [
+        {
+            "display_name": "St. John's Wood Underground Station, London, NW8 6DR, United Kingdom",
+            "lat": "51.5353523",
+            "lon": "-0.1742097",
+            "importance": 0.5
+        },
+        {
+            "display_name": "St. John's Wood, London, Greater London, United Kingdom",
+            "lat": "51.5317260",
+            "lon": "-0.1741901",
+            "importance": 0.4
+        }
+    ]
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = mock_nominatim_response
     
-    # Check shape
-    for item in res:
-        assert "name" in item
-        assert "display_name" in item
-        assert "subtitle" in item
-        assert "lat" in item
-        assert "lon" in item
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+        res = await suggest_locations("st johns")
+        assert len(res) >= 2
+        names = [s["name"] for s in res]
+        assert "St. John's Wood Underground Station" in names
+        assert "St. John's Wood" in names
+        
+        # Check shape
+        for item in res:
+            assert "name" in item
+            assert "display_name" in item
+            assert "subtitle" in item
+            assert "lat" in item
+            assert "lon" in item
 
 
 @pytest.mark.anyio
@@ -106,10 +124,32 @@ def test_suggest_locations_api_endpoint():
 
 @pytest.mark.anyio
 async def test_suggest_locations_proximity_sorting():
-    # Both Slough Station and St. John's Wood Underground Station contain "s".
-    # User in Slough (lat: 51.51, lon: -0.59) should get Slough Station ranked higher
-    # than St. John's Wood Underground Station (lat: 51.53, lon: -0.17).
-    res = await suggest_locations("station", user_lat=51.51, user_lon=-0.59)
-    names = [s["name"] for s in res]
-    assert names.index("Slough Station") < names.index("St. John's Wood Underground Station")
+    # Mock return values for two stations. We return them in an order where
+    # St. John's Wood is first, to verify that the sorting logic successfully reorders them.
+    mock_nominatim_response = [
+        {
+            "display_name": "St. John's Wood Underground Station, London, NW8 6DR, United Kingdom",
+            "lat": "51.5353523",
+            "lon": "-0.1742097",
+            "importance": 0.5
+        },
+        {
+            "display_name": "Slough Station, Slough, SL1 1XN, United Kingdom",
+            "lat": "51.5117",
+            "lon": "-0.5915",
+            "importance": 0.4
+        }
+    ]
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = mock_nominatim_response
+    
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_resp
+        
+        # User in Slough (lat: 51.51, lon: -0.59) should get Slough Station ranked higher
+        # than St. John's Wood Underground Station (lat: 51.53, lon: -0.17).
+        res = await suggest_locations("station", user_lat=51.51, user_lon=-0.59)
+        names = [s["name"] for s in res]
+        assert names.index("Slough Station") < names.index("St. John's Wood Underground Station")
 
