@@ -250,12 +250,30 @@ async def get_routes(
             local_params.update(extra_params)
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                res = await client.get(
-                    f"{TFL_BASE}/Journey/JourneyResults/{origin}/to/{destination}",
-                    params=local_params,
-                )
+                url = f"{TFL_BASE}/Journey/JourneyResults/{origin}/to/{destination}"
+                res = await client.get(url, params=local_params)
                 if res.status_code == 200:
                     return [_parse_journey(j) for j in res.json().get("journeys", [])]
+                
+                # Handle 300 Multiple Choices / Disambiguation response
+                if res.status_code == 300:
+                    data = res.json()
+                    new_origin = origin
+                    new_dest = destination
+                    
+                    from_options = data.get("fromLocationDisambiguation", {}).get("disambiguationOptions", [])
+                    if from_options:
+                        new_origin = from_options[0].get("parameterValue")
+                        
+                    to_options = data.get("toLocationDisambiguation", {}).get("disambiguationOptions", [])
+                    if to_options:
+                        new_dest = to_options[0].get("parameterValue")
+                        
+                    if new_origin != origin or new_dest != destination:
+                        retry_url = f"{TFL_BASE}/Journey/JourneyResults/{new_origin}/to/{new_dest}"
+                        retry_res = await client.get(retry_url, params=local_params)
+                        if retry_res.status_code == 200:
+                            return [_parse_journey(j) for j in retry_res.json().get("journeys", [])]
         except Exception as e:
             print(f"Error fetching TfL routes for preference {preference}: {e}")
         return []

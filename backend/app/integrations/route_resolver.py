@@ -15,7 +15,7 @@ OFF_ROAD_KEYWORDS = [
 
 # If the straight-line distance is under this threshold,
 # it's probably walkable — skip TfL entirely
-WALKING_DISTANCE_THRESHOLD_M = 600
+WALKING_DISTANCE_THRESHOLD_M = 500
 
 
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
