@@ -161,7 +161,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
 
   const legs = route.legs || [];
 
-  // 1. Process legs and identify in-station transfer walks
+  // 1. Map each leg's departure/arrival onto map coordinates.
   const processedLegs = legs.map((leg) => ({
     ...leg,
     dep_lat: leg.departure_lat,
@@ -170,95 +170,57 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
     arr_lon: leg.arrival_lon,
   }));
 
-  const transferLegs: {
-    dep_lat: number;
-    dep_lon: number;
-    arr_lat: number;
-    arr_lon: number;
+  // 2. Build the station nodes shown on the map. Where one leg ends and the
+  // next begins at the same place (you alight a bus and start walking from that
+  // very stop), that's ONE physical point — draw a single circle, not two. Nodes
+  // are added in journey order and merged into the previous one when they share
+  // a name or sit within ~30m, so an alight+board point becomes one interchange.
+  type MapNode = {
+    lat: number;
+    lon: number;
     label: string;
-    duration: number;
-  }[] = [];
+    isStart: boolean;
+    isEnd: boolean;
+    isTransfer: boolean;
+  };
+  const pointsList: MapNode[] = [];
 
-  const transferStations: Set<number> = new Set();
-
-  if (route.legs) {
-    for (let i = 0; i < processedLegs.length - 1; i++) {
-      const legPrev = processedLegs[i];
-      const legNext = processedLegs[i + 1];
-
-      if (
-        legPrev.arr_lat != null &&
-        legPrev.arr_lon != null &&
-        legNext.dep_lat != null &&
-        legNext.dep_lon != null
-      ) {
-        const isSameStation =
-          legPrev.arrival.toLowerCase() === legNext.departure.toLowerCase() ||
-          (Math.abs(legPrev.arr_lat - legNext.dep_lat) < 0.0001 &&
-           Math.abs(legPrev.arr_lon - legNext.dep_lon) < 0.0001);
-
-        if (isSameStation) {
-          const waitTime = legPrev.connection_waiting_mins || 3;
-          
-          // Shift them slightly diagonally (approx. 50-70m offset) to separate arrival/departure platforms
-          const offsetLat = 0.0002;
-          const offsetLon = 0.0002;
-
-          legPrev.arr_lat = legPrev.arr_lat - offsetLat;
-          legPrev.arr_lon = legPrev.arr_lon - offsetLon;
-
-          legNext.dep_lat = legNext.dep_lat + offsetLat;
-          legNext.dep_lon = legNext.dep_lon + offsetLon;
-
-          transferLegs.push({
-            dep_lat: legPrev.arr_lat,
-            dep_lon: legPrev.arr_lon,
-            arr_lat: legNext.dep_lat,
-            arr_lon: legNext.dep_lon,
-            label: `${legPrev.arrival} (Transfer: ${waitTime} min walk)`,
-            duration: waitTime,
-          });
-
-          transferStations.add(i);
-        }
+  const addNode = (
+    lat: number | null | undefined,
+    lon: number | null | undefined,
+    label: string,
+    flags: { isStart?: boolean; isEnd?: boolean; isTransfer?: boolean }
+  ) => {
+    if (lat == null || lon == null) return;
+    const last = pointsList[pointsList.length - 1];
+    if (last) {
+      const sameName = !!label && last.label.toLowerCase() === label.toLowerCase();
+      const nearby =
+        Math.abs(last.lat - lat) < 0.0003 && Math.abs(last.lon - lon) < 0.0003;
+      if (sameName || nearby) {
+        last.isStart = last.isStart || !!flags.isStart;
+        last.isEnd = last.isEnd || !!flags.isEnd;
+        last.isTransfer = last.isTransfer || !!flags.isTransfer;
+        return;
       }
     }
-  }
-
-  // 2. Gather unique platform nodes for styling on the map
-  const uniqueNodes: Record<string, { lat: number; lon: number; label: string; isStart: boolean; isEnd: boolean; isTransfer: boolean }> = {};
-
-  if (route.legs) {
-    processedLegs.forEach((leg, lIdx) => {
-      const isStart = lIdx === 0;
-      const isEnd = lIdx === processedLegs.length - 1;
-
-      if (leg.dep_lat != null && leg.dep_lon != null) {
-        const key = `${leg.departure.toLowerCase()}_dep_${lIdx}`;
-        uniqueNodes[key] = {
-          lat: leg.dep_lat,
-          lon: leg.dep_lon,
-          label: leg.departure + (isStart ? '' : ' Platform'),
-          isStart,
-          isEnd: false,
-          isTransfer: lIdx > 0 && transferStations.has(lIdx - 1),
-        };
-      }
-      if (leg.arr_lat != null && leg.arr_lon != null) {
-        const key = `${leg.arrival.toLowerCase()}_arr_${lIdx}`;
-        uniqueNodes[key] = {
-          lat: leg.arr_lat,
-          lon: leg.arr_lon,
-          label: leg.arrival + (isEnd ? '' : ' Platform'),
-          isStart: false,
-          isEnd,
-          isTransfer: transferStations.has(lIdx),
-        };
-      }
+    pointsList.push({
+      lat,
+      lon,
+      label,
+      isStart: !!flags.isStart,
+      isEnd: !!flags.isEnd,
+      isTransfer: !!flags.isTransfer,
     });
-  }
+  };
 
-  const pointsList = Object.values(uniqueNodes);
+  processedLegs.forEach((leg, lIdx) => {
+    const isFirst = lIdx === 0;
+    const isLast = lIdx === processedLegs.length - 1;
+    // A mid-journey departure/arrival is an interchange (you change vehicles).
+    addNode(leg.dep_lat, leg.dep_lon, leg.departure, { isStart: isFirst, isTransfer: !isFirst });
+    addNode(leg.arr_lat, leg.arr_lon, leg.arrival, { isEnd: isLast, isTransfer: !isLast });
+  });
   const latitudes = pointsList.map((p) => p.lat);
   const longitudes = pointsList.map((p) => p.lon);
 
@@ -355,34 +317,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
       }
     });
 
-    // B. Draw in-station transfer walks (orange dots with black outline)
-    transferLegs.forEach((trans) => {
-      leafletJS += `
-        L.polyline([
-          [${trans.dep_lat}, ${trans.dep_lon}],
-          [${trans.arr_lat}, ${trans.arr_lon}]
-        ], {
-          color: '#1d1c1c',
-          weight: 9,
-          dashArray: '1, 12',
-          lineCap: 'round',
-          lineJoin: 'round'
-        }).addTo(map);
-
-        L.polyline([
-          [${trans.dep_lat}, ${trans.dep_lon}],
-          [${trans.arr_lat}, ${trans.arr_lon}]
-        ], {
-          color: '#fdad70', // Wero Orange
-          weight: 5,
-          dashArray: '1, 12',
-          lineCap: 'round',
-          lineJoin: 'round'
-        }).addTo(map).bindPopup("<b>${trans.label.replace(/"/g, '\\"')}</b>");
-      `;
-    });
-
-    // C. Draw station and platform nodes
+    // B. Draw station nodes — one circle per physical point (see addNode).
     pointsList.forEach((p) => {
       let fillColor = '#ffffff';
       let radius = 6;
