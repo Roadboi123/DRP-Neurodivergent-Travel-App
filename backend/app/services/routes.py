@@ -1119,6 +1119,8 @@ async def get_user_warnings(
             from datetime import datetime, timezone, timedelta
             now_dt = datetime.now(timezone.utc)
             for row in res.data:
+                if not isinstance(row, dict):
+                    continue
                 created_at_str = row.get("created_at")
                 if created_at_str:
                     try:
@@ -1143,11 +1145,11 @@ async def get_user_warnings(
 
                     if is_relevant:
                         warnings.append({
-                            "id": row.get("id"),
-                            "title": row.get("title"),
-                            "desc": row.get("description"),
+                            "id": str(row.get("id") or ""),
+                            "title": str(row.get("title") or ""),
+                            "desc": str(row.get("description") or ""),
                             "severity": "medium",
-                            "icon": row.get("warning_type"),
+                            "icon": str(row.get("warning_type") or ""),
                             "lat": w_lat,
                             "lon": w_lon,
                         })
