@@ -59,7 +59,7 @@ async def get_routes_warnings(
     # Only include non-empty line names (walking legs produce an empty string).
     route_lines: set[str] = set()
     if lines:
-        route_lines = {l.strip().lower() for l in lines.split(",") if l.strip()}
+        route_lines = {ln.strip().lower() for ln in lines.split(",") if ln.strip()}
 
     # Apply the same name-cleaning that get_live_station_works uses so that
     # "Stanmore Underground Station" → "stanmore" matches "Stanmore" → "stanmore".

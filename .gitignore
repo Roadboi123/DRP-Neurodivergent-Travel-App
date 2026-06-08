@@ -13,3 +13,5 @@ __pycache__/
 venv/
 env/
 .env.local/
+backend/ruff_bin/ruff-0.15.16.dist-info/METADATA
+/backend/ruff_bin
