@@ -460,22 +460,6 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                     javaScriptEnabled={true}
                   />
                 )}
-
-                {/* Floating Map Legend - Clean and compact */}
-                <View style={[styles.floatingLegend, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                  <View style={styles.legendRow}>
-                    <View style={[styles.legendIndicator, { backgroundColor: '#83f582', borderColor: palette.border, borderRadius: 5, width: 8, height: 8 }]} />
-                    <Text style={[styles.legendTextMin, { color: palette.textSecondary }]}>Start</Text>
-                  </View>
-                  <View style={styles.legendRow}>
-                    <View style={[styles.legendIndicator, { backgroundColor: '#ff158a', borderColor: palette.border, borderRadius: 5, width: 8, height: 8 }]} />
-                    <Text style={[styles.legendTextMin, { color: palette.textSecondary }]}>End</Text>
-                  </View>
-                  <View style={styles.legendRow}>
-                    <View style={[styles.legendIndicator, { backgroundColor: '#fdad70', borderColor: palette.border, borderRadius: 5, width: 8, height: 8 }]} />
-                    <Text style={[styles.legendTextMin, { color: palette.textSecondary }]}>Transfer</Text>
-                  </View>
-                </View>
               </View>
             )}
           </View>
@@ -706,31 +690,6 @@ const styles = StyleSheet.create({
     height: 270,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  floatingLegend: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    borderWidth: 2,
-    borderRadius: 8,
-    padding: 6,
-    flexDirection: 'row',
-    gap: 8,
-    zIndex: 10,
-    ...hardShadow(2),
-  },
-  legendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  legendIndicator: {
-    borderWidth: 1,
-  },
-  legendTextMin: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    textTransform: 'uppercase',
   },
   sheetPanel: {
     borderTopLeftRadius: 24,
