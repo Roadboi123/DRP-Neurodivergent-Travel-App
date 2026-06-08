@@ -12,7 +12,6 @@ import {
   resolveLineColor,
   TFL_LINE_FALLBACK,
   type Accents,
-  type ThemePalette,
 } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { RouteOption } from '@/types/route';
@@ -26,25 +25,6 @@ function getGroupTitle(type: RouteOption['type']): string {
     return 'Quickest';
   }
   return 'Suggested';
-}
-
-// Wero "word-bg" highlight: scheme-aware fill with on-surface text + a palette border.
-function matchBadgeColors(
-  matchPercentage: number | null | undefined,
-  accents: Accents,
-  palette: ThemePalette
-) {
-  const text = palette.textPrimary;
-  if (matchPercentage == null) {
-    return { bg: palette.surface, text };
-  }
-  if (matchPercentage >= 80) {
-    return { bg: accents.green, text };
-  }
-  if (matchPercentage >= 50) {
-    return { bg: accents.yellow, text };
-  }
-  return { bg: accents.pinkSoft, text };
 }
 
 /** Title-case a raw mode string for display ("national-rail" → "National Rail"). */
@@ -142,7 +122,6 @@ function RouteCardBase({
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
   const groupTitle = getGroupTitle(route.type);
-  const matchColors = matchBadgeColors(route.match_percentage, accents, palette);
 
   return (
     <View style={styles.routeGroupWrapper}>
@@ -209,17 +188,6 @@ function RouteCardBase({
                     </View>
                   );
                 })}
-
-                {/* Match Rating Pill at the end of the timeline */}
-                <View
-                  style={[
-                    styles.matchBadge,
-                    { backgroundColor: matchColors.bg, borderColor: palette.border },
-                  ]}>
-                  <Text style={[styles.matchBadgeText, { color: matchColors.text }]}>
-                    {route.match_percentage ?? 100}% Match
-                  </Text>
-                </View>
               </View>
             )}
           </View>
@@ -231,19 +199,6 @@ function RouteCardBase({
             <SensoryMeter level={route.heat} label="Heat" />
             <SensoryMeter level={route.light} label="Light" />
             <SensoryMeter level={route.smell} label="Smell" />
-          </View>
-          
-          {/* Action indicator at the bottom (Neo-brutalist hint) */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: -2 }}>
-            <Text style={{ fontSize: 10.5, fontWeight: '800', fontFamily: Fonts?.display, textTransform: 'uppercase', color: palette.textMuted }}>
-              Tap to view details & map
-            </Text>
-            <Ionicons
-              name="arrow-forward"
-              size={11}
-              color={palette.textMuted}
-              style={{ marginLeft: 4 }}
-            />
           </View>
         </View>
 
@@ -289,13 +244,13 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     borderRadius: 14,
     borderWidth: 2,
-    padding: 14,
+    padding: 11,
     ...hardShadow(6),
   },
   leftContent: {
     flex: 1,
     marginRight: 12,
-    gap: 10,
+    gap: 8,
   },
   timelineWrapper: {
     flexDirection: 'row',
@@ -352,22 +307,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'nowrap',
     borderTopWidth: 1,
-    paddingTop: 10,
+    paddingTop: 8,
     columnGap: 3,
     justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  matchBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 9,
-    borderRadius: 8,
-    borderWidth: 1.5,
-  },
-  matchBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
   },
   sensoryExplanationText: {
     fontSize: 12,
