@@ -30,6 +30,7 @@ export function createFallbackClient(
   return {
     get: <T>(path: string) => withFallback((client) => client.get<T>(path)),
     post: <T>(path: string, body: unknown) => withFallback((client) => client.post<T>(path, body)),
+    delete: <T>(path: string) => withFallback((client) => client.delete<T>(path)),
     getResponse: (path: string) => withFallback((client) => client.getResponse(path)),
   };
 }

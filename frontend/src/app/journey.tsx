@@ -522,13 +522,24 @@ export default function JourneyScreen() {
       id: `w_user_${Date.now()}`,
       title: `${option.label} Warning`,
       desc: `User reported sensory warning (${option.label.toLowerCase()}) at current location.`,
-      severity: 'medium',
+      severity: 'medium' as const,
       icon: option.icon,
       emoji: option.emoji,
       color: option.color,
       lat: userCoords[0],
       lon: userCoords[1],
     };
+
+    // Call API to persist it on the backend
+    routesService.reportWarning({
+      id: newReport.id,
+      username: username || 'anonymous',
+      warning_type: newReport.icon,
+      title: newReport.title,
+      desc: newReport.desc,
+      lat: newReport.lat,
+      lon: newReport.lon,
+    }).catch((err) => console.warn('Failed to persist warning report on backend:', err));
 
     setWarnings((prev) => [newReport, ...prev]);
     setReportingType(null);
@@ -543,7 +554,10 @@ export default function JourneyScreen() {
         return next;
       });
     } else {
-      // Remove warning entirely on "NO"
+      // Remove warning entirely on "NO" - call API to delete it on the backend for all users
+      routesService.deleteWarning(confirmingWarning.id).catch((err) =>
+        console.warn('Failed to delete warning from backend:', err)
+      );
       setWarnings((prev) => prev.filter((w) => w.id !== confirmingWarning.id));
     }
     setConfirmingWarning(null);

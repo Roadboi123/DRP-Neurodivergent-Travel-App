@@ -73,6 +73,20 @@ class WarningItemSchema(BaseModel):
     desc: str
     severity: Literal["high", "medium", "info"]
     icon: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+
+
+class ReportWarningSchema(BaseModel):
+    """Request schema for reporting a sensory warning."""
+    id: str
+    username: str
+    warning_type: str
+    title: str
+    desc: str
+    lat: float
+    lon: float
+
 
 
 class LocationSuggestion(BaseModel):

@@ -52,6 +52,24 @@ export interface RoutesService {
   ): Promise<WarningItem[]>;
 
   /**
+   * Submit a user-reported sensory warning to persist on the backend.
+   */
+  reportWarning(body: {
+    id: string;
+    username: string;
+    warning_type: string;
+    title: string;
+    desc: string;
+    lat: number;
+    lon: number;
+  }): Promise<WarningItem>;
+
+  /**
+   * Delete a warning from the database (e.g. when it is no longer there).
+   */
+  deleteWarning(warningId: string): Promise<any>;
+
+  /**
    * Fetch location suggestions based on search text query.
    */
   suggestLocations(query: string, userCoords?: string | null): Promise<LocationSuggestion[]>;
@@ -73,6 +91,12 @@ export function createRoutesService(client: HttpClient): RoutesService {
       const query = buildWarningsQuery(username, generic, routeContext);
       return client.get<WarningItem[]>(`/${query}`);
     },
+    reportWarning(body) {
+      return client.post<WarningItem>('/routes/warnings/report', body);
+    },
+    deleteWarning(warningId) {
+      return client.delete<any>(`/routes/warnings/${encodeURIComponent(warningId)}`);
+    },
     suggestLocations(query, userCoords) {
       const queryParam = encodeURIComponent(query.trim());
       const coordParam = userCoords ? `&user_coords=${encodeURIComponent(userCoords.trim())}` : '';
@@ -80,3 +104,4 @@ export function createRoutesService(client: HttpClient): RoutesService {
     },
   };
 }
+
