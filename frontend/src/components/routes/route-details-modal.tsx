@@ -498,28 +498,28 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                 <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
               </View>
 
-              {/* Quick stats panel */}
+              {/* Quick stats panel: duration + cost grouped left, Go button right */}
               <View style={styles.quickStatsRow}>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
-                  <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
-                  <View style={styles.priceStartRow}>
+                <View style={styles.statsGroup}>
+                  <View style={styles.statBox}>
+                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Duration</Text>
+                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>{route.duration} min</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
                     <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      onPress={startJourney}
-                      style={[styles.startJourneyButton, { backgroundColor: accents.green, borderColor: palette.border }]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Start journey mode"
-                    >
-                      <Ionicons name="play" size={13} color={palette.textPrimary} />
-                      <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Start</Text>
-                    </TouchableOpacity>
                   </View>
                 </View>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={startJourney}
+                  style={[styles.startJourneyButton, { backgroundColor: accents.green, borderColor: palette.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start journey mode"
+                >
+                  <Ionicons name="play" size={18} color={palette.textPrimary} />
+                  <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Go</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -735,13 +735,19 @@ const styles = StyleSheet.create({
   },
   quickStatsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 16,
     borderBottomWidth: 1.5,
   },
-  statBox: {
+  statsGroup: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 28,
+  },
+  statBox: {
+    alignItems: 'flex-start',
   },
   statLabel: {
     fontSize: 9.5,
@@ -750,32 +756,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   statVal: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    marginTop: 2,
-  },
-  priceStartRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
     marginTop: 2,
   },
   startJourneyButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    borderWidth: 2,
-    borderRadius: 9,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    ...hardShadow(2),
+    gap: 7,
+    borderWidth: 2.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    ...hardShadow(4),
   },
   startJourneyText: {
-    fontSize: 10,
+    fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   scrollContent: {
     padding: 16,
