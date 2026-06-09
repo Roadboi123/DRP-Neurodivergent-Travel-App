@@ -1,7 +1,6 @@
 import pytest
-import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-from app.integrations.tlf_client import get_station_coords, _parse_leg, COMMON_STATIONS
+from app.integrations.tlf_client import get_station_coords, _parse_leg
 from app.services.routes import get_route_suggestions
 
 @pytest.mark.anyio

@@ -70,9 +70,6 @@ WEIGHTS_MAP = {
     4: 3.0,
 }
 
-from app.integrations.tlf_client import COMMON_STATIONS
-
-
 async def _get_station_coords(station_name: str) -> Optional[tuple[float, float]]:
     return await tlf_client.get_station_coords(None, station_name)
 
