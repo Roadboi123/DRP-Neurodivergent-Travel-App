@@ -32,6 +32,7 @@ import { Fonts, getPalette, getSemanticColors, hardShadow } from '@/constants/th
 import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
+import { consumeReopenJourneyDetails, getActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
@@ -124,6 +125,15 @@ export default function RoutesScreen() {
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
+
+  // Coming back from an active journey re-opens the details sheet the user
+  // saw before pressing "Go", so Back lands there rather than on the list.
+  useEffect(() => {
+    if (isFocused && consumeReopenJourneyDetails()) {
+      const activeRoute = getActiveJourneyRoute();
+      if (activeRoute) setSelectedRoute(activeRoute);
+    }
+  }, [isFocused]);
 
   // Hydration fix
   const [mounted, setMounted] = useState(false);

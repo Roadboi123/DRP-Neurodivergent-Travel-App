@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView, Animated } from 'react-native';
+import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
+import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { getActiveJourneyRoute } from '@/services/active-journey';
+import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
@@ -242,12 +243,7 @@ export default function JourneyScreen() {
   const [warnings, setWarnings] = useState<any[]>([]);
   const [warningsSettings, setWarningsSettings] = useState<Record<string, { showOnMap: boolean; avoidReroute: boolean }>>({});
   const [warningsModalVisible, setWarningsModalVisible] = useState(false);
-  const [confirmingWarning, setConfirmingWarning] = useState<any | null>(null);
-  const [confirmedWarningIds, setConfirmedWarningIds] = useState<Set<string>>(new Set());
-
-  // Simulation state
-  const [currentPathIndex, setCurrentPathIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [detailsVisible, setDetailsVisible] = useState(false);
 
   // Concatenate path coordinates from all route legs
   const allPathCoords = useMemo(() => {
@@ -408,18 +404,15 @@ export default function JourneyScreen() {
     loadWarnings();
   }, [route, allPathCoords]);
 
-  // Current coordinate & heading calculations
+  // User location starts at the journey origin, facing the first leg.
   const userCoords = useMemo<[number, number]>(() => {
-    return allPathCoords[currentPathIndex] || [51.5074, -0.1278];
-  }, [currentPathIndex, allPathCoords]);
+    return allPathCoords[0] || [51.5074, -0.1278];
+  }, [allPathCoords]);
 
   const heading = useMemo(() => {
-    if (currentPathIndex === 0 || allPathCoords.length < 2) return 0;
-    const prev = allPathCoords[currentPathIndex - 1];
-    const curr = allPathCoords[currentPathIndex];
-    if (!prev || !curr) return 0;
-    return calculateHeading(prev, curr);
-  }, [currentPathIndex, allPathCoords]);
+    if (allPathCoords.length < 2) return 0;
+    return calculateHeading(allPathCoords[0], allPathCoords[1]);
+  }, [allPathCoords]);
 
   // Sync state to Leaflet map
   const formattedWarnings = useMemo(() => {
@@ -453,60 +446,6 @@ export default function JourneyScreen() {
       }
     }
   }, [userCoords, heading, formattedWarnings]);
-
-  // Simulation timer loop
-  useEffect(() => {
-    if (!isPlaying || allPathCoords.length === 0) return;
-
-    const interval = setInterval(() => {
-      setCurrentPathIndex((prevIndex) => {
-        if (prevIndex >= allPathCoords.length - 1) {
-          setIsPlaying(false);
-          return prevIndex;
-        }
-        const nextIndex = prevIndex + 1;
-        const nextCoords = allPathCoords[nextIndex];
-
-        if (nextCoords) {
-          // Check proximity to warning markers
-          const nearbyWarning = warnings.find((w) => {
-            if (w.lat == null || w.lon == null || confirmedWarningIds.has(w.id)) return false;
-            if (warningsSettings[w.id]?.showOnMap === false) return false;
-
-            const dLat = nextCoords[0] - w.lat;
-            const dLon = nextCoords[1] - w.lon;
-            const dist = Math.sqrt(dLat * dLat + dLon * dLon);
-            return dist < 0.0006; // roughly 50m
-          });
-
-          if (nearbyWarning) {
-            setIsPlaying(false);
-            setConfirmingWarning(nearbyWarning);
-          }
-        }
-
-        return nextIndex;
-      });
-    }, 1500); // Step every 1.5 seconds
-
-    return () => clearInterval(interval);
-  }, [isPlaying, allPathCoords, warnings, confirmedWarningIds, warningsSettings]);
-
-  // Route identifier & walking duration calculations
-  const routeInfo = useMemo(() => {
-    if (!route) return { name: 'Walk', walkTime: 0 };
-    let name = 'Walk';
-    let walkTime = 0;
-    route.legs?.forEach((leg) => {
-      const mode = leg.mode.toLowerCase();
-      if (mode === 'walking' || mode === 'walk') {
-        walkTime += leg.duration_mins;
-      } else {
-        name = leg.line || leg.mode.toUpperCase();
-      }
-    });
-    return { name, walkTime };
-  }, [route]);
 
   const activeWarningsCount = useMemo(() => {
     return warnings.filter((w) => warningsSettings[w.id]?.showOnMap !== false).length;
@@ -543,25 +482,6 @@ export default function JourneyScreen() {
 
     setWarnings((prev) => [newReport, ...prev]);
     setReportingType(null);
-  };
-
-  const handleConfirmStillThere = (stillThere: boolean) => {
-    if (!confirmingWarning) return;
-    if (stillThere) {
-      setConfirmedWarningIds((prev) => {
-        const next = new Set(prev);
-        next.add(confirmingWarning.id);
-        return next;
-      });
-    } else {
-      // Remove warning entirely on "NO" - call API to delete it on the backend for all users
-      routesService.deleteWarning(confirmingWarning.id).catch((err) =>
-        console.warn('Failed to delete warning from backend:', err)
-      );
-      setWarnings((prev) => prev.filter((w) => w.id !== confirmingWarning.id));
-    }
-    setConfirmingWarning(null);
-    setIsPlaying(true); // Resume simulation
   };
 
   // Check if any warning is avoiding / rerouting
@@ -608,7 +528,11 @@ export default function JourneyScreen() {
       <View style={styles.topControls}>
         <View style={styles.navButtonsRow}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => {
+              // Return to the route details sheet shown before "Go", not the bare list.
+              requestReopenJourneyDetails();
+              router.back();
+            }}
             style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
             accessibilityRole="button"
             accessibilityLabel="Back to route details"
@@ -623,11 +547,6 @@ export default function JourneyScreen() {
           >
             <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
           </TouchableOpacity>
-        </View>
-
-        <View style={[styles.activeBadge, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Ionicons name="navigate" size={14} color={palette.textPrimary} />
-          <Text style={[styles.activeBadgeText, { color: palette.textPrimary }]}>Journey active</Text>
         </View>
       </View>
 
@@ -661,79 +580,24 @@ export default function JourneyScreen() {
         ))}
       </View>
 
-      {/* Simulation Controls Overlay */}
-      <View style={[styles.simControls, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <Text style={[styles.simTitle, { color: palette.textMuted }]}>Journey Simulation</Text>
-        <View style={styles.simButtonsRow}>
-          <TouchableOpacity
-            onPress={() => setIsPlaying(!isPlaying)}
-            style={[styles.simActionBtn, { backgroundColor: isPlaying ? accents.pink : accents.green, borderColor: palette.border }]}
-          >
-            <Ionicons name={isPlaying ? 'pause' : 'play'} size={14} color={palette.textPrimary} />
-            <Text style={[styles.simActionBtnText, { color: palette.textPrimary }]}>
-              {isPlaying ? 'Pause' : 'Play'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              setCurrentPathIndex((prev) => Math.min(prev + 5, allPathCoords.length - 1));
-            }}
-            style={[styles.simActionBtn, { backgroundColor: palette.surface, borderColor: palette.border }]}
-          >
-            <Ionicons name="play-forward" size={14} color={palette.textPrimary} />
-            <Text style={[styles.simActionBtnText, { color: palette.textPrimary }]}>+5 Steps</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              setCurrentPathIndex(0);
-              setIsPlaying(false);
-              setConfirmedWarningIds(new Set());
-            }}
-            style={[styles.simActionBtn, { backgroundColor: palette.surface, borderColor: palette.border }]}
-          >
-            <Ionicons name="refresh" size={14} color={palette.textPrimary} />
-            <Text style={[styles.simActionBtnText, { color: palette.textPrimary }]}>Reset</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Progress Track */}
-        <View style={styles.progressTrackContainer}>
-          <View style={[styles.progressTrackBg, { backgroundColor: palette.divider }]} />
-          <View
-            style={[
-              styles.progressTrackFill,
-              {
-                backgroundColor: accents.pink,
-                width: allPathCoords.length > 0 ? `${(currentPathIndex / (allPathCoords.length - 1)) * 100}%` : '0%',
-              },
-            ]}
-          />
-          <Text style={[styles.progressText, { color: palette.textMuted }]}>
-            {allPathCoords.length > 0 ? Math.round((currentPathIndex / (allPathCoords.length - 1)) * 100) : 0}% Traveled
-          </Text>
-        </View>
-      </View>
-
       {/* Bottom Information Trip Bar */}
       <View style={[styles.tripBar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <View style={styles.tripLeftBlock}>
-          <View style={[styles.infoPill, { backgroundColor: accents.yellow, borderColor: palette.border }]}>
-            <Text style={[styles.infoPillText, { color: palette.textPrimary }]}>{routeInfo.name}</Text>
-          </View>
-          <View style={[styles.infoPill, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Ionicons name="walk" size={13} color={palette.textPrimary} />
-            <Text style={[styles.infoPillText, { color: palette.textPrimary }]}>{routeInfo.walkTime}m</Text>
-          </View>
-        </View>
+        <TouchableOpacity
+          onPress={() => setDetailsVisible(true)}
+          style={[styles.tripActionBtn, { borderColor: palette.border, backgroundColor: accents.cyan }]}
+          accessibilityRole="button"
+          accessibilityLabel="Journey details"
+        >
+          <Ionicons name="list-outline" size={15} color={palette.textPrimary} />
+          <Text style={[styles.tripActionBtnText, { color: palette.textPrimary }]}>DETAILS</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => setWarningsModalVisible(true)}
-          style={[styles.warningsToggleBtn, { borderColor: accents.orange }]}
+          style={[styles.tripActionBtn, { borderColor: accents.orange }]}
         >
           <Ionicons name="warning-outline" size={15} color={accents.orange} />
-          <Text style={[styles.warningsToggleBtnText, { color: palette.textPrimary }]}>
+          <Text style={[styles.tripActionBtnText, { color: palette.textPrimary }]}>
             WARNINGS ({activeWarningsCount})
           </Text>
         </TouchableOpacity>
@@ -744,81 +608,32 @@ export default function JourneyScreen() {
         </View>
       </View>
 
-      {/* Waze style reporting action bar */}
+      {/* Waze style reporting action bar — centred on screen */}
       {reportingType && activeReport && (
-        <View style={[styles.reportInputPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <TouchableOpacity
-            onPress={() => setReportingType(null)}
-            style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel report"
-          >
-            <Ionicons name="close" size={16} color={palette.textPrimary} />
-          </TouchableOpacity>
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <View style={styles.reportBackdrop} pointerEvents="none" />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.reportInputPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <TouchableOpacity
+                onPress={() => setReportingType(null)}
+                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel report"
+              >
+                <Ionicons name="close" size={16} color={palette.textPrimary} />
+              </TouchableOpacity>
 
-          <View style={[styles.reportTypeCircle, { backgroundColor: activeReport.color, borderColor: palette.border }]}>
-            <Ionicons name={activeReport.icon} size={26} color={palette.textPrimary} />
-            <Text style={[styles.reportTypeCircleText, { color: palette.textPrimary }]}>{activeReport.label}</Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={submitReport}
-            activeOpacity={0.85}
-            style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
-          >
-            <Text style={[styles.reportSubmitBtnText, { color: palette.textPrimary }]}>Submit</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Proximity Dialog: Asked to confirm still there? */}
-      {confirmingWarning && (
-        <View style={StyleSheet.absoluteFill}>
-          <View style={styles.modalBackdrop} />
-          <View style={styles.confirmDialogContainer}>
-            <View style={[styles.confirmDialogCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <View style={[styles.confirmIconHeader, { backgroundColor: confirmingWarning.color, borderColor: palette.border }]}>
-                <Text style={styles.confirmIconEmoji}>{confirmingWarning.emoji}</Text>
-              </View>
-
-              <Text style={[styles.confirmTitle, { color: palette.textPrimary }]}>
-                {confirmingWarning.title}
-              </Text>
-              <Text style={[styles.confirmSubtitle, { color: palette.textSecondary }]}>
-                Last reported ~20 min ago. Still there?
-              </Text>
-
-              <View style={styles.confirmButtonsRow}>
-                <TouchableOpacity
-                  onPress={() => handleConfirmStillThere(true)}
-                  style={[styles.confirmAnswerBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
-                >
-                  <Ionicons name="checkmark-sharp" size={16} color={palette.textPrimary} />
-                  <Text style={[styles.confirmAnswerBtnText, { color: palette.textPrimary }]}>YES</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => handleConfirmStillThere(false)}
-                  style={[styles.confirmAnswerBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
-                >
-                  <Ionicons name="close-sharp" size={16} color={palette.textPrimary} />
-                  <Text style={[styles.confirmAnswerBtnText, { color: palette.textPrimary }]}>NO</Text>
-                </TouchableOpacity>
+              <View style={[styles.reportTypeCircle, { backgroundColor: activeReport.color, borderColor: palette.border }]}>
+                <Ionicons name={activeReport.icon} size={26} color={palette.textPrimary} />
+                <Text style={[styles.reportTypeCircleText, { color: palette.textPrimary }]}>{activeReport.label}</Text>
               </View>
 
               <TouchableOpacity
-                onPress={() => {
-                  setConfirmedWarningIds((prev) => {
-                    const next = new Set(prev);
-                    next.add(confirmingWarning.id);
-                    return next;
-                  });
-                  setConfirmingWarning(null);
-                  setIsPlaying(true);
-                }}
-                style={[styles.confirmSkipBtn, { backgroundColor: palette.divider, borderColor: palette.border }]}
+                onPress={submitReport}
+                activeOpacity={0.85}
+                style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
               >
-                <Text style={[styles.confirmSkipBtnText, { color: palette.textPrimary }]}>SKIP</Text>
+                <Text style={[styles.reportSubmitBtnText, { color: palette.textPrimary }]}>Submit</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -937,6 +752,115 @@ export default function JourneyScreen() {
           </TouchableOpacity>
         </SafeAreaView>
       </Modal>
+
+      {/* Journey Details Overlay — read sensory load & the full step list mid-trip */}
+      <Modal
+        visible={detailsVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setDetailsVisible(false)}
+      >
+        <SafeAreaView style={[styles.overlayScreen, { backgroundColor: palette.surface }]}>
+          <View style={styles.overlayHeader}>
+            <TouchableOpacity
+              onPress={() => setDetailsVisible(false)}
+              style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Close journey details"
+            >
+              <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.overlayTitle, { color: palette.textPrimary }]} numberOfLines={1}>
+                {route.name}
+              </Text>
+              {route.subName ? (
+                <Text style={[styles.detailsSubtitle, { color: palette.textSecondary }]} numberOfLines={1}>
+                  {route.subName}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.detailsScrollContent} showsVerticalScrollIndicator={false}>
+            {/* Sensory alignment dashboard */}
+            <View style={[styles.detailsCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+              <Text style={[styles.detailsCardHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
+              <View style={styles.detailsSensoryRow}>
+                <SensoryMeter level={route.noise} label="Sound" />
+                <SensoryMeter level={route.crowds} label="Crowds" />
+                <SensoryMeter level={route.heat} label="Heat" />
+                <SensoryMeter level={route.light} label="Light" />
+                <SensoryMeter level={route.smell} label="Smell" />
+              </View>
+              {route.sensory_description ? (
+                <Text style={[styles.detailsSensoryDesc, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
+                  {route.sensory_description}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Step-by-step leg timeline */}
+            <View style={styles.detailsTimeline}>
+              {route.legs && route.legs.map((leg, lIdx) => {
+                const { iconName, bgColor: lineBgColor, textColor: lineTextColor } = getLegUIProps(
+                  leg.mode,
+                  leg.line,
+                  leg.instruction,
+                  accents
+                );
+                const isWalking = leg.mode.toLowerCase() === 'walking' || leg.mode.toLowerCase() === 'walk';
+                return (
+                  <View key={lIdx} style={styles.detailStepContainer}>
+                    <View style={styles.stepIndicatorCol}>
+                      <View style={[styles.stepNode, { backgroundColor: lineBgColor, borderColor: palette.border }]}>
+                        <Ionicons name={iconName} size={11} color={lineTextColor} />
+                      </View>
+                      <View style={[styles.stepLine, { backgroundColor: lineBgColor }]} />
+                    </View>
+                    <View style={styles.stepContentCol}>
+                      <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>{leg.departure}</Text>
+                      <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
+                        {leg.instruction} ({leg.duration_mins} mins)
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <Ionicons
+                          name={isWalking ? 'walk-outline' : 'exit-outline'}
+                          size={13}
+                          color={palette.textSecondary}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={[styles.detailsArrival, { color: palette.textSecondary }]}>
+                          {isWalking ? 'Walk to ' : 'Get off at '}
+                          <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{leg.arrival}</Text>
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+
+              {route.legs && route.legs.length > 0 && (
+                <View style={styles.detailStepContainer}>
+                  <View style={styles.stepIndicatorCol}>
+                    <View style={[styles.stepNode, { backgroundColor: palette.textPrimary, borderColor: palette.border }]}>
+                      <Ionicons name="pin" size={11} color={palette.surface} />
+                    </View>
+                  </View>
+                  <View style={styles.stepContentCol}>
+                    <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>
+                      {route.legs[route.legs.length - 1].arrival}
+                    </Text>
+                    <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
+                      Arrive at destination
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -979,22 +903,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...hardShadow(3),
-  },
-  activeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 2,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    ...hardShadow(3),
-  },
-  activeBadgeText: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
   },
   rerouteBanner: {
     position: 'absolute',
@@ -1042,74 +950,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  simControls: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 96,
-    zIndex: 10,
-    borderWidth: 2.5,
-    borderRadius: 18,
-    padding: 12,
-    ...hardShadow(4),
-  },
-  simTitle: {
-    fontSize: 9,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  simButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    gap: 8,
-  },
-  simActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    gap: 4,
-    flex: 1,
-    ...hardShadow(2),
-  },
-  simActionBtnText: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  progressTrackContainer: {
-    marginTop: 12,
-    position: 'relative',
-    height: 24,
-    justifyContent: 'center',
-  },
-  progressTrackBg: {
-    height: 8,
-    borderRadius: 4,
-    width: '100%',
-  },
-  progressTrackFill: {
-    height: 8,
-    borderRadius: 4,
-    position: 'absolute',
-    left: 0,
-  },
-  progressText: {
-    fontSize: 8.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    textAlign: 'right',
-    marginTop: 4,
-  },
   tripBar: {
     position: 'absolute',
     left: 16,
@@ -1125,27 +965,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...hardShadow(5),
   },
-  tripLeftBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  infoPill: {
-    borderWidth: 2,
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  infoPillText: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  warningsToggleBtn: {
+  tripActionBtn: {
     borderWidth: 2,
     borderRadius: 12,
     paddingVertical: 6,
@@ -1155,7 +975,7 @@ const styles = StyleSheet.create({
     gap: 4,
     ...hardShadow(2),
   },
-  warningsToggleBtnText: {
+  tripActionBtnText: {
     fontSize: 10,
     fontFamily: Fonts?.display,
     fontWeight: '900',
@@ -1175,19 +995,30 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 1,
   },
+  reportOverlayRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+  },
+  reportBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  reportCenterContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
   reportInputPanel: {
-    position: 'absolute',
-    left: 16,
-    bottom: 96,
-    zIndex: 25,
     borderWidth: 3,
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    width: 240,
+    gap: 14,
+    width: '100%',
+    maxWidth: 300,
     ...hardShadow(6),
   },
   reportCancelBtn: {
@@ -1229,93 +1060,6 @@ const styles = StyleSheet.create({
     ...hardShadow(2),
   },
   reportSubmitBtnText: {
-    fontSize: 11,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 99,
-  },
-  confirmDialogContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-    padding: 24,
-  },
-  confirmDialogCard: {
-    width: '100%',
-    maxWidth: 320,
-    borderWidth: 3,
-    borderRadius: 22,
-    padding: 20,
-    alignItems: 'center',
-    ...hardShadow(6),
-  },
-  confirmIconHeader: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-    ...hardShadow(2),
-  },
-  confirmIconEmoji: {
-    fontSize: 26,
-  },
-  confirmTitle: {
-    fontSize: 15,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  confirmSubtitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 16,
-    marginBottom: 18,
-  },
-  confirmButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-    marginBottom: 10,
-  },
-  confirmAnswerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderWidth: 2.5,
-    borderRadius: 12,
-    paddingVertical: 12,
-    flex: 1,
-    ...hardShadow(2),
-  },
-  confirmAnswerBtnText: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-  },
-  confirmSkipBtn: {
-    width: '100%',
-    borderWidth: 2.5,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-    ...hardShadow(2),
-  },
-  confirmSkipBtnText: {
     fontSize: 11,
     fontFamily: Fonts?.display,
     fontWeight: '900',
@@ -1417,6 +1161,90 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
+  },
+  detailsSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  detailsScrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  detailsCard: {
+    borderWidth: 2,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+    ...hardShadow(4),
+  },
+  detailsCardHeading: {
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 10,
+  },
+  detailsSensoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  detailsSensoryDesc: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    lineHeight: 16,
+    marginTop: 6,
+    borderTopWidth: 1,
+    paddingTop: 8,
+  },
+  detailsTimeline: {
+    gap: 12,
+    marginTop: 4,
+  },
+  detailStepContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  stepIndicatorCol: {
+    alignItems: 'center',
+    width: 24,
+    alignSelf: 'stretch',
+  },
+  stepNode: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  stepLine: {
+    width: 2.5,
+    flex: 1,
+    marginTop: -2,
+    marginBottom: -10,
+    zIndex: 1,
+  },
+  stepContentCol: {
+    flex: 1,
+    gap: 2,
+    paddingBottom: 12,
+  },
+  detailsStation: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  detailsInstruction: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  detailsArrival: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    marginTop: 2,
   },
   backBtnAction: {
     borderWidth: 2,
