@@ -334,6 +334,7 @@ async def suggest_locations(
 
     suggestions = []
     seen_coords = set()
+    seen_names = set()
 
     # 1. Query Photon API (komoot public instance) for sub-50ms autocomplete
     corrected_query = correct_common_typos(query)
@@ -385,6 +386,11 @@ async def suggest_locations(
                             else:
                                 name = city or country or "Unknown Location"
                                 
+                        # Skip duplicate names in the same city
+                        name_key = (name.lower(), (city or "").lower())
+                        if name_key in seen_names:
+                            continue
+
                         # Build display name and subtitle
                         display_parts = []
                         if name:
@@ -412,6 +418,7 @@ async def suggest_locations(
                             "in_london": in_london
                         })
                         seen_coords.add(coord_key)
+                        seen_names.add(name_key)
                     except (ValueError, KeyError):
                         pass
     except Exception as e:
@@ -456,6 +463,12 @@ async def suggest_locations(
                                 name = parts[0].strip()
                                 subtitle = ", ".join([p.strip() for p in parts[1:]]).strip() if len(parts) > 1 else ""
                                 
+                                # Skip duplicate names in the same city
+                                city_part = subtitle.split(",")[0].strip().lower() if subtitle else ""
+                                name_key = (name.lower(), city_part)
+                                if name_key in seen_names:
+                                    continue
+
                                 # Check London bounds
                                 in_london = (51.25 <= lat <= 51.75) and (-0.60 <= lon <= 0.35)
                                 importance = float(item.get("importance") or 0.0)
@@ -470,6 +483,7 @@ async def suggest_locations(
                                     "in_london": in_london
                                 })
                                 seen_coords.add(coord_key)
+                                seen_names.add(name_key)
                             except (ValueError, KeyError):
                                 pass
             except Exception as e:

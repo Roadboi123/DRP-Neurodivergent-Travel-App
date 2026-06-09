@@ -138,6 +138,7 @@ export function RouteSearchInputs({
         defaults.push(...recents.map(r => ({ ...r, isRecent: true } as LocationSuggestion & { isRecent?: boolean })));
       }
       setSuggestions(defaults);
+      setSuggestionsLoading(false);
       return;
     }
 
@@ -156,6 +157,7 @@ export function RouteSearchInputs({
 
     // If query is too short, don't query backend
     if (cleanQuery.length < 2) {
+      setSuggestionsLoading(false);
       return;
     }
 
@@ -164,12 +166,14 @@ export function RouteSearchInputs({
     const cacheKey = `${normQuery}:${userLat}:${userLon}`;
     if (FRONTEND_SUGGESTIONS_CACHE[cacheKey]) {
       setSuggestions(FRONTEND_SUGGESTIONS_CACHE[cacheKey]);
+      setSuggestionsLoading(false);
       return;
     }
 
+    setSuggestionsLoading(true);
+
     // 3. Fire debounced backend request (150ms) to supplement suggestions list
     const delayDebounce = setTimeout(async () => {
-      setSuggestionsLoading(true);
       try {
         const data = await routesService.suggestLocations(query, userCoords);
         
