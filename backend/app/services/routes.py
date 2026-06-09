@@ -1105,6 +1105,28 @@ async def get_user_warnings(
         except Exception as e:
             print(f"Error checking live station works: {e}")
 
+    # 4b. Live station events check (football, crowd, concerts)
+    if u_crowds >= 3:
+        try:
+            event_alerts = await tlf_client.get_live_station_events()
+            if event_alerts:
+                if route_stations:
+                    event_alerts = [
+                        e for e in event_alerts if e["station"].lower() in route_stations
+                    ]
+                for event in event_alerts:
+                    desc_text = event["desc"]
+                    warnings.append({
+                        "id": f"w_station_event_{warning_id_counter}",
+                        "title": f"Event & Crowds at {event['station']}",
+                        "desc": desc_text,
+                        "severity": "high" if any(w in desc_text.lower() for w in ("football", "match", "concert", "stadium")) else "medium",
+                        "icon": "people"
+                    })
+                    warning_id_counter += 1
+        except Exception as e:
+            print(f"Error checking live station events: {e}")
+
     # 5. Fetch user-reported warnings from database
     try:
         route_coords = []

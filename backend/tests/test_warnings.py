@@ -1,6 +1,21 @@
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
+import pytest
 from app.services.routes import get_user_warnings
+
+@pytest.fixture(autouse=True)
+def mock_supabase_client():
+    with patch("app.services.routes.supabase") as mock_supabase:
+        mock_execute = MagicMock()
+        mock_execute.execute.return_value = MagicMock(data=[])
+        
+        mock_table = MagicMock()
+        mock_table.select.return_value = mock_execute
+        mock_table.select.return_value.eq.return_value = mock_execute
+        
+        mock_supabase.table.return_value = mock_table
+        yield mock_supabase
+
 
 def test_no_station_works_warnings_when_clean():
     # If get_live_station_works returns empty, there should be no station works warnings.

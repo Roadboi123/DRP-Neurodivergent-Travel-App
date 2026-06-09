@@ -320,8 +320,15 @@ export default function JourneyScreen() {
           },
           ...liveWarnings.map((w) => ({
             ...w,
-            emoji: w.icon === 'thermometer' ? '🔥' : w.icon === 'volume-high' ? '🔊' : '⚠️',
-            color: w.icon === 'thermometer' ? accents.pink : w.icon === 'volume-high' ? accents.cyan : accents.yellow,
+            emoji: w.icon === 'thermometer' ? '🔥' : w.icon === 'volume-high' ? '🔊' : w.icon === 'people' ? '👥' : '⚠️',
+            color:
+              w.icon === 'thermometer'
+                ? accents.pink
+                : w.icon === 'volume-high'
+                  ? accents.cyan
+                  : w.icon === 'people'
+                    ? accents.orange
+                    : accents.yellow,
             lat: null,
             lon: null,
           })),

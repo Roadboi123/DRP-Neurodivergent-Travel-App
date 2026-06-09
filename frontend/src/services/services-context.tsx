@@ -26,13 +26,20 @@ function createDefaultServices(): Services {
   const api = createApiClient();
   const local = createLocalApiClient();
 
+  // In development, prioritize local backend so changes are tested. In production, use the deployed API.
+  const routesClient = __DEV__ ? createFallbackClient(local, api) : createFallbackClient(api, local);
+  const preferencesClient = __DEV__ ? createFallbackClient(local, api) : api;
+  const presetsClient = __DEV__ ? createFallbackClient(local, api) : api;
+  const healthClient = __DEV__ ? createFallbackClient(local, api) : api;
+
   return {
-    routes: createRoutesService(createFallbackClient(api, local)),
-    preferences: createPreferencesService(api),
-    presets: createPresetsService(api),
-    health: createHealthService(api),
+    routes: createRoutesService(routesClient),
+    preferences: createPreferencesService(preferencesClient),
+    presets: createPresetsService(presetsClient),
+    health: createHealthService(healthClient),
   };
 }
+
 
 const ServicesContext = createContext<Services | null>(null);
 
