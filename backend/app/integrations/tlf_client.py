@@ -96,14 +96,16 @@ async def get_station_coords(naptan_id: str | None, station_name: str | None) ->
     if naptan_id:
         naptan_id = naptan_id.strip().upper()
         if naptan_id in _STATION_COORDS_CACHE:
-            return tuple(_STATION_COORDS_CACHE[naptan_id])
+            cached_naptan = _STATION_COORDS_CACHE[naptan_id]
+            return (float(cached_naptan[0]), float(cached_naptan[1]))
             
     # 2. Normalize station name
     name_clean = ""
     if station_name:
         name_clean = clean_station_name(station_name)
         if name_clean in _STATION_COORDS_CACHE:
-            return tuple(_STATION_COORDS_CACHE[name_clean])
+            cached_name = _STATION_COORDS_CACHE[name_clean]
+            return (float(cached_name[0]), float(cached_name[1]))
             
     # 3. Check COMMON_STATIONS
     if name_clean and name_clean in COMMON_STATIONS:
@@ -121,7 +123,8 @@ async def get_station_coords(naptan_id: str | None, station_name: str | None) ->
         async with _STATION_COORDS_LOCKS[naptan_id]:
             # Double-check cache inside lock
             if naptan_id in _STATION_COORDS_CACHE:
-                return tuple(_STATION_COORDS_CACHE[naptan_id])
+                cached_naptan_lock = _STATION_COORDS_CACHE[naptan_id]
+                return (float(cached_naptan_lock[0]), float(cached_naptan_lock[1]))
                 
             url = f"{TFL_BASE}/StopPoint/{naptan_id}"
             params = {}
@@ -152,20 +155,21 @@ async def get_station_coords(naptan_id: str | None, station_name: str | None) ->
             
         async with _STATION_COORDS_LOCKS[name_clean]:
             if name_clean in _STATION_COORDS_CACHE:
-                return tuple(_STATION_COORDS_CACHE[name_clean])
+                cached_name_lock = _STATION_COORDS_CACHE[name_clean]
+                return (float(cached_name_lock[0]), float(cached_name_lock[1]))
                 
             try:
                 from app.integrations.osm_client import geocode
                 query_name = f"{station_name}"
                 if "station" not in query_name.lower():
                     query_name += " Station"
-                coords = await geocode(query_name)
-                if coords:
-                    _STATION_COORDS_CACHE[name_clean] = list(coords)
+                res_coords = await geocode(query_name)
+                if res_coords:
+                    _STATION_COORDS_CACHE[name_clean] = list(res_coords)
                     if naptan_id:
-                        _STATION_COORDS_CACHE[naptan_id] = list(coords)
+                        _STATION_COORDS_CACHE[naptan_id] = list(res_coords)
                     await save_station_coords_cache()
-                    return coords
+                    return res_coords
             except Exception as e:
                 print(f"Error geocoding station {station_name}: {e}")
 
