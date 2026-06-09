@@ -2,7 +2,7 @@ from typing import List, Optional
 import jwt
 from fastapi import APIRouter, Depends
 
-from app.schemas.route import RouteOption, WarningItemSchema, LocationSuggestion
+from app.schemas.route import RouteOption, WarningItemSchema, LocationSuggestion, ReportWarningSchema
 from app.services.routes import get_route_suggestions, get_user_warnings
 from app.api.auth import oauth2_scheme, ALGORITHM, JWT_SECRET
 from app.integrations.tlf_client import clean_station_name
@@ -93,5 +93,39 @@ async def suggest_locations(q: str, user_coords: Optional[str] = None):
         except ValueError:
             pass
     return await osm_suggest_locations(q, user_lat, user_lon)
+
+
+@router.post("/warnings/report", response_model=WarningItemSchema)
+async def report_warning(body: ReportWarningSchema):
+    """Save a user-reported sensory warning to the database so other users can see it."""
+    from app.integrations.supabase import supabase
+    supabase.table("reported_warnings").insert({
+        "id": body.id,
+        "username": body.username,
+        "warning_type": body.warning_type,
+        "title": body.title,
+        "description": body.desc,
+        "lat": body.lat,
+        "lon": body.lon,
+    }).execute()
+    
+    return WarningItemSchema(
+        id=body.id,
+        title=body.title,
+        desc=body.desc,
+        severity="medium",
+        icon=body.warning_type,
+        lat=body.lat,
+        lon=body.lon,
+    )
+
+
+@router.delete("/warnings/{warning_id}")
+async def delete_warning(warning_id: str):
+    """Delete a user-reported warning from the database (e.g. when it is no longer there)."""
+    from app.integrations.supabase import supabase
+    supabase.table("reported_warnings").delete().eq("id", warning_id).execute()
+    return {"status": "success", "message": f"Warning {warning_id} deleted successfully"}
+
 
 

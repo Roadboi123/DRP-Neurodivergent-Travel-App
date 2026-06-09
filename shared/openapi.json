@@ -422,6 +422,50 @@
         "title": "PresetsResponse",
         "type": "object"
       },
+      "ReportWarningSchema": {
+        "description": "Request schema for reporting a sensory warning.",
+        "properties": {
+          "desc": {
+            "title": "Desc",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "warning_type": {
+            "title": "Warning Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "warning_type",
+          "title",
+          "desc",
+          "lat",
+          "lon"
+        ],
+        "title": "ReportWarningSchema",
+        "type": "object"
+      },
       "RouteFeature": {
         "description": "Color-coded sensory/efficiency feature badge for the route card.",
         "properties": {
@@ -808,6 +852,28 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon"
           },
           "severity": {
             "enum": [
@@ -1412,6 +1478,89 @@
           }
         ],
         "summary": "Get Routes Warnings",
+        "tags": [
+          "routes"
+        ]
+      }
+    },
+    "/routes/warnings/report": {
+      "post": {
+        "description": "Save a user-reported sensory warning to the database so other users can see it.",
+        "operationId": "report_warning_routes_warnings_report_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportWarningSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarningItemSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Warning",
+        "tags": [
+          "routes"
+        ]
+      }
+    },
+    "/routes/warnings/{warning_id}": {
+      "delete": {
+        "description": "Delete a user-reported warning from the database (e.g. when it is no longer there).",
+        "operationId": "delete_warning_routes_warnings__warning_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "warning_id",
+            "required": true,
+            "schema": {
+              "title": "Warning Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Warning",
         "tags": [
           "routes"
         ]

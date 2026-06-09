@@ -23,6 +23,8 @@ export interface HttpClient {
   get<T>(path: string): Promise<T>;
   /** POST `body` as JSON to `path`, parse JSON as `T`. Throws {@link HttpError} on a non-ok response. */
   post<T>(path: string, body: unknown): Promise<T>;
+  /** DELETE `path`, parse JSON as `T`. Throws {@link HttpError} on a non-ok response. */
+  delete<T>(path: string): Promise<T>;
   /**
    * GET `path` returning the raw {@link Response} without status checking or
    * parsing — for callers that treat specific statuses (e.g. 404) as data
@@ -73,6 +75,14 @@ export function createHttpClient({ baseUrl }: HttpClientOptions): HttpClient {
         method: 'POST',
         headers: getHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(body),
+      });
+      return parse<T>(res, path);
+    },
+
+    async delete<T>(path: string): Promise<T> {
+      const res = await fetch(url(path), {
+        method: 'DELETE',
+        headers: getHeaders(),
       });
       return parse<T>(res, path);
     },

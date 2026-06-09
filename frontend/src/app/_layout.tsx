@@ -47,6 +47,7 @@ function ThemedApp() {
     <NavThemeProvider value={isDark ? navThemeDark : navThemeLight}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="journey" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <ProfileModal

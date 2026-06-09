@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Animated, Dimensions, Modal, PanResponder, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
@@ -7,6 +8,7 @@ import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
 
 interface RouteDetailsModalProps {
@@ -151,6 +153,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   ).current;
 
   if (!route) return null;
+
+  const startJourney = () => {
+    setActiveJourneyRoute(route);
+    onClose();
+    router.push('/journey');
+  };
 
   const toggleStops = (idx: number) => {
     setStopsExpanded((prev) => ({
@@ -346,6 +354,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         }).addTo(map).bindPopup("<b>${p.label.replace(/"/g, '\\"')}</b>");
       `;
     });
+
   }
 
   const leafletHtml = `
@@ -497,7 +506,19 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                 </View>
                 <View style={styles.statBox}>
                   <Text style={[styles.statLabel, { color: palette.textMuted }]}>Cost</Text>
-                  <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+                  <View style={styles.priceStartRow}>
+                    <Text style={[styles.statVal, { color: palette.textPrimary }]}>£{route.price.toFixed(2)}</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={startJourney}
+                      style={[styles.startJourneyButton, { backgroundColor: accents.green, borderColor: palette.border }]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Start journey mode"
+                    >
+                      <Ionicons name="play" size={13} color={palette.textPrimary} />
+                      <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Start</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </View>
@@ -715,6 +736,7 @@ const styles = StyleSheet.create({
   quickStatsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1.5,
   },
@@ -732,6 +754,28 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.display,
     fontWeight: '800',
     marginTop: 2,
+  },
+  priceStartRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
+  },
+  startJourneyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 2,
+    borderRadius: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    ...hardShadow(2),
+  },
+  startJourneyText: {
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   scrollContent: {
     padding: 16,

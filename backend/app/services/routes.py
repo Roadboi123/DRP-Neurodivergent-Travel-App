@@ -1105,4 +1105,56 @@ async def get_user_warnings(
         except Exception as e:
             print(f"Error checking live station works: {e}")
 
+    # 5. Fetch user-reported warnings from database
+    try:
+        route_coords = []
+        if route_stations:
+            for s in route_stations:
+                coords = await _get_station_coords(s)
+                if coords:
+                    route_coords.append(coords)
+
+        res = supabase.table("reported_warnings").select("*").execute()
+        if res.data:
+            from datetime import datetime, timezone, timedelta
+            now_dt = datetime.now(timezone.utc)
+            for row in res.data:
+                if not isinstance(row, dict):
+                    continue
+                created_at_str = row.get("created_at")
+                if created_at_str:
+                    try:
+                        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                        if now_dt - created_at > timedelta(hours=6):
+                            continue
+                    except Exception:
+                        pass
+
+                w_lat = row.get("lat")
+                w_lon = row.get("lon")
+                if w_lat is not None and w_lon is not None:
+                    is_relevant = False
+                    if generic or not route_stations:
+                        is_relevant = True
+                    else:
+                        for s_coords in route_coords:
+                            dist = _haversine_distance(w_lat, w_lon, s_coords[0], s_coords[1])
+                            if dist <= 1500:
+                                is_relevant = True
+                                break
+
+                    if is_relevant:
+                        warnings.append({
+                            "id": str(row.get("id") or ""),
+                            "title": str(row.get("title") or ""),
+                            "desc": str(row.get("description") or ""),
+                            "severity": "medium",
+                            "icon": str(row.get("warning_type") or ""),
+                            "lat": w_lat,
+                            "lon": w_lon,
+                        })
+    except Exception as e:
+        print(f"Error fetching user reported warnings: {e}")
+
     return warnings
+
