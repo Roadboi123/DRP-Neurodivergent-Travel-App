@@ -346,10 +346,10 @@ async def suggest_locations(
     photon_params = {
         "q": corrected_query,
         "limit": "15",
-        "countrycode": "gb",
         "lat": str(bias_lat),
         "lon": str(bias_lon),
     }
+
     
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
