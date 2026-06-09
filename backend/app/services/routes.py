@@ -70,51 +70,8 @@ WEIGHTS_MAP = {
     4: 3.0,
 }
 
-
-COMMON_STATIONS = {
-    "high street kensington": (51.5013, -0.1927),
-    "notting hill gate": (51.5091, -0.1961),
-    "queensway": (51.5103, -0.1871),
-    "lancaster gate": (51.5117, -0.1755),
-    "bayswater": (51.5121, -0.1879),
-    "paddington": (51.5159, -0.1759),
-    "earl's court": (51.4912, -0.1944),
-    "gloucester road": (51.4944, -0.1829),
-    "south kensington": (51.4941, -0.1730),
-    "ealing broadway": (51.5149, -0.2997),
-    "north acton": (51.5234, -0.2596),
-    "shepherd's bush": (51.5042, -0.2185),
-    "white city": (51.5120, -0.2241),
-    "holland park": (51.5074, -0.2060),
-    "kensington (olympia)": (51.4979, -0.2101),
-    "west kensington": (51.4902, -0.2063),
-    "barons court": (51.4902, -0.2139),
-    "hammersmith": (51.4928, -0.2229),
-    "ravenscourt park": (51.4943, -0.2382),
-    "stamford brook": (51.4945, -0.2457),
-    "turnham green": (51.4951, -0.2501),
-    "chiswick park": (51.4944, -0.2678),
-    "acton town": (51.5028, -0.2721),
-    "south ealing": (51.5011, -0.2872),
-    "northfields": (51.4975, -0.2981),
-    "boston manor": (51.4956, -0.3250),
-    "osterley": (51.4813, -0.3517),
-    "hounslow east": (51.4732, -0.3565),
-    "hounslow central": (51.4713, -0.3664),
-    "hounslow west": (51.4736, -0.3858),
-    "hatton cross": (51.4668, -0.4233),
-}
-
-
 async def _get_station_coords(station_name: str) -> Optional[tuple[float, float]]:
-    if not station_name:
-        return None
-    name_clean = station_name.lower()
-    for suffix in [" underground station", " station", " railway station", " rail station", " dlr station"]:
-        if name_clean.endswith(suffix):
-            name_clean = name_clean[:-len(suffix)].strip()
-            
-    return COMMON_STATIONS.get(name_clean)
+    return await tlf_client.get_station_coords(None, station_name)
 
 
 async def _create_walking_leg(
@@ -296,6 +253,22 @@ async def _calculate_leg_sensory_live(leg: dict, temp: float) -> tuple[int, int,
             pass  # Fall back to static heuristics on any error
             
     return noise, crowds, heat, light, smell
+
+
+def find_closest_coordinate_index(coords: list[list[float]], target: tuple[float, float]) -> int:
+    if not coords:
+        return 0
+    min_dist = float("inf")
+    closest_idx = 0
+    target_lat, target_lon = target
+    for idx, pt in enumerate(coords):
+        d_lat = pt[0] - target_lat
+        d_lon = pt[1] - target_lon
+        dist = d_lat * d_lat + d_lon * d_lon
+        if dist < min_dist:
+            min_dist = dist
+            closest_idx = idx
+    return closest_idx
 
 
 async def _build_route_option(index: int, journey: dict, temp: float, destination_name: str) -> dict:
@@ -693,11 +666,38 @@ async def get_route_suggestions(
                             modified_leg["arrival_lat"] = stop_lat
                             modified_leg["arrival_lon"] = stop_lon
                             
+                            # Prepare modified path coordinates up to the intermediate exit stop
+                            modified_path = []
+                            original_coords = leg.get("path_coords", [])
+                            stop_points = leg.get("stop_points", [])
+                            if original_coords and len(original_coords) >= 2:
+                                # Find closest point in original path to stop_coords
+                                closest_idx = find_closest_coordinate_index(original_coords, (stop_lat, stop_lon))
+                                # Slice original path up to the closest index
+                                modified_path = [pt.copy() for pt in original_coords[:closest_idx + 1]]
+                                if modified_path:
+                                    modified_path[-1] = [stop_lat, stop_lon]
+                                else:
+                                    modified_path = [[stop_lat, stop_lon]]
+                            else:
+                                # Fall back to straight line if original coords are missing
+                                dep_lat = leg.get("departure_lat")
+                                dep_lon = leg.get("departure_lon")
+                                if dep_lat is not None and dep_lon is not None:
+                                    modified_path.append([float(dep_lat), float(dep_lon)])
+                                modified_path.append([stop_lat, stop_lon])
+                                
+                            modified_leg["path_coords"] = modified_path
+                            
                             # Interpolate duration
                             total_stops = len(stops)
                             fraction = (stop_idx + 1) / (total_stops + 1)
                             modified_leg["duration_mins"] = max(1, round(leg.get("duration_mins", 0) * fraction))
                             modified_leg["stops"] = stops[:stop_idx]
+                            
+                            # Update stop_points for modified leg
+                            modified_leg["stop_points"] = stop_points[:stop_idx]
+                            
                             modified_leg["connection_waiting_mins"] = 0
                             
                             # Generate new journey legs
