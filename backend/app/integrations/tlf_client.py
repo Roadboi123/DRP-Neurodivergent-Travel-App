@@ -392,3 +392,62 @@ async def get_live_station_works() -> list[str]:
         asyncio.create_task(_refresh_live_station_works_task())
         
     return _LIVE_STATION_WORKS_CACHE
+
+
+_LIVE_STATION_EVENTS_CACHE: list[dict[str, str]] = []
+_LIVE_STATION_EVENTS_EXPIRY: float = 0.0
+_STATION_EVENTS_LOCK = asyncio.Lock()
+_IS_REFRESHING_STATION_EVENTS: bool = False
+
+
+async def _refresh_live_station_events_task() -> None:
+    """Background task to fetch and filter live stadium and crowd events from TfL."""
+    global _LIVE_STATION_EVENTS_EXPIRY, _LIVE_STATION_EVENTS_CACHE, _IS_REFRESHING_STATION_EVENTS
+    url = f"{TFL_BASE}/StopPoint/Mode/tube,dlr,overground,elizabeth-line/Disruption"
+    params = {}
+    if APP_KEY:
+        params["app_key"] = APP_KEY
+
+    events = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url, params=params)
+            if res.status_code == 200:
+                disruptions = res.json()
+                keywords = ["crowd", "busy", "congestion", "football", "match", "concert", "stadium", "event"]
+                for d in disruptions:
+                    desc = str(d.get("description", ""))
+                    desc_lower = desc.lower()
+                    if any(kw in desc_lower for kw in keywords):
+                        name = d.get("commonName", "")
+                        if name:
+                            # Clean up station name suffixes
+                            name = name.replace(" Underground Station", "")
+                            name = name.replace(" DLR Station", "")
+                            name = name.replace(" Railway Station", "")
+                            name = name.replace(" Rail Station", "")
+                            name = name.replace(" Station", "")
+                            name = name.strip()
+                            if name:
+                                events.append({
+                                    "station": name,
+                                    "desc": desc
+                                })
+                _LIVE_STATION_EVENTS_CACHE = events
+    except Exception as e:
+        print(f"Error background fetching live station events: {e}")
+    finally:
+        _LIVE_STATION_EVENTS_EXPIRY = time.time() + CACHE_TTL_SECS
+        _IS_REFRESHING_STATION_EVENTS = False
+
+
+async def get_live_station_events() -> list[dict[str, str]]:
+    """Return active station crowd and event alerts from cache, refreshing asynchronously if stale."""
+    global _LIVE_STATION_EVENTS_EXPIRY, _IS_REFRESHING_STATION_EVENTS
+    now = time.time()
+    if now >= _LIVE_STATION_EVENTS_EXPIRY and not _IS_REFRESHING_STATION_EVENTS:
+        _IS_REFRESHING_STATION_EVENTS = True
+        asyncio.create_task(_refresh_live_station_events_task())
+        
+    return _LIVE_STATION_EVENTS_CACHE
+
