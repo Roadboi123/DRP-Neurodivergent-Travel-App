@@ -155,9 +155,10 @@ export function RouteSearchInputs({
     setSuggestions(mergedList);
 
     // If query is too short, don't query backend
-    if (cleanQuery.length < 3) {
+    if (cleanQuery.length < 2) {
       return;
     }
+
 
     // Check frontend cache
     const cacheKey = `${normQuery}:${userLat}:${userLon}`;

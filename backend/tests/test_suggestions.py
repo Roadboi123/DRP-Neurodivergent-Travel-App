@@ -20,29 +20,47 @@ def test_correct_common_typos():
 
 @pytest.mark.anyio
 async def test_suggest_locations_short_query():
-    res = await suggest_locations("ab")
+    # Only queries of length < 2 are rejected immediately.
+    # Query "a" has length 1, so it should return []
+    res = await suggest_locations("a")
     assert res == []
 
 
 @pytest.mark.anyio
 async def test_suggest_locations_local_match():
-    mock_nominatim_response = [
-        {
-            "display_name": "St. John's Wood Underground Station, London, NW8 6DR, United Kingdom",
-            "lat": "51.5353523",
-            "lon": "-0.1742097",
-            "importance": 0.5
-        },
-        {
-            "display_name": "St. John's Wood, London, Greater London, United Kingdom",
-            "lat": "51.5317260",
-            "lon": "-0.1741901",
-            "importance": 0.4
-        }
-    ]
+    mock_photon_response = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-0.1742097, 51.5353523]
+                },
+                "properties": {
+                    "name": "St. John's Wood Underground Station",
+                    "city": "London",
+                    "postcode": "NW8 6DR",
+                    "country": "United Kingdom"
+                }
+            },
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-0.1741901, 51.5317260]
+                },
+                "properties": {
+                    "name": "St. John's Wood",
+                    "city": "London",
+                    "country": "United Kingdom"
+                }
+            }
+        ]
+    }
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = mock_nominatim_response
+    mock_resp.json.return_value = mock_photon_response
     
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_resp
@@ -63,38 +81,50 @@ async def test_suggest_locations_local_match():
 
 @pytest.mark.anyio
 async def test_suggest_locations_nominatim_integration():
-    mock_nominatim_response = [
-        {
-            "display_name": "St Johns Wood, Birmingham, West Midlands, England, United Kingdom",
-            "lat": "52.3848",
-            "lon": "-2.0039",
-            "importance": 0.05
-        },
-        {
-            "display_name": "St. John's Wood Underground Station, London, Greater London, England, United Kingdom",
-            "lat": "51.5353",
-            "lon": "-0.1742",
-            "importance": 0.44
-        }
-    ]
+    mock_photon_response = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-2.0039, 52.3848]
+                },
+                "properties": {
+                    "name": "St Johns Wood",
+                    "city": "Birmingham",
+                    "country": "United Kingdom"
+                }
+            },
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-0.1742, 51.5353]
+                },
+                "properties": {
+                    "name": "St. John's Wood Underground Station",
+                    "city": "London",
+                    "country": "United Kingdom"
+                }
+            }
+        ]
+    }
     
-    # Mock httpx.AsyncClient.get to return mock Nominatim results
+    # Mock httpx.AsyncClient.get to return mock Photon results
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = mock_nominatim_response
+    mock_resp.json.return_value = mock_photon_response
     
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_resp
         
-        # Query for something that will trigger Nominatim
-        # (e.g. "st johns wood", but to avoid hitting local pre-seeds completely or verify merging,
-        # let's query a non-local match "bristol park")
         res = await suggest_locations("bristol park")
         
         # Verify call
         mock_get.assert_called_once()
         
-        # Verify London is sorted first even if its importance was lower or order was second in response
+        # Verify London is sorted first even if order was second in response
         assert len(res) == 2
         assert "London" in res[0]["display_name"]
         assert "Birmingham" in res[1]["display_name"]
@@ -124,25 +154,40 @@ def test_suggest_locations_api_endpoint():
 
 @pytest.mark.anyio
 async def test_suggest_locations_proximity_sorting():
-    # Mock return values for two stations. We return them in an order where
-    # St. John's Wood is first, to verify that the sorting logic successfully reorders them.
-    mock_nominatim_response = [
-        {
-            "display_name": "St. John's Wood Underground Station, London, NW8 6DR, United Kingdom",
-            "lat": "51.5353523",
-            "lon": "-0.1742097",
-            "importance": 0.5
-        },
-        {
-            "display_name": "Slough Station, Slough, SL1 1XN, United Kingdom",
-            "lat": "51.5117",
-            "lon": "-0.5915",
-            "importance": 0.4
-        }
-    ]
+    mock_photon_response = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-0.1742097, 51.5353523]
+                },
+                "properties": {
+                    "name": "St. John's Wood Underground Station",
+                    "city": "London",
+                    "postcode": "NW8 6DR",
+                    "country": "United Kingdom"
+                }
+            },
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-0.5915, 51.5117]
+                },
+                "properties": {
+                    "name": "Slough Station",
+                    "city": "Slough",
+                    "postcode": "SL1 1XN",
+                    "country": "United Kingdom"
+                }
+            }
+        ]
+    }
     mock_resp = MagicMock()
     mock_resp.status_code = 200
-    mock_resp.json.return_value = mock_nominatim_response
+    mock_resp.json.return_value = mock_photon_response
     
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_resp
@@ -152,4 +197,5 @@ async def test_suggest_locations_proximity_sorting():
         res = await suggest_locations("station", user_lat=51.51, user_lon=-0.59)
         names = [s["name"] for s in res]
         assert names.index("Slough Station") < names.index("St. John's Wood Underground Station")
+
 
