@@ -36,6 +36,7 @@ import { consumeReopenJourneyDetails, getActiveJourneyRoute } from '@/services/a
 import type { RouteOption, WarningItem } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
+import { analytics } from '@/services/analytics';
 
 // How many routes to show in the ungrouped (Google-Maps-style) list.
 const MAX_RESULTS = Infinity;
@@ -110,8 +111,15 @@ export default function RoutesScreen() {
     }
   }, [isFocused, startLoc, coords]);
 
+  useEffect(() => {
+    if (isFocused) {
+      analytics.trackScreenChange();
+    }
+  }, [isFocused]);
+
   // Google-Maps-style swap of the start and end locations.
   const handleSwapLocations = () => {
+    analytics.startSearch(endLoc, startLoc);
     const newStart = endLoc;
     const newEnd = startLoc;
     setStartLoc(newStart);
@@ -256,6 +264,7 @@ export default function RoutesScreen() {
         onEndChange={setEndLoc}
         onSwap={handleSwapLocations}
         onSubmit={(start, end, startCoords, endCoords) => {
+          analytics.startSearch(start, end);
           setActiveStart(start);
           setActiveEnd(end);
           setActiveStartCoords(startCoords);
@@ -297,11 +306,17 @@ export default function RoutesScreen() {
               variant="tab"
               options={SORT_TABS}
               value={filters.sort}
-              onChange={(sort) => setFilters((f) => ({ ...f, sort }))}
+              onChange={(sort) => {
+                analytics.trackClick();
+                setFilters((f) => ({ ...f, sort }));
+              }}
             />
           </View>
           <TouchableOpacity
-            onPress={() => setFiltersVisible(true)}
+            onPress={() => {
+              analytics.trackClick();
+              setFiltersVisible(true);
+            }}
             activeOpacity={0.85}
             style={[styles.filtersButton, { borderColor: palette.borderStrong, backgroundColor: palette.surface }]}>
             <Ionicons name="options-outline" size={16} color={palette.textPrimary} />
@@ -315,7 +330,10 @@ export default function RoutesScreen() {
             {chips.map((chip) => (
               <TouchableOpacity
                 key={chip}
-                onPress={() => setFiltersVisible(true)}
+                onPress={() => {
+                  analytics.trackClick();
+                  setFiltersVisible(true);
+                }}
                 activeOpacity={0.85}
                 style={[
                   styles.statusChip,
@@ -361,7 +379,11 @@ export default function RoutesScreen() {
                     key={`g${group.changes}-${route.id}`}
                     route={route}
                     hideTitle
-                    onPress={() => setSelectedRoute(route)}
+                    onPress={() => {
+                      analytics.trackClick();
+                      analytics.trackRouteView(route.id, warnings.length > 0);
+                      setSelectedRoute(route);
+                    }}
                   />
                 ))}
               </View>
@@ -374,7 +396,11 @@ export default function RoutesScreen() {
                 key={route.id}
                 route={route}
                 hideTitle
-                onPress={() => setSelectedRoute(route)}
+                onPress={() => {
+                  analytics.trackClick();
+                  analytics.trackRouteView(route.id, warnings.length > 0);
+                  setSelectedRoute(route);
+                }}
               />
             ))}
           </View>

@@ -10,6 +10,7 @@ import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
+import { analytics } from '@/services/analytics';
 
 interface RouteDetailsModalProps {
   visible: boolean;
@@ -155,12 +156,14 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   if (!route) return null;
 
   const startJourney = () => {
+    analytics.startJourney(route.id);
     setActiveJourneyRoute(route);
     onClose();
     router.push('/journey');
   };
 
   const toggleStops = (idx: number) => {
+    analytics.trackClick();
     setStopsExpanded((prev) => ({
       ...prev,
       [idx]: !prev[idx],
@@ -435,7 +438,10 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
             ) : null}
           </View>
           <TouchableOpacity
-            onPress={onClose}
+            onPress={() => {
+              analytics.trackClick();
+              onClose();
+            }}
             style={[styles.closeBtn, { backgroundColor: semantic.neutralSurface, borderColor: palette.border }]}
             accessibilityLabel="Close detailed route overlay"
           >

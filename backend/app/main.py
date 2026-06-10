@@ -5,7 +5,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, diagnostics, health, preferences, presets, routes
+from app.api import auth, diagnostics, health, preferences, presets, routes, metrics
 from app.config import settings
 
 app = FastAPI(
@@ -27,6 +27,7 @@ app.include_router(diagnostics.router)
 app.include_router(preferences.router)
 app.include_router(presets.router)
 app.include_router(routes.router)
+app.include_router(metrics.router)
 
 
 @app.get("/")
