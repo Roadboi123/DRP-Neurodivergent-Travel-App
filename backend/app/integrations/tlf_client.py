@@ -250,8 +250,9 @@ async def _parse_leg(leg: dict) -> dict:
         if departure_lat is not None and departure_lon is not None:
             path_coords.append([float(departure_lat), float(departure_lon)])
             
-        for sp in stop_points:
-            sp_coords = await get_station_coords(sp["id"], sp["name"])
+        # Resolve all stop point coordinates in parallel
+        sp_coords_list = await asyncio.gather(*(get_station_coords(sp["id"], sp["name"]) for sp in stop_points))
+        for sp_coords in sp_coords_list:
             if sp_coords:
                 path_coords.append([sp_coords[0], sp_coords[1]])
                 
