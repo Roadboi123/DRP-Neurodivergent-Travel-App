@@ -1780,7 +1780,7 @@
     },
     "/routes/warnings/report": {
       "post": {
-        "description": "Save a user-reported sensory warning to the database so other users can see it.",
+        "description": "Save a user-reported sensory warning to the database so other users can see it.\n\nRejects with 409 if a same-type warning was already reported nearby (anti-spam).",
         "operationId": "report_warning_routes_warnings_report_post",
         "requestBody": {
           "content": {
@@ -1822,7 +1822,7 @@
     },
     "/routes/warnings/{warning_id}": {
       "delete": {
-        "description": "Delete a user-reported warning from the database (e.g. when it is no longer there).",
+        "description": "Delete a user-reported warning from the database.\n\nOwner-only: a warning is removed for everyone only when ``username`` matches\nthe reporter. Other users dismiss a warning locally (client-side), never via\nthis endpoint. Returns ``deleted`` so the client knows whether a row went.",
         "operationId": "delete_warning_routes_warnings__warning_id__delete",
         "parameters": [
           {
@@ -1831,6 +1831,15 @@
             "required": true,
             "schema": {
               "title": "Warning Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "username",
+            "required": true,
+            "schema": {
+              "title": "Username",
               "type": "string"
             }
           }

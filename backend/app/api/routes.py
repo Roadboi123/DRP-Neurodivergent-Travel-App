@@ -132,11 +132,23 @@ async def report_warning(body: ReportWarningSchema):
 
 
 @router.delete("/warnings/{warning_id}")
-async def delete_warning(warning_id: str):
-    """Delete a user-reported warning from the database (e.g. when it is no longer there)."""
+async def delete_warning(warning_id: str, username: str):
+    """Delete a user-reported warning from the database.
+
+    Owner-only: a warning is removed for everyone only when ``username`` matches
+    the reporter. Other users dismiss a warning locally (client-side), never via
+    this endpoint. Returns ``deleted`` so the client knows whether a row went.
+    """
     from app.integrations.supabase import supabase
-    supabase.table("reported_warnings").delete().eq("id", warning_id).execute()
-    return {"status": "success", "message": f"Warning {warning_id} deleted successfully"}
+    res = (
+        supabase.table("reported_warnings")
+        .delete()
+        .eq("id", warning_id)
+        .eq("username", username)
+        .execute()
+    )
+    deleted = bool(getattr(res, "data", None))
+    return {"status": "success", "deleted": deleted, "id": warning_id}
 
 
 
