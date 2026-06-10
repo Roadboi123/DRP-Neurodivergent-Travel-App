@@ -30,6 +30,61 @@ def clean_station_name(name: str) -> str:
     return n.strip()
 
 
+def get_gwml_path(dep_name: str, arr_name: str) -> list[list[float]] | None:
+    stations_ordered = [
+        "reading", "twyford", "maidenhead", "taplow", "burnham", "slough",
+        "langley", "iver", "west drayton", "hayes & harlington", "southall",
+        "hanwell", "west ealing", "ealing broadway", "acton main line", "paddington"
+    ]
+    
+    station_coords = {
+        "reading": [51.458786, -0.971849],
+        "twyford": [51.475534, -0.863293],
+        "maidenhead": [51.518305, -0.722253],
+        "taplow": [51.523402, -0.681505],
+        "burnham": [51.523506, -0.646374],
+        "slough": [51.51202, -0.591924],
+        "langley": [51.507712, -0.541104],
+        "iver": [51.508503, -0.506726],
+        "west drayton": [51.509829, -0.47217],
+        "hayes & harlington": [51.502935, -0.420113],
+        "southall": [51.505987, -0.377543],
+        "hanwell": [51.511888, -0.338524],
+        "west ealing": [51.513411, -0.322313],
+        "ealing broadway": [51.514643, -0.30173],
+        "acton main line": [51.516747, -0.269684],
+        "paddington": [51.516995, -0.177388],
+    }
+    
+    def clean(name: str) -> str:
+        n = name.lower()
+        for suffix in [" underground station", " railway station", " rail station", " dlr station", " station"]:
+            if n.endswith(suffix):
+                n = n[:-len(suffix)]
+        n = n.replace(" (berks)", "")
+        n = n.replace("london ", "")
+        return n.strip()
+        
+    dep_clean = clean(dep_name)
+    arr_clean = clean(arr_name)
+    
+    if dep_clean in stations_ordered and arr_clean in stations_ordered:
+        i = stations_ordered.index(dep_clean)
+        j = stations_ordered.index(arr_clean)
+        if i == j:
+            return [[station_coords[dep_clean][0], station_coords[dep_clean][1]]]
+        if i < j:
+            path_names = stations_ordered[i:j+1]
+            return [station_coords[name] for name in path_names]
+        else:
+            path_names = stations_ordered[j:i+1]
+            coords = [station_coords[name] for name in path_names]
+            coords.reverse()
+            return coords
+            
+    return None
+
+
 def _parse_leg(leg: dict) -> dict:
     # Resolve geometry from lineString
     path_coords = []
@@ -122,23 +177,47 @@ def _parse_leg(leg: dict) -> dict:
         if stop_c != dep_c and stop_c != arr_c:
             stops.append(stop_name)
 
+    mode_name = leg.get("mode", {}).get("name", "unknown")
+    line_name = leg.get("routeOptions", [{}])[0].get("lineIdentifier", {}).get("name", "") if leg.get("routeOptions") else ""
+    
+    dep_lat = leg.get("departurePoint", {}).get("lat")
+    dep_lon = leg.get("departurePoint", {}).get("lon")
+    arr_lat = leg.get("arrivalPoint", {}).get("lat")
+    arr_lon = leg.get("arrivalPoint", {}).get("lon")
+
+    # Override path and endpoints if this is a rail service along the Great Western Main Line
+    mode_lower = mode_name.lower()
+    line_lower = line_name.lower()
+    is_gwml = (
+        "elizabeth" in line_lower or
+        "elizabeth" in mode_lower or
+        "great western" in line_lower or
+        "gwr" in line_lower or
+        "national-rail" in mode_lower or
+        "national rail" in mode_lower
+    )
+    if is_gwml:
+        gwml_path = get_gwml_path(departure, arrival)
+        if gwml_path is not None:
+            path_coords = gwml_path
+            dep_lat, dep_lon = path_coords[0][0], path_coords[0][1]
+            arr_lat, arr_lon = path_coords[-1][0], path_coords[-1][1]
+
     return {
-        "mode":          leg.get("mode", {}).get("name", "unknown"),
+        "mode":          mode_name,
         "departure":     departure,
         "arrival":       arrival,
         "departure_naptan": leg.get("departurePoint", {}).get("naptanId", ""),
         "arrival_naptan":   leg.get("arrivalPoint", {}).get("naptanId", ""),
-        "departure_lat":    leg.get("departurePoint", {}).get("lat"),
-        "departure_lon":    leg.get("departurePoint", {}).get("lon"),
-        "arrival_lat":      leg.get("arrivalPoint", {}).get("lat"),
-        "arrival_lon":      leg.get("arrivalPoint", {}).get("lon"),
+        "departure_lat":    dep_lat,
+        "departure_lon":    dep_lon,
+        "arrival_lat":      arr_lat,
+        "arrival_lon":      arr_lon,
         "departs_at":    leg.get("departureTime", ""),
         "arrives_at":    leg.get("arrivalTime", ""),
         "duration_mins": leg.get("duration", 0),
         "instruction":   leg.get("instruction", {}).get("summary", ""),
-        "line":          leg.get("routeOptions", [{}])[0]
-                            .get("lineIdentifier", {})
-                            .get("name", "") if leg.get("routeOptions") else "",
+        "line":          line_name,
         "stops":         stops,
         "path_coords":   path_coords,
     }
