@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { BRAND, Fonts, getAccents, getPalette, hardShadow, type Accents } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -24,6 +24,9 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
 
+  // Expanded by default; the header chevron lets the user minimise the list.
+  const [expanded, setExpanded] = useState(true);
+
   if (!warnings || warnings.length === 0) {
     return null;
   }
@@ -35,18 +38,32 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
         { backgroundColor: accents.orange, borderColor: palette.border },
       ]}
     >
-      {/* Header — always visible, no toggle */}
-      <View style={styles.header}>
+      {/* Header — tap to collapse/expand the list */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => setExpanded((prev) => !prev)}
+        style={styles.header}
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? 'Minimise sensory warnings' : 'Show sensory warnings'}
+      >
         <Ionicons name="warning" size={22} color={palette.textPrimary} />
         <Text style={[styles.headerText, { color: palette.textPrimary }]}>
           Sensory Warnings [{warnings.length}]
         </Text>
-      </View>
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color={palette.textPrimary}
+          style={styles.headerChevron}
+        />
+      </TouchableOpacity>
 
+      {expanded && (
+        <>
       {/* Divider between header and list */}
       <View style={[styles.headerDivider, { backgroundColor: palette.border }]} />
 
-      {/* Warning items — always shown */}
+      {/* Warning items */}
       <View style={[styles.itemsBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         {warnings.map((w, index) => (
           <View key={w.id}>
@@ -74,6 +91,8 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
           </View>
         ))}
       </View>
+        </>
+      )}
     </View>
   );
 }
@@ -99,6 +118,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  headerChevron: {
+    marginLeft: 'auto',
   },
   headerDivider: {
     height: 2,
