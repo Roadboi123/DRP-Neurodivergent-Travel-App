@@ -80,7 +80,8 @@ def _parse_leg(leg: dict) -> dict:
 
             def _step_m(a, b):
                 R = 6_371_000
-                p1 = _math.radians(a[0]); p2 = _math.radians(b[0])
+                p1 = _math.radians(a[0])
+                p2 = _math.radians(b[0])
                 dp = _math.radians(b[0] - a[0])
                 dl = _math.radians(b[1] - a[1])
                 s = _math.sin(dp/2)**2 + _math.cos(p1)*_math.cos(p2)*_math.sin(dl/2)**2
