@@ -9,8 +9,8 @@ import type { HttpClient } from '@/services/http-client';
  * Any service can opt into failover simply by being handed this wrapped client
  * in the composition root; the service code stays fallback-agnostic.
  *
- * Note: `getResponse` does not throw on a non-ok status, so a clean 404 from the
- * primary is returned as-is and does NOT trigger the fallback.
+ * Note: `getResponse`/`postResponse` do not throw on a non-ok status, so a clean
+ * 404/409 from the primary is returned as-is and does NOT trigger the fallback.
  */
 export function createFallbackClient(
   primary: HttpClient,
@@ -32,5 +32,7 @@ export function createFallbackClient(
     post: <T>(path: string, body: unknown) => withFallback((client) => client.post<T>(path, body)),
     delete: <T>(path: string) => withFallback((client) => client.delete<T>(path)),
     getResponse: (path: string) => withFallback((client) => client.getResponse(path)),
+    postResponse: (path: string, body: unknown) =>
+      withFallback((client) => client.postResponse(path, body)),
   };
 }
