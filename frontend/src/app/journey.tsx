@@ -264,6 +264,8 @@ export default function JourneyScreen() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   // The warning whose action card (Remove / Close) is currently open.
   const [selectedWarning, setSelectedWarning] = useState<WarningItem | null>(null);
+  // Transient banner shown e.g. when a report is rejected as a near-duplicate.
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
 
   // Latest warnings, readable from the map's (stale-closure) message handlers.
@@ -337,39 +339,57 @@ export default function JourneyScreen() {
   // Fetch the real, user-reported warnings near this journey. Live TfL/weather
   // warnings (no coordinates) are intentionally not placed on the journey map —
   // that's a separate story — so we keep only items reported by users.
-  useEffect(() => {
-    async function loadWarnings() {
-      const activeRoute = route;
-      if (!activeRoute) return;
-      try {
-        const lineSet = new Set<string>();
-        const stationSet = new Set<string>();
-        activeRoute.legs?.forEach((leg) => {
-          if (leg.line) lineSet.add(leg.line);
-          if (leg.departure) stationSet.add(leg.departure);
-          if (leg.arrival) stationSet.add(leg.arrival);
-          leg.stops?.forEach((stop) => stationSet.add(stop));
-        });
+  const loadingRef = useRef(false);
+  const loadWarnings = useCallback(async () => {
+    const activeRoute = route;
+    if (!activeRoute || loadingRef.current) return;
+    loadingRef.current = true;
+    try {
+      const lineSet = new Set<string>();
+      const stationSet = new Set<string>();
+      activeRoute.legs?.forEach((leg) => {
+        if (leg.line) lineSet.add(leg.line);
+        if (leg.departure) stationSet.add(leg.departure);
+        if (leg.arrival) stationSet.add(leg.arrival);
+        leg.stops?.forEach((stop) => stationSet.add(stop));
+      });
 
-        const routeContext = {
-          lines: Array.from(lineSet),
-          stations: Array.from(stationSet),
-        };
+      const routeContext = {
+        lines: Array.from(lineSet),
+        stations: Array.from(stationSet),
+      };
 
-        const liveWarnings = await routesService.getWarnings(username || '', false, routeContext);
+      const liveWarnings = await routesService.getWarnings(username || '', false, routeContext);
 
-        // User reports are the only ones with a reporter and real coordinates.
-        const userReports = liveWarnings.filter(
-          (w) => w.username != null && w.lat != null && w.lon != null,
-        );
-        setWarnings(userReports);
-      } catch (e) {
-        console.warn('Error loading route warnings:', e);
-      }
+      // User reports are the only ones with a reporter and real coordinates.
+      const userReports = liveWarnings.filter(
+        (w) => w.username != null && w.lat != null && w.lon != null,
+      );
+      // Avoid re-rendering (and a marker flicker) when the set is unchanged.
+      setWarnings((prev) => {
+        const prevIds = new Set(prev.map((p) => p.id));
+        const unchanged = prev.length === userReports.length && userReports.every((w) => prevIds.has(w.id));
+        return unchanged ? prev : userReports;
+      });
+    } catch (e) {
+      console.warn('Error loading route warnings:', e);
+    } finally {
+      loadingRef.current = false;
     }
-
-    loadWarnings();
   }, [route, routesService, username]);
+
+  // Poll so warnings reported by others appear, and expired ones drop off.
+  useEffect(() => {
+    loadWarnings();
+    const interval = setInterval(loadWarnings, 20000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadWarnings();
+    });
+    return () => {
+      clearInterval(interval);
+      sub.remove();
+    };
+  }, [loadWarnings]);
 
   // User location starts at the journey origin, facing the first leg.
   const userCoords = useMemo<[number, number]>(() => {
@@ -473,13 +493,22 @@ export default function JourneyScreen() {
 
     try {
       const result = await routesService.reportWarning(body);
-      if (!result.duplicate) {
+      if (result.duplicate) {
+        setReportNotice('Already reported nearby');
+      } else {
         setWarnings((prev) => [result.warning, ...prev]);
       }
     } catch (err) {
       console.warn('Failed to persist warning report on backend:', err);
     }
   };
+
+  // Auto-dismiss the transient notice after a few seconds.
+  useEffect(() => {
+    if (!reportNotice) return;
+    const timer = setTimeout(() => setReportNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [reportNotice]);
 
   const mapHtml = useMemo(() => (route ? buildJourneyMap(route, accents) : ''), [route, accents]);
 
@@ -542,6 +571,14 @@ export default function JourneyScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Transient notice (e.g. duplicate report rejected) */}
+      {reportNotice && (
+        <View style={[styles.noticeBanner, { backgroundColor: accents.yellow, borderColor: palette.border }]}>
+          <Ionicons name="information-circle-outline" size={16} color={palette.textPrimary} />
+          <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>{reportNotice}</Text>
+        </View>
+      )}
 
       {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
       <View style={[styles.reportCapsule, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -829,6 +866,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...hardShadow(3),
+  },
+  noticeBanner: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 76 : 96,
+    left: 16,
+    right: 16,
+    zIndex: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    ...hardShadow(3),
+  },
+  noticeBannerText: {
+    fontSize: 11,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   reportCapsule: {
     position: 'absolute',
