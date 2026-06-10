@@ -1,6 +1,9 @@
-import { API_BASE_URL } from '@/constants/config';
+import { createApiClient, createLocalApiClient } from '@/services/client-config';
+import { createFallbackClient } from '@/services/fallback-client';
 
-const API_BASE = API_BASE_URL;
+const client = __DEV__
+  ? createFallbackClient(createLocalApiClient(), createApiClient())
+  : createFallbackClient(createApiClient(), createLocalApiClient());
 
 class AnalyticsService {
   private destinationSearchTime: number | null = null;
@@ -106,19 +109,10 @@ class AnalyticsService {
     
     // Post to backend
     try {
-      const response = await fetch(`${API_BASE}/metrics/disruption`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          time_taken_seconds: timeTaken,
-          would_contribute: wouldContribute,
-        }),
+      await client.post('/metrics/disruption', {
+        time_taken_seconds: timeTaken,
+        would_contribute: wouldContribute,
       });
-      if (!response.ok) {
-        console.warn('[Analytics] Failed to post disruption report metrics:', response.status);
-      }
     } catch (err) {
       console.warn('[Analytics] Error posting disruption report metrics:', err);
     }
@@ -140,16 +134,7 @@ class AnalyticsService {
         warning_clicked_for_info: warningClicked,
       };
       
-      const response = await fetch(`${API_BASE}/metrics/journey`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        console.warn('[Analytics] Failed to post journey metrics:', response.status);
-      }
+      await client.post('/metrics/journey', body);
     } catch (err) {
       console.warn('[Analytics] Error posting journey metrics:', err);
     }
