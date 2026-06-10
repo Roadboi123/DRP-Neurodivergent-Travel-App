@@ -78,54 +78,24 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
     if (leg.dep_lat == null || leg.dep_lon == null || leg.arr_lat == null || leg.arr_lon == null) return;
     const { bgColor } = getLegUIProps(leg.mode, leg.line, leg.instruction, accents);
     const isWalking = leg.mode.toLowerCase() === 'walking' || leg.mode.toLowerCase() === 'walk';
-
-    let polylinePointsStr = '';
-    if (leg.path_coords && leg.path_coords.length > 0) {
-      const pathPoints = [...leg.path_coords];
-      // Some providers return a leg's geometry in the opposite order to the
-      // leg's own dep→arr direction. Snapping the endpoints (below) onto
-      // reversed geometry makes the drawn line shoot across to the far end
-      // and trace back — the "dots going round in circles" artifact. Flip
-      // the path first when that orientation reduces the endpoint mismatch.
-      if (
-        pathPoints.length > 1 &&
-        leg.dep_lat != null && leg.dep_lon != null &&
-        leg.arr_lat != null && leg.arr_lon != null
-      ) {
-        const sq = (aLat: number, aLon: number, bLat: number, bLon: number) =>
-          (aLat - bLat) ** 2 + (aLon - bLon) ** 2;
-        const head = pathPoints[0];
-        const tail = pathPoints[pathPoints.length - 1];
-        const asIs =
-          sq(head[0], head[1], leg.dep_lat, leg.dep_lon) +
-          sq(tail[0], tail[1], leg.arr_lat, leg.arr_lon);
-        const flipped =
-          sq(head[0], head[1], leg.arr_lat, leg.arr_lon) +
-          sq(tail[0], tail[1], leg.dep_lat, leg.dep_lon);
-        if (flipped < asIs) {
-          pathPoints.reverse();
-        }
-      }
-      if (leg.dep_lat != null && leg.dep_lon != null && pathPoints.length > 0) {
-        pathPoints[0] = [leg.dep_lat, leg.dep_lon];
-      }
-      if (leg.arr_lat != null && leg.arr_lon != null && pathPoints.length > 0) {
-        pathPoints[pathPoints.length - 1] = [leg.arr_lat, leg.arr_lon];
-      }
-      polylinePointsStr = JSON.stringify(pathPoints);
-    } else {
-      polylinePointsStr = `[[${leg.dep_lat}, ${leg.dep_lon}], [${leg.arr_lat}, ${leg.arr_lon}]]`;
-    }
+    const points =
+      leg.path_coords && leg.path_coords.length > 0
+        ? JSON.stringify([
+            [leg.dep_lat, leg.dep_lon],
+            ...leg.path_coords.slice(1, -1),
+            [leg.arr_lat, leg.arr_lon],
+          ])
+        : `[[${leg.dep_lat}, ${leg.dep_lon}], [${leg.arr_lat}, ${leg.arr_lon}]]`;
 
     leafletJS += `
-      L.polyline(${polylinePointsStr}, {
+      L.polyline(${points}, {
         color: '#1d1c1c',
         weight: ${isWalking ? 10 : 9},
         ${isWalking ? "dashArray: '1, 15'," : ''}
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(map);
-      L.polyline(${polylinePointsStr}, {
+      L.polyline(${points}, {
         color: '${isWalking ? '#ff158a' : bgColor}',
         weight: ${isWalking ? 6 : 5},
         ${isWalking ? "dashArray: '1, 15'," : ''}
@@ -281,27 +251,7 @@ export default function JourneyScreen() {
     const coords: [number, number][] = [];
     route.legs.forEach((leg) => {
       if (leg.path_coords && leg.path_coords.length > 0) {
-        const pathPoints = [...leg.path_coords];
-        if (
-          pathPoints.length > 1 &&
-          leg.departure_lat != null && leg.departure_lon != null &&
-          leg.arrival_lat != null && leg.arrival_lon != null
-        ) {
-          const sq = (aLat: number, aLon: number, bLat: number, bLon: number) =>
-            (aLat - bLat) ** 2 + (aLon - bLon) ** 2;
-          const head = pathPoints[0];
-          const tail = pathPoints[pathPoints.length - 1];
-          const asIs =
-            sq(head[0], head[1], leg.departure_lat, leg.departure_lon) +
-            sq(tail[0], tail[1], leg.arrival_lat, leg.arrival_lon);
-          const flipped =
-            sq(head[0], head[1], leg.arrival_lat, leg.arrival_lon) +
-            sq(tail[0], tail[1], leg.departure_lat, leg.departure_lon);
-          if (flipped < asIs) {
-            pathPoints.reverse();
-          }
-        }
-        pathPoints.forEach((pt) => {
+        leg.path_coords.forEach((pt) => {
           coords.push([pt[0], pt[1]]);
         });
       } else if (leg.departure_lat != null && leg.departure_lon != null && leg.arrival_lat != null && leg.arrival_lon != null) {
