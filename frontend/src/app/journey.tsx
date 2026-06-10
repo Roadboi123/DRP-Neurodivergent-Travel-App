@@ -6,29 +6,40 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
-import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
-import type { RouteOption } from '@/types/route';
+import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
 
 type SensoryReportType = 'sound' | 'heat' | 'smell' | 'crowds' | 'other';
+type Accents = ReturnType<typeof getAccents>;
 
 const REPORT_OPTIONS: {
   type: SensoryReportType;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   emoji: string;
-  color: string;
+  accent: keyof Accents;
 }[] = [
-  { type: 'sound', label: 'Sound', icon: 'radio-outline', emoji: '🔊', color: '#7af7f7' },
-  { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🔥', color: '#ff158a' },
-  { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '👃', color: '#83f582' },
-  { type: 'crowds', label: 'Crowds', icon: 'people-outline', emoji: '👥', color: '#fdad70' },
-  { type: 'other', label: 'Other', icon: 'add-circle-outline', emoji: '⚠️', color: '#fff48d' },
+  { type: 'sound', label: 'Sound', icon: 'radio-outline', emoji: '🔊', accent: 'cyan' },
+  { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🔥', accent: 'pink' },
+  { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '👃', accent: 'green' },
+  { type: 'crowds', label: 'Crowds', icon: 'people-outline', emoji: '👥', accent: 'orange' },
+  { type: 'other', label: 'Other', icon: 'add-circle-outline', emoji: '⚠️', accent: 'yellow' },
 ];
+
+/**
+ * Map a warning's stored `icon` (an Ionicon name, set when it was reported) to
+ * the marker emoji and an accent-ramp colour, so journey markers stay readable
+ * in both themes. Unknown icons fall back to the generic "other" look.
+ */
+function warningVisual(icon: string, accents: Accents): { emoji: string; color: string } {
+  const option = REPORT_OPTIONS.find((o) => o.icon === icon) ?? REPORT_OPTIONS[REPORT_OPTIONS.length - 1];
+  return { emoji: option.emoji, color: accents[option.accent] };
+}
 
 function calculateHeading(from: [number, number], to: [number, number]): number {
   const dLon = ((to[1] - from[1]) * Math.PI) / 180;
@@ -244,15 +255,15 @@ export default function JourneyScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
-  const semantic = getSemanticColors(isDark);
 
   const webViewRef = useRef<WebView>(null);
 
   // States
   const [reportingType, setReportingType] = useState<SensoryReportType | null>(null);
-  const [warnings, setWarnings] = useState<any[]>([]);
-  const [warningsSettings, setWarningsSettings] = useState<Record<string, { showOnMap: boolean; avoidReroute: boolean }>>({});
-  const [warningsModalVisible, setWarningsModalVisible] = useState(false);
+  // Real user-reported warnings near this journey (no mocks, no live TfL items).
+  const [warnings, setWarnings] = useState<WarningItem[]>([]);
+  // Other users' warnings this user has closed — hidden locally only, never deleted.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [detailsVisible, setDetailsVisible] = useState(false);
 
   // Analytics & Active Journey Lifecycles
@@ -308,7 +319,9 @@ export default function JourneyScreen() {
     return coords;
   }, [route]);
 
-  // Fetch / initialize warnings
+  // Fetch the real, user-reported warnings near this journey. Live TfL/weather
+  // warnings (no coordinates) are intentionally not placed on the journey map —
+  // that's a separate story — so we keep only items reported by users.
   useEffect(() => {
     async function loadWarnings() {
       const activeRoute = route;
@@ -330,132 +343,18 @@ export default function JourneyScreen() {
 
         const liveWarnings = await routesService.getWarnings(username || '', false, routeContext);
 
-        const initialWarnings = [
-          {
-            id: 'w_mock_piccadilly',
-            title: 'Piccadilly line, Port closure',
-            desc: 'Short description of impacts i.e. Bus services delayed',
-            severity: 'high',
-            icon: 'alert-circle',
-            emoji: '❌',
-            color: accents.pink,
-            lat: null,
-            lon: null,
-          },
-          {
-            id: 'w_mock_protest',
-            title: 'Protest at SK, ~2000 people',
-            desc: 'Short description of impacts i.e. Bus services affected',
-            severity: 'high',
-            icon: 'people',
-            emoji: '👥',
-            color: accents.orange,
-            lat: null,
-            lon: null,
-          },
-          {
-            id: 'w_mock_forest',
-            title: 'Forest, No vehicles found',
-            desc: 'No vehicles found right now',
-            severity: 'info',
-            icon: 'warning',
-            emoji: '⚠️',
-            color: accents.yellow,
-            lat: null,
-            lon: null,
-          },
-          ...liveWarnings.map((w) => ({
-            ...w,
-            emoji: w.icon === 'thermometer' ? '🔥' : w.icon === 'volume-high' ? '🔊' : w.icon === 'people' ? '👥' : '⚠️',
-            color:
-              w.icon === 'thermometer'
-                ? accents.pink
-                : w.icon === 'volume-high'
-                  ? accents.cyan
-                  : w.icon === 'people'
-                    ? accents.orange
-                    : accents.yellow,
-            lat: null,
-            lon: null,
-          })),
-        ];
-
-        // Map warnings along path
-        const mapped = initialWarnings.map((w, index) => {
-          let lat = null,
-            lon = null;
-          if (activeRoute.legs) {
-            for (const leg of activeRoute.legs) {
-              if (leg.departure && w.title.toLowerCase().includes(leg.departure.toLowerCase())) {
-                lat = leg.departure_lat;
-                lon = leg.departure_lon;
-                break;
-              }
-              if (leg.arrival && w.title.toLowerCase().includes(leg.arrival.toLowerCase())) {
-                lat = leg.arrival_lat;
-                lon = leg.arrival_lon;
-                break;
-              }
-            }
-          }
-
-          if (lat == null && allPathCoords.length > 0) {
-            const ratio = (index + 1) / (initialWarnings.length + 1);
-            const coordIndex = Math.floor(allPathCoords.length * ratio);
-            const pt = allPathCoords[coordIndex] || allPathCoords[0];
-            lat = pt[0];
-            lon = pt[1];
-          }
-
-          return { ...w, lat, lon };
-        });
-
-        setWarnings(mapped);
+        // User reports are the only ones with a reporter and real coordinates.
+        const userReports = liveWarnings.filter(
+          (w) => w.username != null && w.lat != null && w.lon != null,
+        );
+        setWarnings(userReports);
       } catch (e) {
         console.warn('Error loading route warnings:', e);
-        if (allPathCoords.length > 0) {
-          const fallbacks = [
-            {
-              id: 'w_mock_piccadilly',
-              title: 'Piccadilly line, Port closure',
-              desc: 'Short description of impacts i.e. Bus services delayed',
-              severity: 'high',
-              icon: 'alert-circle',
-              emoji: '❌',
-              color: accents.pink,
-              lat: allPathCoords[Math.floor(allPathCoords.length * 0.3)][0],
-              lon: allPathCoords[Math.floor(allPathCoords.length * 0.3)][1],
-            },
-            {
-              id: 'w_mock_protest',
-              title: 'Protest at SK, ~2000 people',
-              desc: 'Short description of impacts i.e. Bus services affected',
-              severity: 'high',
-              icon: 'people',
-              emoji: '👥',
-              color: accents.orange,
-              lat: allPathCoords[Math.floor(allPathCoords.length * 0.6)][0],
-              lon: allPathCoords[Math.floor(allPathCoords.length * 0.6)][1],
-            },
-            {
-              id: 'w_mock_forest',
-              title: 'Forest, No vehicles found',
-              desc: 'No vehicles found right now',
-              severity: 'info',
-              icon: 'warning',
-              emoji: '⚠️',
-              color: accents.yellow,
-              lat: allPathCoords[Math.floor(allPathCoords.length * 0.8)][0],
-              lon: allPathCoords[Math.floor(allPathCoords.length * 0.8)][1],
-            },
-          ];
-          setWarnings(fallbacks);
-        }
       }
     }
 
     loadWarnings();
-  }, [route, allPathCoords, accents.cyan, accents.orange, accents.pink, accents.yellow, routesService, username]);
+  }, [route, routesService, username]);
 
   // User location starts at the journey origin, facing the first leg.
   const userCoords = useMemo<[number, number]>(() => {
@@ -469,17 +368,20 @@ export default function JourneyScreen() {
 
   // Sync state to Leaflet map
   const formattedWarnings = useMemo(() => {
-    return warnings.map((w) => ({
-      id: w.id,
-      title: w.title,
-      desc: w.desc,
-      emoji: w.emoji,
-      color: w.color,
-      lat: w.lat,
-      lon: w.lon,
-      hidden: warningsSettings[w.id]?.showOnMap === false,
-    }));
-  }, [warnings, warningsSettings]);
+    return warnings.map((w) => {
+      const { emoji, color } = warningVisual(w.icon, accents);
+      return {
+        id: w.id,
+        title: w.title,
+        desc: w.desc,
+        emoji,
+        color,
+        lat: w.lat,
+        lon: w.lon,
+        hidden: dismissedIds.has(w.id),
+      };
+    });
+  }, [warnings, dismissedIds, accents]);
 
   useEffect(() => {
     const jsonString = JSON.stringify(formattedWarnings);
@@ -500,10 +402,6 @@ export default function JourneyScreen() {
     }
   }, [userCoords, heading, formattedWarnings]);
 
-  const activeWarningsCount = useMemo(() => {
-    return warnings.filter((w) => warningsSettings[w.id]?.showOnMap !== false).length;
-  }, [warnings, warningsSettings]);
-
   const handleMapMessage = (event: any) => {
     try {
       const dataStr = event.nativeEvent.data;
@@ -516,44 +414,34 @@ export default function JourneyScreen() {
     }
   };
 
-  // Actions
-  const submitReport = (wouldContribute: boolean) => {
+  // Actions — report a sensory warning at the (simulated) current location.
+  const submitReport = async () => {
     if (!reportingType) return;
     const option = REPORT_OPTIONS.find((o) => o.type === reportingType);
     if (!option) return;
 
-    const newReport = {
+    const body = {
       id: `w_user_${Date.now()}`,
-      title: `${option.label} Warning`,
-      desc: `User reported sensory warning (${option.label.toLowerCase()}) at current location.`,
-      severity: 'medium' as const,
-      icon: option.icon,
-      emoji: option.emoji,
-      color: option.color,
+      username: username || 'anonymous',
+      warning_type: option.icon,
+      title: `${option.label} reported`,
+      desc: `${option.label} flagged here by a traveller.`,
       lat: userCoords[0],
       lon: userCoords[1],
     };
 
-    // Call API to persist it on the backend
-    routesService.reportWarning({
-      id: newReport.id,
-      username: username || 'anonymous',
-      warning_type: newReport.icon,
-      title: newReport.title,
-      desc: newReport.desc,
-      lat: newReport.lat,
-      lon: newReport.lon,
-    }).catch((err) => console.warn('Failed to persist warning report on backend:', err));
-
-    setWarnings((prev) => [newReport, ...prev]);
     setReportingType(null);
-    analytics.endDisruptionReport(wouldContribute);
-  };
+    analytics.endDisruptionReport(true);
 
-  // Check if any warning is avoiding / rerouting
-  const avoidingWarningsCount = useMemo(() => {
-    return Object.values(warningsSettings).filter((s) => s.avoidReroute).length;
-  }, [warningsSettings]);
+    try {
+      const result = await routesService.reportWarning(body);
+      if (!result.duplicate) {
+        setWarnings((prev) => [result.warning, ...prev]);
+      }
+    } catch (err) {
+      console.warn('Failed to persist warning report on backend:', err);
+    }
+  };
 
   const mapHtml = useMemo(() => (route ? buildJourneyMap(route, accents) : ''), [route, accents]);
 
@@ -617,17 +505,7 @@ export default function JourneyScreen() {
         </View>
       </View>
 
-      {/* Rerouted Indicator Banner */}
-      {avoidingWarningsCount > 0 && (
-        <View style={[styles.rerouteBanner, { backgroundColor: semantic.warningSurface, borderColor: semantic.warningBorder }]}>
-          <Ionicons name="shuffle-outline" size={16} color={semantic.warningIcon} />
-          <Text style={[styles.rerouteBannerText, { color: semantic.warningText }]}>
-            Rerouted: Avoiding {avoidingWarningsCount} warning{avoidingWarningsCount > 1 ? 's' : ''}
-          </Text>
-        </View>
-      )}
-
-      {/* Grouped Right Capsule-style Rail */}
+      {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
       <View style={[styles.reportCapsule, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         {REPORT_OPTIONS.map((option) => (
           <TouchableOpacity
@@ -640,7 +518,7 @@ export default function JourneyScreen() {
             style={[
               styles.reportCapsuleBtn,
               {
-                backgroundColor: reportingType === option.type ? option.color : palette.surface,
+                backgroundColor: reportingType === option.type ? accents[option.accent] : palette.surface,
               },
             ]}
           >
@@ -663,19 +541,6 @@ export default function JourneyScreen() {
         >
           <Ionicons name="list-outline" size={15} color={palette.textPrimary} />
           <Text style={[styles.tripActionBtnText, { color: palette.textPrimary }]}>DETAILS</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackWarningClick();
-            setWarningsModalVisible(true);
-          }}
-          style={[styles.tripActionBtn, { borderColor: accents.orange }]}
-        >
-          <Ionicons name="warning-outline" size={15} color={accents.orange} />
-          <Text style={[styles.tripActionBtnText, { color: palette.textPrimary }]}>
-            WARNINGS ({activeWarningsCount})
-          </Text>
         </TouchableOpacity>
 
         <View style={styles.tripRightBlock}>
@@ -703,13 +568,13 @@ export default function JourneyScreen() {
                 <Ionicons name="close" size={16} color={palette.textPrimary} />
               </TouchableOpacity>
 
-              <View style={[styles.reportTypeCircle, { backgroundColor: activeReport.color, borderColor: palette.border }]}>
+              <View style={[styles.reportTypeCircle, { backgroundColor: accents[activeReport.accent], borderColor: palette.border }]}>
                 <Ionicons name={activeReport.icon} size={26} color={palette.textPrimary} />
                 <Text style={[styles.reportTypeCircleText, { color: palette.textPrimary }]}>{activeReport.label}</Text>
               </View>
 
               <TouchableOpacity
-                onPress={() => submitReport(true)}
+                onPress={() => submitReport()}
                 activeOpacity={0.85}
                 style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
               >
@@ -719,128 +584,6 @@ export default function JourneyScreen() {
           </View>
         </View>
       )}
-
-      {/* Select Warnings Modal List Overlay */}
-      <Modal
-        visible={warningsModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setWarningsModalVisible(false)}
-      >
-        <SafeAreaView style={[styles.overlayScreen, { backgroundColor: palette.surface }]}>
-          {/* Header controls inside the overlay */}
-          <View style={styles.overlayHeader}>
-            <View style={styles.navButtonsRow}>
-              <TouchableOpacity
-                onPress={() => {
-                  analytics.trackClick();
-                  setWarningsModalVisible(false);
-                }}
-                style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-              >
-                <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  analytics.trackClick();
-                  setWarningsModalVisible(false);
-                  router.replace('/(tabs)/routes');
-                }}
-                style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-              >
-                <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.overlayTitle, { color: palette.textPrimary }]}>Select warning</Text>
-          </View>
-
-          {/* Warnings List */}
-          <ScrollView contentContainerStyle={styles.overlayListContainer} showsVerticalScrollIndicator={false}>
-            {warnings.length === 0 ? (
-              <Text style={[styles.emptyWarningsText, { color: palette.textMuted }]}>
-                No warnings active for this journey.
-              </Text>
-            ) : (
-              warnings.map((w) => {
-                const setting = warningsSettings[w.id] || { showOnMap: true, avoidReroute: false };
-                return (
-                  <View key={w.id} style={[styles.warningListCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                    <View style={[styles.warningListIconCircle, { backgroundColor: w.color, borderColor: palette.border }]}>
-                      <Text style={styles.warningListEmoji}>{w.emoji}</Text>
-                    </View>
-
-                    <View style={styles.warningListInfo}>
-                      <Text style={[styles.warningListTitle, { color: palette.textPrimary }]}>{w.title}</Text>
-                      <Text style={[styles.warningListDesc, { color: palette.textSecondary }]}>
-                        &gt; {w.desc}
-                      </Text>
-                    </View>
-
-                    {/* Actions block (Show on map / Avoid) */}
-                    <View style={styles.warningListActions}>
-                      <TouchableOpacity
-                        onPress={() => {
-                          analytics.trackWarningClick();
-                          setWarningsSettings((prev) => ({
-                            ...prev,
-                            [w.id]: {
-                              ...setting,
-                              showOnMap: !setting.showOnMap,
-                            },
-                          }));
-                        }}
-                        style={[
-                          styles.listActionCheckbox,
-                          {
-                            borderColor: palette.border,
-                            backgroundColor: setting.showOnMap ? accents.green : palette.divider,
-                          },
-                        ]}
-                      >
-                        <Ionicons name="map-outline" size={14} color={palette.textPrimary} />
-                        {setting.showOnMap && <Ionicons name="checkmark" size={10} color={palette.textPrimary} style={styles.checkMini} />}
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => {
-                          analytics.trackWarningClick();
-                          setWarningsSettings((prev) => ({
-                            ...prev,
-                            [w.id]: {
-                              ...setting,
-                              avoidReroute: !setting.avoidReroute,
-                            },
-                          }));
-                        }}
-                        style={[
-                          styles.listActionCheckbox,
-                          {
-                            borderColor: palette.border,
-                            backgroundColor: setting.avoidReroute ? accents.orange : palette.divider,
-                          },
-                        ]}
-                      >
-                        <Ionicons name="close-circle-outline" size={14} color={palette.textPrimary} />
-                        {setting.avoidReroute && <Ionicons name="checkmark" size={10} color={palette.textPrimary} style={styles.checkMini} />}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })
-            )}
-          </ScrollView>
-
-          <TouchableOpacity
-            onPress={() => {
-              analytics.trackClick();
-              setWarningsModalVisible(false);
-            }}
-            style={[styles.closeOverlayBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
-          >
-            <Text style={[styles.closeOverlayBtnText, { color: palette.textPrimary }]}>Apply</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </Modal>
 
       {/* Journey Details Overlay — read sensory load & the full step list mid-trip */}
       <Modal
