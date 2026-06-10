@@ -1,5 +1,6 @@
-// Read API URL from environment, fallback to localhost
-const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/constants/config';
+
+const API_BASE = API_BASE_URL;
 
 class AnalyticsService {
   private destinationSearchTime: number | null = null;
