@@ -691,6 +691,35 @@ async def get_route_suggestions(
                     stop_coords = await _get_station_coords(stop_name)
                     if stop_coords:
                         stop_lat, stop_lon = stop_coords
+                        
+                        # Validate that stop_coords actually lies on/near this leg to prevent name collision teleportation bugs
+                        dep_lat = leg.get("departure_lat")
+                        dep_lon = leg.get("departure_lon")
+                        arr_lat = leg.get("arrival_lat")
+                        arr_lon = leg.get("arrival_lon")
+                        
+                        is_valid = True
+                        if dep_lat is not None and dep_lon is not None and arr_lat is not None and arr_lon is not None:
+                            path_coords = leg.get("path_coords", [])
+                            if path_coords:
+                                # Find min distance to any point in path_coords
+                                min_dist = float("inf")
+                                for pt in path_coords:
+                                    d = _haversine_distance(stop_lat, stop_lon, pt[0], pt[1])
+                                    if d < min_dist:
+                                        min_dist = d
+                                if min_dist > 600:
+                                    is_valid = False
+                            else:
+                                # Fallback to endpoint distances
+                                D = _haversine_distance(dep_lat, dep_lon, arr_lat, arr_lon)
+                                d_dep = _haversine_distance(dep_lat, dep_lon, stop_lat, stop_lon)
+                                d_arr = _haversine_distance(arr_lat, arr_lon, stop_lat, stop_lon)
+                                if d_dep > D + 1500 or d_arr > D + 1500:
+                                    is_valid = False
+                                    
+                        if not is_valid:
+                            continue
                         dist = _haversine_distance(stop_lat, stop_lon, dest_lat, dest_lon)
                         if dist <= 2000:
                             # Construct the walking leg from the intermediate stop

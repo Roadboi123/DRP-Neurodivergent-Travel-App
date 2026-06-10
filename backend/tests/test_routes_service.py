@@ -208,3 +208,102 @@ def test_custom_fare_calculations():
         # Slough to Windsor via Green Line 702 (non-TfL bus) should cost 3.00
         bus_route = next(r for r in routes if "Green Line 702" in r["name"])
         assert bus_route["price"] == 3.00
+
+
+def test_intermediate_stop_validation_prevents_teleportation():
+    # Mock a bus journey from Kingston to Putney that has an intermediate stop named "Gloucester Road"
+    teleport_journey = {
+        "source": "tfl",
+        "duration_mins": 30,
+        "startDateTime": "2026-06-03T16:00:00",
+        "arrivalDateTime": "2026-06-03T16:30:00",
+        "legs": [
+            {
+                "mode": "bus",
+                "line": "85",
+                "duration_mins": 30,
+                "departure": "Kingston",
+                "arrival": "Putney Station",
+                "departure_lat": 51.410,
+                "departure_lon": -0.276,
+                "arrival_lat": 51.461,
+                "arrival_lon": -0.217,
+                "departure_naptan": "",
+                "arrival_naptan": "",
+                "instruction": "Take Bus 85",
+                "stops": ["Gloucester Road"],  # Name matches a COMMON_STATIONS entry (SW7)
+                "connection_waiting_mins": 0,
+                "path_coords": [[51.410, -0.276], [51.420, -0.260], [51.461, -0.217]],
+            },
+            {
+                # Subsequent transit to trigger Option B short circuiting check
+                "mode": "tube",
+                "line": "District",
+                "duration_mins": 10,
+                "departure": "Putney Station",
+                "arrival": "Earl's Court",
+                "departure_lat": 51.461,
+                "departure_lon": -0.217,
+                "arrival_lat": 51.491,
+                "arrival_lon": -0.194,
+                "departure_naptan": "",
+                "arrival_naptan": "",
+                "instruction": "District line to Earl's Court",
+                "stops": [],
+                "connection_waiting_mins": 0,
+            }
+        ]
+    }
+
+    with patch("app.services.routes.tlf_client.get_routes", new_callable=AsyncMock) as mock_tfl, \
+         patch("app.services.routes.osm_client.geocode", new_callable=AsyncMock) as mock_geocode:
+        mock_tfl.return_value = [teleport_journey]
+        # Target destination is South Kensington (51.4941, -0.1730)
+        mock_geocode.side_effect = lambda place: (51.4941, -0.1730) if "South Kensington" in place else (51.410, -0.276)
+        
+        routes = asyncio.run(get_route_suggestions("Kingston", "South Kensington"))
+        
+        # Verify that no route was short-circuited/teleported at "Gloucester Road"
+        # If it had teleported, it would have created a route where the first leg's arrival is "Gloucester Road"
+        # with SW7 coordinates (51.4944, -0.1829).
+        for r in routes:
+            for leg in r.get("legs", []):
+                if leg.get("arrival") == "Gloucester Road":
+                    assert leg.get("arrival_lat") != 51.4944
+
+
+def test_gwml_path_override():
+    from app.integrations.tlf_client import get_gwml_path, _parse_leg
+    
+    # 1. Test get_gwml_path directly
+    path = get_gwml_path("Reading Station", "London Paddington Station")
+    assert path is not None
+    assert len(path) == 16  # All 16 stations on the main line
+    assert path[0] == [51.458786, -0.971849]  # Reading
+    assert path[-1] == [51.516995, -0.177388]  # Paddington
+
+    # Test westbound (reverse order)
+    path_west = get_gwml_path("London Paddington", "Slough")
+    assert path_west is not None
+    assert len(path_west) == 11
+    assert path_west[0] == [51.516995, -0.177388]  # Paddington
+    assert path_west[-1] == [51.51202, -0.591924]  # Slough
+    
+    # 2. Test _parse_leg override
+    leg = {
+        "mode": {"name": "elizabeth-line"},
+        "departurePoint": {"commonName": "Reading", "lat": 51.0, "lon": 0.0},
+        "arrivalPoint": {"commonName": "London Paddington", "lat": 52.0, "lon": 1.0},
+        "departureTime": "2026-06-03T16:00:00",
+        "arrivalTime": "2026-06-03T16:40:00",
+        "duration": 40,
+        "instruction": {"summary": "Take Elizabeth Line"},
+        "routeOptions": [{"lineIdentifier": {"name": "Elizabeth line"}}],
+        "path": {"lineString": "[[-0.9, 51.4], [-0.5, 51.5]]"}
+    }
+    parsed = _parse_leg(leg)
+    assert parsed["path_coords"] == path
+    assert parsed["departure_lat"] == 51.458786
+    assert parsed["arrival_lat"] == 51.516995
+
+
