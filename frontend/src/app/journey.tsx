@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView } from 'react-native';
+import { AppState, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
@@ -11,7 +11,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
-import type { RouteOption, WarningItem } from '@/types/route';
+import type { RouteOption } from '@/types/route';
+import { analytics } from '@/services/analytics';
 
 type SensoryReportType = 'sound' | 'heat' | 'smell' | 'crowds' | 'other';
 
@@ -203,6 +204,15 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
               .addTo(map)
               .bindPopup(\`<b>\${w.title}</b><br/>\${w.desc}\`);
             
+            marker.on('click', function() {
+              const msg = JSON.stringify({ type: 'warningClick' });
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(msg);
+              } else {
+                window.parent.postMessage(msg, '*');
+              }
+            });
+            
             warningMarkers[w.id] = marker;
           });
         };
@@ -244,6 +254,42 @@ export default function JourneyScreen() {
   const [warningsSettings, setWarningsSettings] = useState<Record<string, { showOnMap: boolean; avoidReroute: boolean }>>({});
   const [warningsModalVisible, setWarningsModalVisible] = useState(false);
   const [detailsVisible, setDetailsVisible] = useState(false);
+
+  // Analytics & Active Journey Lifecycles
+  useEffect(() => {
+    // Increment initial access on mount
+    analytics.trackAppAccess();
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        analytics.trackAppAccess();
+      }
+    });
+
+    // Web iframe postMessage listener
+    const handleWebMessage = (event: MessageEvent) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data.type === 'warningClick') {
+          analytics.trackWarningClick();
+        }
+      } catch {
+        // Ignore other/external window messages
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      window.addEventListener('message', handleWebMessage);
+    }
+
+    return () => {
+      subscription.remove();
+      if (Platform.OS === 'web') {
+        window.removeEventListener('message', handleWebMessage);
+      }
+      analytics.endJourney();
+    };
+  }, []);
 
   // Concatenate path coordinates from all route legs
   const allPathCoords = useMemo(() => {
@@ -409,7 +455,7 @@ export default function JourneyScreen() {
     }
 
     loadWarnings();
-  }, [route, allPathCoords]);
+  }, [route, allPathCoords, accents.cyan, accents.orange, accents.pink, accents.yellow, routesService, username]);
 
   // User location starts at the journey origin, facing the first leg.
   const userCoords = useMemo<[number, number]>(() => {
@@ -458,8 +504,20 @@ export default function JourneyScreen() {
     return warnings.filter((w) => warningsSettings[w.id]?.showOnMap !== false).length;
   }, [warnings, warningsSettings]);
 
+  const handleMapMessage = (event: any) => {
+    try {
+      const dataStr = event.nativeEvent.data;
+      const data = JSON.parse(dataStr);
+      if (data.type === 'warningClick') {
+        analytics.trackWarningClick();
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
   // Actions
-  const submitReport = () => {
+  const submitReport = (wouldContribute: boolean) => {
     if (!reportingType) return;
     const option = REPORT_OPTIONS.find((o) => o.type === reportingType);
     if (!option) return;
@@ -489,6 +547,7 @@ export default function JourneyScreen() {
 
     setWarnings((prev) => [newReport, ...prev]);
     setReportingType(null);
+    analytics.endDisruptionReport(wouldContribute);
   };
 
   // Check if any warning is avoiding / rerouting
@@ -527,6 +586,7 @@ export default function JourneyScreen() {
             originWhitelist={['*']}
             domStorageEnabled={true}
             javaScriptEnabled={true}
+            onMessage={handleMapMessage}
           />
         )}
       </View>
@@ -573,7 +633,10 @@ export default function JourneyScreen() {
           <TouchableOpacity
             key={option.type}
             activeOpacity={0.85}
-            onPress={() => setReportingType(option.type)}
+            onPress={() => {
+              analytics.startDisruptionReport();
+              setReportingType(option.type);
+            }}
             style={[
               styles.reportCapsuleBtn,
               {
@@ -590,7 +653,10 @@ export default function JourneyScreen() {
       {/* Bottom Information Trip Bar */}
       <View style={[styles.tripBar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <TouchableOpacity
-          onPress={() => setDetailsVisible(true)}
+          onPress={() => {
+            analytics.trackClick();
+            setDetailsVisible(true);
+          }}
           style={[styles.tripActionBtn, { borderColor: palette.border, backgroundColor: accents.cyan }]}
           accessibilityRole="button"
           accessibilityLabel="Journey details"
@@ -600,7 +666,10 @@ export default function JourneyScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => setWarningsModalVisible(true)}
+          onPress={() => {
+            analytics.trackWarningClick();
+            setWarningsModalVisible(true);
+          }}
           style={[styles.tripActionBtn, { borderColor: accents.orange }]}
         >
           <Ionicons name="warning-outline" size={15} color={accents.orange} />
@@ -622,7 +691,11 @@ export default function JourneyScreen() {
           <View style={styles.reportCenterContainer} pointerEvents="box-none">
             <View style={[styles.reportInputPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <TouchableOpacity
-                onPress={() => setReportingType(null)}
+                onPress={() => {
+                  analytics.trackClick();
+                  setReportingType(null);
+                  analytics.endDisruptionReport(null);
+                }}
                 style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel report"
@@ -636,7 +709,7 @@ export default function JourneyScreen() {
               </View>
 
               <TouchableOpacity
-                onPress={submitReport}
+                onPress={() => submitReport(true)}
                 activeOpacity={0.85}
                 style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
               >
@@ -659,13 +732,17 @@ export default function JourneyScreen() {
           <View style={styles.overlayHeader}>
             <View style={styles.navButtonsRow}>
               <TouchableOpacity
-                onPress={() => setWarningsModalVisible(false)}
+                onPress={() => {
+                  analytics.trackClick();
+                  setWarningsModalVisible(false);
+                }}
                 style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
               >
                 <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
+                  analytics.trackClick();
                   setWarningsModalVisible(false);
                   router.replace('/(tabs)/routes');
                 }}
@@ -703,6 +780,7 @@ export default function JourneyScreen() {
                     <View style={styles.warningListActions}>
                       <TouchableOpacity
                         onPress={() => {
+                          analytics.trackWarningClick();
                           setWarningsSettings((prev) => ({
                             ...prev,
                             [w.id]: {
@@ -725,6 +803,7 @@ export default function JourneyScreen() {
 
                       <TouchableOpacity
                         onPress={() => {
+                          analytics.trackWarningClick();
                           setWarningsSettings((prev) => ({
                             ...prev,
                             [w.id]: {
@@ -752,7 +831,10 @@ export default function JourneyScreen() {
           </ScrollView>
 
           <TouchableOpacity
-            onPress={() => setWarningsModalVisible(false)}
+            onPress={() => {
+              analytics.trackClick();
+              setWarningsModalVisible(false);
+            }}
             style={[styles.closeOverlayBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
           >
             <Text style={[styles.closeOverlayBtnText, { color: palette.textPrimary }]}>Apply</Text>
@@ -770,7 +852,10 @@ export default function JourneyScreen() {
         <SafeAreaView style={[styles.overlayScreen, { backgroundColor: palette.surface }]}>
           <View style={styles.overlayHeader}>
             <TouchableOpacity
-              onPress={() => setDetailsVisible(false)}
+              onPress={() => {
+                analytics.trackClick();
+                setDetailsVisible(false);
+              }}
               style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
               accessibilityRole="button"
               accessibilityLabel="Close journey details"

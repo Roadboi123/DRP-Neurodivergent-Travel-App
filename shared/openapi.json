@@ -1,6 +1,34 @@
 {
   "components": {
     "schemas": {
+      "DisruptionReportMetricsCreate": {
+        "properties": {
+          "time_taken_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Taken Seconds"
+          },
+          "would_contribute": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Contribute"
+          }
+        },
+        "title": "DisruptionReportMetricsCreate",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -12,6 +40,67 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JourneyMetricsCreate": {
+        "properties": {
+          "actions_in_timeframe": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actions In Timeframe"
+          },
+          "app_accesses_during_journey": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Accesses During Journey"
+          },
+          "route_changed_after_warning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Changed After Warning"
+          },
+          "time_to_start_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time To Start Seconds"
+          },
+          "warning_clicked_for_info": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning Clicked For Info"
+          }
+        },
+        "title": "JourneyMetricsCreate",
         "type": "object"
       },
       "LegOption": {
@@ -178,6 +267,89 @@
           "lon"
         ],
         "title": "LocationSuggestion",
+        "type": "object"
+      },
+      "MetricsSummary": {
+        "properties": {
+          "avg_actions_in_timeframe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Actions In Timeframe"
+          },
+          "avg_app_accesses_during_journey": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg App Accesses During Journey"
+          },
+          "avg_time_taken_to_report": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Time Taken To Report"
+          },
+          "avg_time_to_start_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Time To Start Seconds"
+          },
+          "pct_route_changed_after_warning": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Route Changed After Warning"
+          },
+          "pct_warning_clicked_for_info": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Warning Clicked For Info"
+          },
+          "pct_would_contribute": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Would Contribute"
+          }
+        },
+        "title": "MetricsSummary",
         "type": "object"
       },
       "PreferenceResponse": {
@@ -1030,6 +1202,118 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/metrics/disruption": {
+      "post": {
+        "description": "Store disruption reporting metrics (time taken, contribution prompt response).",
+        "operationId": "report_disruption_metrics_metrics_disruption_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisruptionReportMetricsCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Report Disruption Metrics",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/metrics/journey": {
+      "post": {
+        "description": "Store journey behavior metrics (times, clicks, changes).",
+        "operationId": "report_journey_metrics_metrics_journey_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JourneyMetricsCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Report Journey Metrics",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/metrics/summary": {
+      "get": {
+        "description": "Retrieve the average values and percentages of all logged user metrics.",
+        "operationId": "get_metrics_summary_metrics_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Metrics Summary",
+        "tags": [
+          "metrics"
+        ]
       }
     },
     "/preferences/": {
