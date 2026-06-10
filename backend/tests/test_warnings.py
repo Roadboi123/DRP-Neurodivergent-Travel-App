@@ -1,7 +1,8 @@
 import asyncio
+from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 import pytest
-from app.services.routes import get_user_warnings
+from app.services.routes import get_user_warnings, is_duplicate_report
 
 @pytest.fixture(autouse=True)
 def mock_supabase_client():
@@ -162,3 +163,42 @@ def test_many_line_suspensions_list_all():
         susp_warnings = [w for w in warnings if w["title"] == "Line Suspensions"]
         assert len(susp_warnings) == 1
         assert susp_warnings[0]["desc"] == "Bakerloo, Central, District, and Jubilee lines are suspended."
+
+
+def _supabase_returning(rows):
+    """A supabase mock whose table().select().eq().execute().data == rows."""
+    mock_supabase = MagicMock()
+    chain = mock_supabase.table.return_value.select.return_value.eq.return_value
+    chain.execute.return_value = MagicMock(data=rows)
+    return mock_supabase
+
+
+# A warning ~10m away (well inside DUPLICATE_RADIUS_M of 75m).
+_NEARBY = (51.5074, -0.12792)
+_REF = (51.5074, -0.1278)
+
+
+def test_duplicate_report_blocks_same_type_nearby_and_fresh():
+    fresh = datetime.now(timezone.utc).isoformat()
+    rows = [{"warning_type": "sound", "lat": _NEARBY[0], "lon": _NEARBY[1], "created_at": fresh}]
+    with patch("app.services.routes.supabase", _supabase_returning(rows)):
+        assert is_duplicate_report("sound", _REF[0], _REF[1]) is True
+
+
+def test_duplicate_report_allows_far_away():
+    fresh = datetime.now(timezone.utc).isoformat()
+    rows = [{"warning_type": "sound", "lat": 51.6000, "lon": -0.2000, "created_at": fresh}]
+    with patch("app.services.routes.supabase", _supabase_returning(rows)):
+        assert is_duplicate_report("sound", _REF[0], _REF[1]) is False
+
+
+def test_duplicate_report_ignores_expired_nearby():
+    stale = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    rows = [{"warning_type": "sound", "lat": _NEARBY[0], "lon": _NEARBY[1], "created_at": stale}]
+    with patch("app.services.routes.supabase", _supabase_returning(rows)):
+        assert is_duplicate_report("sound", _REF[0], _REF[1]) is False
+
+
+def test_duplicate_report_empty_db_is_not_duplicate():
+    with patch("app.services.routes.supabase", _supabase_returning([])):
+        assert is_duplicate_report("sound", _REF[0], _REF[1]) is False

@@ -1,9 +1,9 @@
 from typing import List, Optional
 import jwt
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.schemas.route import RouteOption, WarningItemSchema, LocationSuggestion, ReportWarningSchema
-from app.services.routes import get_route_suggestions, get_user_warnings
+from app.services.routes import get_route_suggestions, get_user_warnings, is_duplicate_report
 from app.api.auth import oauth2_scheme, ALGORITHM, JWT_SECRET
 from app.integrations.tlf_client import clean_station_name
 
@@ -97,8 +97,18 @@ async def suggest_locations(q: str, user_coords: Optional[str] = None):
 
 @router.post("/warnings/report", response_model=WarningItemSchema)
 async def report_warning(body: ReportWarningSchema):
-    """Save a user-reported sensory warning to the database so other users can see it."""
+    """Save a user-reported sensory warning to the database so other users can see it.
+
+    Rejects with 409 if a same-type warning was already reported nearby (anti-spam).
+    """
     from app.integrations.supabase import supabase
+
+    if is_duplicate_report(body.warning_type, body.lat, body.lon):
+        raise HTTPException(
+            status_code=409,
+            detail="A similar warning has already been reported nearby.",
+        )
+
     supabase.table("reported_warnings").insert({
         "id": body.id,
         "username": body.username,
