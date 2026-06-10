@@ -573,9 +573,6 @@ async def get_route_suggestions(
         dest_lat, dest_lon = end_coords
         dest_name = end
         
-        # Pre-fetch all intermediate stop point coordinates in parallel to warm up the cache
-        all_stop_tasks = []
-        seen_stop_keys = set()
         seen_sigs = set()
         for rj in raw_journeys:
             leg_sig = tuple(
@@ -583,22 +580,7 @@ async def get_route_suggestions(
                 for leg in rj.get("legs", [])
             )
             seen_sigs.add(leg_sig)
-
-            if rj.get("source") != "tfl":
-                continue
-            for leg in rj.get("legs", []):
-                sps = leg.get("stop_points", [])
-                for sp in sps:
-                    sp_id = sp.get("id")
-                    sp_name = sp.get("name")
-                    if sp_name:
-                        key = (sp_id, sp_name)
-                        if key not in seen_stop_keys:
-                            seen_stop_keys.add(key)
-                            all_stop_tasks.append(tlf_client.get_station_coords(sp_id, sp_name))
-        if all_stop_tasks:
-            await asyncio.gather(*all_stop_tasks, return_exceptions=True)
-
+            
         new_short_circuits = []
         
         for j in raw_journeys:
@@ -660,10 +642,8 @@ async def get_route_suggestions(
                             
                 # Option B: Exit at an intermediate stop of this leg
                 stops = leg.get("stops", [])
-                stop_points = leg.get("stop_points", [])
                 for stop_idx, stop_name in enumerate(stops):
-                    sp_id = stop_points[stop_idx].get("id") if stop_idx < len(stop_points) else None
-                    stop_coords = await tlf_client.get_station_coords(sp_id, stop_name)
+                    stop_coords = await _get_station_coords(stop_name)
                     if stop_coords:
                         stop_lat, stop_lon = stop_coords
                         dist = _haversine_distance(stop_lat, stop_lon, dest_lat, dest_lon)
