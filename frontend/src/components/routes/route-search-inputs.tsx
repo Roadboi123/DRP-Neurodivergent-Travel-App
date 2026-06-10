@@ -15,7 +15,10 @@ interface RouteSearchInputsProps {
   onStartChange: (text: string) => void;
   onEndChange: (text: string) => void;
   onSwap: () => void;
-  onSubmit: (start: string, end: string) => void;
+  /** Called when the user commits a search. `startCoords`/`endCoords` are
+   *  "lat,lon" strings set only when a suggestion was explicitly picked;
+   *  they bypass re-geocoding on the backend. */
+  onSubmit: (start: string, end: string, startCoords?: string, endCoords?: string) => void;
   userCoords?: string | null;
 }
 
@@ -47,6 +50,10 @@ export function RouteSearchInputs({
   const endInputRef = useRef<TextInput>(null);
   // Tracks when a suggestion tap initiated the blur so handleBlur skips its own onSubmit.
   const selectingRef = useRef(false);
+  // Pinned coordinates from the last suggestion selection for start/end.
+  // Set to undefined when the user types manually (to force backend re-geocoding).
+  const startCoordsRef = useRef<string | undefined>(undefined);
+  const endCoordsRef = useRef<string | undefined>(undefined);
 
   // Parse user coords for proximity sorting
   let userLat: number | null = null;
@@ -212,7 +219,11 @@ export function RouteSearchInputs({
     setTimeout(() => {
       setFocusedInput(null);
       if (!selectingRef.current) {
-        onSubmit(startLoc, endLoc);
+        // Manual text entry — clear pinned coords for whichever field just blurred
+        // so the backend re-geocodes the new text instead of using stale coords.
+        if (focusedInput === 'start') startCoordsRef.current = undefined;
+        if (focusedInput === 'end') endCoordsRef.current = undefined;
+        onSubmit(startLoc, endLoc, startCoordsRef.current, endCoordsRef.current);
       }
       selectingRef.current = false;
     }, 250);
@@ -223,19 +234,26 @@ export function RouteSearchInputs({
     let newEnd = endLoc;
     // Raise the flag before blur so handleBlur's delayed submit is suppressed.
     selectingRef.current = true;
+
+    // Pin the exact coordinates from the autocomplete result so the backend
+    // doesn't re-geocode the name string (which can resolve to the wrong place).
+    const coordStr = sug.name === 'Current Location' ? undefined : `${sug.lat},${sug.lon}`;
+
     if (focusedInput === 'start') {
       newStart = sug.name;
+      startCoordsRef.current = coordStr;
       onStartChange(sug.name);
       startInputRef.current?.blur();
     } else if (focusedInput === 'end') {
       newEnd = sug.name;
+      endCoordsRef.current = coordStr;
       onEndChange(sug.name);
       endInputRef.current?.blur();
     }
     setFocusedInput(null);
     setSuggestions([]);
-    // Submit immediately with the correct, freshly-resolved values.
-    onSubmit(newStart, newEnd);
+    // Submit immediately with pinned coordinates so the backend skips geocoding.
+    onSubmit(newStart, newEnd, startCoordsRef.current, endCoordsRef.current);
 
     // Save to recents if not Current Location
     if (sug.name !== 'Current Location') {

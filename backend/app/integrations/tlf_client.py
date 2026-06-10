@@ -36,7 +36,74 @@ def _parse_leg(leg: dict) -> dict:
     line_string_str = leg.get("path", {}).get("lineString")
     if line_string_str:
         try:
-            path_coords = json.loads(line_string_str)
+            import math as _math
+
+            raw_coords = json.loads(line_string_str)
+
+            # ----------------------------------------------------------------
+            # Clean-up pass: the TfL lineString for long rail legs (e.g.
+            # Elizabeth line) often contains geometry for BOTH the eastbound
+            # and westbound tracks, producing a zig-zag that wanders off the
+            # actual route on the map.  We apply two successive filters:
+            #
+            # 1. Step-distance guard — drop any point that teleports more
+            #    than 3 000 m from the previous kept point (rare TfL artifact).
+            #
+            # 2. Monotonic-progress filter — project each point onto the
+            #    departure → arrival axis and discard any point that moves
+            #    MORE THAN 150 m backwards along that axis relative to the
+            #    last accepted point.  Legitimate curves always make forward
+            #    progress; only the duplicate-track zig-zags go backwards.
+            # ----------------------------------------------------------------
+
+            dep_lat = leg.get("departurePoint", {}).get("lat") or 0.0
+            dep_lon = leg.get("departurePoint", {}).get("lon") or 0.0
+            arr_lat = leg.get("arrivalPoint", {}).get("lat") or 0.0
+            arr_lon = leg.get("arrivalPoint", {}).get("lon") or 0.0
+
+            # Build a unit vector in approximate flat-earth coords.
+            # Scale longitude by cos(mid-lat) so degrees are comparable.
+            cos_lat = _math.cos(_math.radians((dep_lat + arr_lat) / 2))
+            ax = (arr_lat - dep_lat)
+            ay = (arr_lon - dep_lon) * cos_lat
+            a_len = _math.sqrt(ax * ax + ay * ay) or 1.0
+            # Unit vector along dep→arr
+            ux, uy = ax / a_len, ay / a_len
+            # Degrees → metres scaling (approximate)
+            deg_to_m = 111_320.0
+
+            def _progress(pt):
+                """Signed projection of pt onto dep→arr axis, in metres."""
+                dx = pt[0] - dep_lat
+                dy = (pt[1] - dep_lon) * cos_lat
+                return (dx * ux + dy * uy) * deg_to_m
+
+            def _step_m(a, b):
+                R = 6_371_000
+                p1 = _math.radians(a[0]); p2 = _math.radians(b[0])
+                dp = _math.radians(b[0] - a[0])
+                dl = _math.radians(b[1] - a[1])
+                s = _math.sin(dp/2)**2 + _math.cos(p1)*_math.cos(p2)*_math.sin(dl/2)**2
+                return 2 * R * _math.atan2(_math.sqrt(s), _math.sqrt(1 - s))
+
+            STEP_LIMIT   = 3_000   # metres — teleport guard
+            BACK_LIMIT   = 150     # metres — backwards-progress tolerance
+
+            filtered: list = []
+            max_progress = float("-inf")
+
+            for pt in raw_coords:
+                # Guard 1: step-distance
+                if filtered and _step_m(filtered[-1], pt) > STEP_LIMIT:
+                    continue
+                # Guard 2: monotonic progress
+                prog = _progress(pt)
+                if prog < max_progress - BACK_LIMIT:
+                    continue
+                max_progress = max(max_progress, prog)
+                filtered.append(pt)
+
+            path_coords = filtered
         except Exception as e:
             print(f"Error parsing TfL lineString: {e}")
 

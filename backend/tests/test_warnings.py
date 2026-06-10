@@ -19,16 +19,25 @@ def mock_supabase_client():
 
 def test_no_station_works_warnings_when_clean():
     # If get_live_station_works returns empty, there should be no station works warnings.
+    # Also mock supabase to avoid real DB calls for user-reported warnings.
+    from unittest.mock import MagicMock
+    mock_supabase = MagicMock()
+    mock_supabase.table.return_value.select.return_value.execute.return_value.data = []
+    mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+
     with patch("app.services.routes.tlf_client.get_live_station_works", new_callable=AsyncMock) as mock_works, \
          patch("app.services.routes.tlf_client.get_live_line_disruptions", new_callable=AsyncMock) as mock_disruptions, \
-         patch("app.services.routes.get_current_london_temp", new_callable=AsyncMock) as mock_temp:
-        
+         patch("app.services.routes.get_current_london_temp", new_callable=AsyncMock) as mock_temp, \
+         patch("app.services.routes.supabase", mock_supabase):
+
         mock_works.return_value = []
         mock_disruptions.return_value = []
         mock_temp.return_value = 18.0
-        
+
         warnings = asyncio.run(get_user_warnings(username="test_user", generic=True))
         assert len(warnings) == 0
+
+
 
 def test_station_works_warnings_single_station():
     with patch("app.services.routes.tlf_client.get_live_station_works", new_callable=AsyncMock) as mock_works, \

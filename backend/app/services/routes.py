@@ -551,10 +551,24 @@ async def get_route_suggestions(
     tfl_task: Optional[Coroutine[Any, Any, List[Dict[str, Any]]]] = None
     gmaps_task: Optional[Coroutine[Any, Any, List[Dict[str, Any]]]] = None
 
-    # Geocode to coordinates to bypass TfL "300 Multiple Choices" ambiguity redirects (only for London/commuter belt queries)
+    # Geocode to coordinates to bypass TfL "300 Multiple Choices" ambiguity redirects.
+    # If the frontend already passed a "lat,lon" string (from a suggestion pick), skip
+    # Nominatim entirely — re-geocoding an ambiguous name like "Burnham" returns the
+    # wrong place (a park in London instead of Burnham in Slough).
     from app.integrations.osm_client import geocode
-    start_coords = await geocode(start)
-    end_coords = await geocode(end)
+
+    def _parse_latlon(s: str):
+        """Return (lat, lon) tuple if s is already a 'lat,lon' string, else None."""
+        parts = s.split(",")
+        if len(parts) == 2:
+            try:
+                return float(parts[0]), float(parts[1])
+            except ValueError:
+                pass
+        return None
+
+    start_coords = _parse_latlon(start) or await geocode(start)
+    end_coords = _parse_latlon(end) or await geocode(end)
     
     def is_in_commuter_belt(lat: float, lon: float) -> bool:
         # Covers the entire London commuter belt from Reading/Slough in the west (-1.05 lon)
@@ -567,7 +581,11 @@ async def get_route_suggestions(
     if strategy in ("tfl", "both"):
         tfl_task = tlf_client.get_routes(tfl_start, tfl_end, walking_speed=walking_speed)
     if strategy in ("google", "both"):
-        gmaps_task = osm_client.get_walking_routes(start, end)
+        # Pass coordinate strings to walking routes too so OSM doesn't re-geocode an
+        # ambiguous name.
+        walk_start = f"{start_coords[0]},{start_coords[1]}" if start_coords else start
+        walk_end = f"{end_coords[0]},{end_coords[1]}" if end_coords else end
+        gmaps_task = osm_client.get_walking_routes(walk_start, walk_end)
 
     tfl_res: Any = None
     gmaps_res: Any = None
