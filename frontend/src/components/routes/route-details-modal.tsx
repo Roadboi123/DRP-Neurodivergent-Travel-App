@@ -448,7 +448,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               onPress={() => {
                 analytics.trackClick();
                 onClose();
-                router.replace('/(tabs)/routes');
+                router.replace('/');
               }}
               style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
               accessibilityRole="button"
