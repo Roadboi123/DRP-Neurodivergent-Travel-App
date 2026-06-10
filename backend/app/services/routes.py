@@ -60,6 +60,11 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return R * c
 
+
+# User-reported warnings are short-lived: they drop off the map this long after
+# being reported. Also the window used for the anti-spam duplicate check.
+REPORTED_WARNING_TTL_MINUTES = 20
+
 # Mapping Supabase integer sensitivities (1 = little, 2 = medium, 3 = high,
 # 4 = very high) to discomfort multiplier weights. Higher sensitivity = more
 # strongly affected = larger weight.
@@ -1194,7 +1199,7 @@ async def get_user_warnings(
                 if created_at_str:
                     try:
                         created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-                        if now_dt - created_at > timedelta(hours=6):
+                        if now_dt - created_at > timedelta(minutes=REPORTED_WARNING_TTL_MINUTES):
                             continue
                     except Exception:
                         pass
