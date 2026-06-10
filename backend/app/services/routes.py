@@ -947,7 +947,7 @@ async def get_user_warnings(
         _u_light = 3
         _u_smell = 3
 
-    warnings = []
+    warnings: List[Dict[str, Any]] = []
     warning_id_counter = 1
 
     # 2. Temperature check
@@ -1221,6 +1221,7 @@ async def get_user_warnings(
                             "icon": str(row.get("warning_type") or ""),
                             "lat": w_lat,
                             "lon": w_lon,
+                            "username": str(row.get("username") or "") or None,
                         })
     except Exception as e:
         print(f"Error fetching user reported warnings: {e}")

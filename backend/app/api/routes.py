@@ -117,6 +117,7 @@ async def report_warning(body: ReportWarningSchema):
         icon=body.warning_type,
         lat=body.lat,
         lon=body.lon,
+        username=body.username,
     )
 
 
