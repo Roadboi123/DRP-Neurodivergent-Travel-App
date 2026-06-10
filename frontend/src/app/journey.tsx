@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { AppState, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -211,12 +211,10 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
               iconAnchor: [18, 18]
             });
 
-            const marker = L.marker([w.lat, w.lon], { icon: warningIcon })
-              .addTo(map)
-              .bindPopup(\`<b>\${w.title}</b><br/>\${w.desc}\`);
-            
+            const marker = L.marker([w.lat, w.lon], { icon: warningIcon }).addTo(map);
+
             marker.on('click', function() {
-              const msg = JSON.stringify({ type: 'warningClick' });
+              const msg = JSON.stringify({ type: 'warningClick', id: w.id });
               if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(msg);
               } else {
@@ -264,7 +262,24 @@ export default function JourneyScreen() {
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
   // Other users' warnings this user has closed — hidden locally only, never deleted.
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  // The warning whose action card (Remove / Close) is currently open.
+  const [selectedWarning, setSelectedWarning] = useState<WarningItem | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
+
+  // Latest warnings, readable from the map's (stale-closure) message handlers.
+  const warningsRef = useRef<WarningItem[]>([]);
+  useEffect(() => {
+    warningsRef.current = warnings;
+  }, [warnings]);
+
+  // Open the action card for a tapped marker (looked up by id from the map).
+  const openWarningById = useCallback((id: string) => {
+    const warning = warningsRef.current.find((w) => w.id === id);
+    if (warning) {
+      analytics.trackWarningClick();
+      setSelectedWarning(warning);
+    }
+  }, []);
 
   // Analytics & Active Journey Lifecycles
   useEffect(() => {
@@ -281,8 +296,8 @@ export default function JourneyScreen() {
     const handleWebMessage = (event: MessageEvent) => {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data.type === 'warningClick') {
-          analytics.trackWarningClick();
+        if (data.type === 'warningClick' && data.id) {
+          openWarningById(data.id);
         }
       } catch {
         // Ignore other/external window messages
@@ -300,7 +315,7 @@ export default function JourneyScreen() {
       }
       analytics.endJourney();
     };
-  }, []);
+  }, [openWarningById]);
 
   // Concatenate path coordinates from all route legs
   const allPathCoords = useMemo(() => {
@@ -406,13 +421,36 @@ export default function JourneyScreen() {
     try {
       const dataStr = event.nativeEvent.data;
       const data = JSON.parse(dataStr);
-      if (data.type === 'warningClick') {
-        analytics.trackWarningClick();
+      if (data.type === 'warningClick' && data.id) {
+        openWarningById(data.id);
       }
     } catch {
       // Ignore
     }
   };
+
+  // Own warning: delete from the DB (gone for everyone). Optimistically drop it.
+  const removeOwnWarning = async (warning: WarningItem) => {
+    setSelectedWarning(null);
+    setWarnings((prev) => prev.filter((w) => w.id !== warning.id));
+    try {
+      await routesService.deleteWarning(warning.id, username || 'anonymous');
+    } catch (err) {
+      console.warn('Failed to delete warning on backend:', err);
+    }
+  };
+
+  // Someone else's warning: hide it for this user only, no API call.
+  const dismissWarning = (warning: WarningItem) => {
+    setSelectedWarning(null);
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.add(warning.id);
+      return next;
+    });
+  };
+
+  const selectedIsOwn = !!selectedWarning && !!username && selectedWarning.username === username;
 
   // Actions — report a sensory warning at the (simulated) current location.
   const submitReport = async () => {
@@ -585,6 +623,59 @@ export default function JourneyScreen() {
         </View>
       )}
 
+      {/* Tapped-warning action card — Remove (own) or Close (someone else's) */}
+      {selectedWarning && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.reportBackdrop}
+            activeOpacity={1}
+            onPress={() => setSelectedWarning(null)}
+          />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <TouchableOpacity
+                onPress={() => setSelectedWarning(null)}
+                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+              >
+                <Ionicons name="close" size={16} color={palette.textPrimary} />
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.warningCardIcon,
+                  { backgroundColor: warningVisual(selectedWarning.icon, accents).color, borderColor: palette.border },
+                ]}
+              >
+                <Text style={styles.warningListEmoji}>{warningVisual(selectedWarning.icon, accents).emoji}</Text>
+              </View>
+
+              <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
+              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
+
+              <TouchableOpacity
+                onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
+                activeOpacity={0.85}
+                style={[
+                  styles.warningCardAction,
+                  { backgroundColor: selectedIsOwn ? accents.pink : accents.green, borderColor: palette.border },
+                ]}
+              >
+                <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
+                <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                  {selectedIsOwn ? 'Remove' : 'Close'}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
+                {selectedIsOwn ? 'Removes it from the map for everyone' : 'Hides it for you only'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Journey Details Overlay — read sensory load & the full step list mid-trip */}
       <Modal
         visible={detailsVisible}
@@ -738,26 +829,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...hardShadow(3),
-  },
-  rerouteBanner: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 76 : 96,
-    left: 16,
-    right: 16,
-    zIndex: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 2,
-    gap: 8,
-    ...hardShadow(2),
-  },
-  rerouteBannerText: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: Fonts?.body,
   },
   reportCapsule: {
     position: 'absolute',
@@ -917,85 +988,66 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  overlayListContainer: {
-    padding: 16,
-    gap: 14,
+  warningListEmoji: {
+    fontSize: 22,
   },
-  emptyWarningsText: {
-    textAlign: 'center',
-    paddingVertical: 36,
-    fontSize: 12,
-  },
-  warningListCard: {
-    flexDirection: 'row',
+  warningCard: {
+    borderWidth: 3,
+    borderRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 2,
-    gap: 12,
-    ...hardShadow(2),
+    width: '100%',
+    maxWidth: 300,
+    gap: 8,
+    ...hardShadow(6),
   },
-  warningListIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
+  warningCardIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  warningListEmoji: {
-    fontSize: 18,
-  },
-  warningListInfo: {
-    flex: 1,
-  },
-  warningListTitle: {
-    fontSize: 13,
+  warningCardTitle: {
+    fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-  },
-  warningListDesc: {
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
+    textTransform: 'uppercase',
+    textAlign: 'center',
     marginTop: 2,
   },
-  warningListActions: {
-    flexDirection: 'row',
-    gap: 6,
+  warningCardDesc: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    textAlign: 'center',
   },
-  listActionCheckbox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 2,
+  warningCardAction: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-  },
-  checkMini: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    backgroundColor: '#ffffff',
-    borderRadius: 6,
-    borderWidth: 1,
-    padding: 1,
-  },
-  closeOverlayBtn: {
-    margin: 16,
+    gap: 6,
     borderWidth: 2.5,
     borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...hardShadow(3),
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    alignSelf: 'stretch',
+    marginTop: 4,
+    ...hardShadow(2),
   },
-  closeOverlayBtnText: {
+  warningCardActionText: {
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
+  },
+  warningCardHint: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   detailsSubtitle: {
     fontSize: 11,
