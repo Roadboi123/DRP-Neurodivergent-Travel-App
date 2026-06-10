@@ -37,7 +37,7 @@ import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
 
 // How many routes to show in the ungrouped (Google-Maps-style) list.
-const MAX_RESULTS = 8;
+const MAX_RESULTS = Infinity;
 
 const SORT_TABS: SegmentOption<SortMode>[] = [
   { value: 'preference', label: 'Preference', icon: 'heart-outline' },
@@ -79,6 +79,9 @@ export default function RoutesScreen() {
   // Active search query states (used for fetching routes only after user commits search)
   const [activeStart, setActiveStart] = useState('Current Location');
   const [activeEnd, setActiveEnd] = useState('');
+  // Pinned coordinates from suggestion picks — bypass backend re-geocoding.
+  const [activeStartCoords, setActiveStartCoords] = useState<string | undefined>(undefined);
+  const [activeEndCoords, setActiveEndCoords] = useState<string | undefined>(undefined);
 
   // Real-time coordinates state
   const [coords, setCoords] = useState<string | null>(null);
@@ -114,6 +117,9 @@ export default function RoutesScreen() {
     setEndLoc(newEnd);
     setActiveStart(newStart);
     setActiveEnd(newEnd);
+    // Swap pinned coords too so each field still maps to the right location.
+    setActiveStartCoords(activeEndCoords);
+    setActiveEndCoords(activeStartCoords);
   };
 
   // Filter states
@@ -146,7 +152,7 @@ export default function RoutesScreen() {
       // Clear stale warnings when starting a new journey search
       setWarnings([]);
       try {
-        let originQuery = activeStart;
+        let originQuery = activeStartCoords ?? activeStart;
         if (activeStart === 'Current Location') {
           let activeCoords = coords;
           if (!activeCoords) {
@@ -156,7 +162,9 @@ export default function RoutesScreen() {
             originQuery = activeCoords;
           }
         }
-        const routeData = await routesService.getRoutes(originQuery, activeEnd, username);
+        // Use pinned end coords if available, otherwise let the backend geocode the name.
+        const endQuery = activeEndCoords ?? activeEnd;
+        const routeData = await routesService.getRoutes(originQuery, endQuery, username);
 
         // Extract every line name and station name from all legs of all routes
         // so the warnings endpoint can filter to only journey-relevant disruptions.
@@ -199,7 +207,7 @@ export default function RoutesScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [activeStart, activeEnd, username, routesService, prefKey, isFocused, coords]);
+  }, [activeStart, activeEnd, activeStartCoords, activeEndCoords, username, routesService, prefKey, isFocused, coords]);
 
   // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
@@ -237,9 +245,11 @@ export default function RoutesScreen() {
         onStartChange={setStartLoc}
         onEndChange={setEndLoc}
         onSwap={handleSwapLocations}
-        onSubmit={(start, end) => {
+        onSubmit={(start, end, startCoords, endCoords) => {
           setActiveStart(start);
           setActiveEnd(end);
+          setActiveStartCoords(startCoords);
+          setActiveEndCoords(endCoords);
         }}
         userCoords={coords}
       />

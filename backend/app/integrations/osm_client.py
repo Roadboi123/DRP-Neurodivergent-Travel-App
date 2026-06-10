@@ -323,7 +323,7 @@ async def suggest_locations(
 ) -> list[dict]:
     """Provide location suggestions, prioritizing proximity to user location or Greater London, and correcting typos."""
     query = query.strip()
-    if len(query) < 3:
+    if len(query) < 2:
         return []
 
     # Check suggestions cache first
@@ -334,66 +334,160 @@ async def suggest_locations(
 
     suggestions = []
     seen_coords = set()
+    seen_names = set()
 
-    # 1. Query Nominatim Search API
+    # 1. Query Photon API (komoot public instance) for sub-50ms autocomplete
     corrected_query = correct_common_typos(query)
     headers = {"User-Agent": "CalmTravelApp/1.0 (sivat@uniwork.drp)"}
-    params = {
+    
+    bias_lat = user_lat if user_lat is not None else 51.5074
+    bias_lon = user_lon if user_lon is not None else -0.1278
+    
+    photon_params = {
         "q": corrected_query,
-        "format": "json",
-        "limit": "8",
-        "countrycodes": "gb",
-        "viewbox": "-0.60,51.75,0.35,51.25"  # Bias to Greater London
+        "limit": "15",
+        "lat": str(bias_lat),
+        "lon": str(bias_lon),
     }
 
-    # Strict rate-limiting lock
-    global _last_nominatim_call_time
-    async with _nominatim_lock:
-        now = time.time()
-        elapsed = now - _last_nominatim_call_time
-        if elapsed < 1.0:
-            await asyncio.sleep(1.0 - elapsed)
-            
-        _last_nominatim_call_time = time.time()
-        
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers)
-                if res.status_code == 200:
-                    data = res.json()
-                    for item in data:
-                        try:
-                            lat = float(item["lat"])
-                            lon = float(item["lon"])
-                            coord_key = (round(lat, 4), round(lon, 4))
+    
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get("https://photon.komoot.io/api/", params=photon_params, headers=headers)
+            if res.status_code == 200:
+                data = res.json()
+                features = data.get("features", [])
+                for feat in features:
+                    try:
+                        geom = feat.get("geometry", {})
+                        coords = geom.get("coordinates", [])
+                        if len(coords) < 2:
+                            continue
+                        lon = float(coords[0])
+                        lat = float(coords[1])
+                        coord_key = (round(lat, 4), round(lon, 4))
+                        
+                        # Skip duplicates
+                        if coord_key in seen_coords:
+                            continue
                             
-                            # Skip duplicates
-                            if coord_key in seen_coords:
-                                continue
+                        props = feat.get("properties", {})
+                        name = props.get("name")
+                        city = props.get("city") or props.get("town") or props.get("village") or props.get("county")
+                        postcode = props.get("postcode")
+                        country = props.get("country")
+                        
+                        # Build name if missing
+                        if not name:
+                            street = props.get("street")
+                            hn = props.get("housenumber")
+                            if street:
+                                name = f"{hn} {street}".strip() if hn else street
+                            else:
+                                name = city or country or "Unknown Location"
                                 
-                            display_name = item["display_name"]
-                            parts = display_name.split(",")
-                            name = parts[0].strip()
-                            subtitle = ", ".join([p.strip() for p in parts[1:]]).strip() if len(parts) > 1 else ""
+                        # Skip duplicate names in the same city
+                        name_key = (name.lower(), (city or "").lower())
+                        if name_key in seen_names:
+                            continue
+
+                        # Build display name and subtitle
+                        display_parts = []
+                        if name:
+                            display_parts.append(name)
+                        if city:
+                            display_parts.append(city)
+                        if postcode:
+                            display_parts.append(postcode)
+                        if country:
+                            display_parts.append(country)
                             
-                            # Check London bounds
-                            in_london = (51.25 <= lat <= 51.75) and (-0.60 <= lon <= 0.35)
-                            importance = float(item.get("importance") or 0.0)
-                            
-                            suggestions.append({
-                                "name": name,
-                                "display_name": display_name,
-                                "subtitle": subtitle,
-                                "lat": lat,
-                                "lon": lon,
-                                "importance": importance,
-                                "in_london": in_london
-                            })
-                            seen_coords.add(coord_key)
-                        except (ValueError, KeyError):
-                            pass
-        except Exception as e:
-            print(f"Nominatim suggestions error for '{query}': {e}")
+                        display_name = ", ".join(display_parts)
+                        subtitle = ", ".join([p for p in display_parts[1:]]) if len(display_parts) > 1 else ""
+                        
+                        # Check London bounds
+                        in_london = (51.25 <= lat <= 51.75) and (-0.60 <= lon <= 0.35)
+                        
+                        suggestions.append({
+                            "name": name,
+                            "display_name": display_name,
+                            "subtitle": subtitle,
+                            "lat": lat,
+                            "lon": lon,
+                            "importance": 0.5,
+                            "in_london": in_london
+                        })
+                        seen_coords.add(coord_key)
+                        seen_names.add(name_key)
+                    except (ValueError, KeyError):
+                        pass
+    except Exception as e:
+        print(f"Photon suggestions error for '{query}': {e}")
+
+    # 2. Fallback to Nominatim if Photon fails or returns nothing
+    if not suggestions:
+        nominatim_params = {
+            "q": corrected_query,
+            "format": "json",
+            "limit": "8",
+            "countrycodes": "gb",
+            "viewbox": "-0.60,51.75,0.35,51.25"  # Bias to Greater London
+        }
+        
+        global _last_nominatim_call_time
+        async with _nominatim_lock:
+            now = time.time()
+            elapsed = now - _last_nominatim_call_time
+            if elapsed < 1.0:
+                await asyncio.sleep(1.0 - elapsed)
+                
+            _last_nominatim_call_time = time.time()
+            
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.get("https://nominatim.openstreetmap.org/search", params=nominatim_params, headers=headers)
+                    if res.status_code == 200:
+                        nominatim_data = res.json()
+                        for item in nominatim_data:
+                            try:
+                                lat = float(item["lat"])
+                                lon = float(item["lon"])
+                                coord_key = (round(lat, 4), round(lon, 4))
+                                
+                                # Skip duplicates
+                                if coord_key in seen_coords:
+                                    continue
+                                    
+                                display_name = item["display_name"]
+                                parts = display_name.split(",")
+                                name = parts[0].strip()
+                                subtitle = ", ".join([p.strip() for p in parts[1:]]).strip() if len(parts) > 1 else ""
+                                
+                                # Skip duplicate names in the same city
+                                city_part = subtitle.split(",")[0].strip().lower() if subtitle else ""
+                                name_key = (name.lower(), city_part)
+                                if name_key in seen_names:
+                                    continue
+
+                                # Check London bounds
+                                in_london = (51.25 <= lat <= 51.75) and (-0.60 <= lon <= 0.35)
+                                importance = float(item.get("importance") or 0.0)
+                                
+                                suggestions.append({
+                                    "name": name,
+                                    "display_name": display_name,
+                                    "subtitle": subtitle,
+                                    "lat": lat,
+                                    "lon": lon,
+                                    "importance": importance,
+                                    "in_london": in_london
+                                })
+                                seen_coords.add(coord_key)
+                                seen_names.add(name_key)
+                            except (ValueError, KeyError):
+                                pass
+            except Exception as e:
+                print(f"Nominatim suggestions error fallback for '{query}': {e}")
 
     # 3. Sort suggestions: by relevance (exact, prefix, substring) first,
     # then by proximity (if user coords available), otherwise by importance/London
@@ -414,7 +508,6 @@ async def suggest_locations(
         suggestions.sort(key=lambda s: (-get_relevance(s["name"]), (s["lat"] - user_lat) ** 2 + (s["lon"] - user_lon) ** 2))
     else:
         suggestions.sort(key=lambda s: (-get_relevance(s["name"]), -int(s.get("in_london", False)), -float(s.get("importance", 0.0) or 0.0)))
-
 
     # 4. Strip sorting helper keys before returning/caching
     final_suggestions = []
@@ -439,5 +532,6 @@ async def suggest_locations(
     # Cache suggestions
     _SUGGESTIONS_CACHE[cache_key] = final_suggestions
     return final_suggestions
+
 
 
