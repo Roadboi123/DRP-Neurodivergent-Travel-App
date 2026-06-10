@@ -75,6 +75,10 @@ class WarningItemSchema(BaseModel):
     icon: str
     lat: Optional[float] = None
     lon: Optional[float] = None
+    # Username of the reporter for user-submitted warnings; None for live
+    # TfL/weather/event warnings. The client uses this to tell its own reports
+    # (which it may delete from the DB) apart from everyone else's.
+    username: Optional[str] = None
 
 
 class ReportWarningSchema(BaseModel):

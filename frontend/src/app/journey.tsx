@@ -1,34 +1,45 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { AppState, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView } from 'react-native';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
-import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
-import type { RouteOption } from '@/types/route';
+import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
 
 type SensoryReportType = 'sound' | 'heat' | 'smell' | 'crowds' | 'other';
+type Accents = ReturnType<typeof getAccents>;
 
 const REPORT_OPTIONS: {
   type: SensoryReportType;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   emoji: string;
-  color: string;
+  accent: keyof Accents;
 }[] = [
-  { type: 'sound', label: 'Sound', icon: 'radio-outline', emoji: '🔊', color: '#7af7f7' },
-  { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🔥', color: '#ff158a' },
-  { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '👃', color: '#83f582' },
-  { type: 'crowds', label: 'Crowds', icon: 'people-outline', emoji: '👥', color: '#fdad70' },
-  { type: 'other', label: 'Other', icon: 'add-circle-outline', emoji: '⚠️', color: '#fff48d' },
+  { type: 'sound', label: 'Sound', icon: 'radio-outline', emoji: '🔊', accent: 'cyan' },
+  { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🔥', accent: 'pink' },
+  { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '👃', accent: 'green' },
+  { type: 'crowds', label: 'Crowds', icon: 'people-outline', emoji: '👥', accent: 'orange' },
+  { type: 'other', label: 'Other', icon: 'add-circle-outline', emoji: '⚠️', accent: 'yellow' },
 ];
+
+/**
+ * Map a warning's stored `icon` (an Ionicon name, set when it was reported) to
+ * the marker emoji and an accent-ramp colour, so journey markers stay readable
+ * in both themes. Unknown icons fall back to the generic "other" look.
+ */
+function warningVisual(icon: string, accents: Accents): { emoji: string; color: string } {
+  const option = REPORT_OPTIONS.find((o) => o.icon === icon) ?? REPORT_OPTIONS[REPORT_OPTIONS.length - 1];
+  return { emoji: option.emoji, color: accents[option.accent] };
+}
 
 function calculateHeading(from: [number, number], to: [number, number]): number {
   const dLon = ((to[1] - from[1]) * Math.PI) / 180;
@@ -200,12 +211,10 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
               iconAnchor: [18, 18]
             });
 
-            const marker = L.marker([w.lat, w.lon], { icon: warningIcon })
-              .addTo(map)
-              .bindPopup(\`<b>\${w.title}</b><br/>\${w.desc}\`);
-            
+            const marker = L.marker([w.lat, w.lon], { icon: warningIcon }).addTo(map);
+
             marker.on('click', function() {
-              const msg = JSON.stringify({ type: 'warningClick' });
+              const msg = JSON.stringify({ type: 'warningClick', id: w.id });
               if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(msg);
               } else {
@@ -244,16 +253,127 @@ export default function JourneyScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
-  const semantic = getSemanticColors(isDark);
 
   const webViewRef = useRef<WebView>(null);
 
   // States
   const [reportingType, setReportingType] = useState<SensoryReportType | null>(null);
-  const [warnings, setWarnings] = useState<any[]>([]);
-  const [warningsSettings, setWarningsSettings] = useState<Record<string, { showOnMap: boolean; avoidReroute: boolean }>>({});
-  const [warningsModalVisible, setWarningsModalVisible] = useState(false);
-  const [detailsVisible, setDetailsVisible] = useState(false);
+  // Real user-reported warnings near this journey (no mocks, no live TfL items).
+  const [warnings, setWarnings] = useState<WarningItem[]>([]);
+  // Other users' warnings this user has closed — hidden locally only, never deleted.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  // The warning whose action card (Remove / Close) is currently open.
+  const [selectedWarning, setSelectedWarning] = useState<WarningItem | null>(null);
+  // Transient banner shown e.g. when a report is rejected as a near-duplicate.
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
+
+  // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
+  // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const SHEET_HEIGHT = SCREEN_HEIGHT * 0.7;
+  const COLLAPSED_HEIGHT = 96;
+  const MAX_TRANSLATE_Y = SHEET_HEIGHT - COLLAPSED_HEIGHT;
+
+  const panY = useRef(new Animated.Value(MAX_TRANSLATE_Y)).current;
+  const lastTranslateY = useRef(MAX_TRANSLATE_Y);
+  const startTranslateY = useRef(MAX_TRANSLATE_Y);
+  const scrollOffsetY = useRef(0);
+
+  useEffect(() => {
+    const id = panY.addListener(({ value }) => {
+      lastTranslateY.current = value;
+    });
+    return () => panY.removeListener(id);
+  }, [panY]);
+
+  const onPanResponderGrant = () => {
+    startTranslateY.current = lastTranslateY.current;
+    panY.setOffset(startTranslateY.current);
+    panY.setValue(0);
+  };
+
+  const onPanResponderMove = (_: any, gestureState: any) => {
+    const minVal = -startTranslateY.current;
+    const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
+    panY.setValue(Math.max(minVal, Math.min(maxVal, gestureState.dy)));
+  };
+
+  const onPanResponderRelease = (_: any, gestureState: any) => {
+    panY.flattenOffset();
+    const currentY = lastTranslateY.current;
+    const velocityY = gestureState.vy;
+    let targetY = MAX_TRANSLATE_Y;
+    if (velocityY < -0.3) {
+      targetY = 0;
+    } else if (velocityY > 0.3) {
+      targetY = MAX_TRANSLATE_Y;
+    } else {
+      targetY = currentY < MAX_TRANSLATE_Y / 2 ? 0 : MAX_TRANSLATE_Y;
+    }
+    Animated.spring(panY, {
+      toValue: targetY,
+      useNativeDriver: Platform.OS !== 'web',
+      tension: 50,
+      friction: 8,
+    }).start();
+  };
+
+  const headerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant,
+      onPanResponderMove,
+      onPanResponderRelease,
+      onPanResponderTerminate: () => {},
+    })
+  ).current;
+
+  const sheetPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        if (!verticalEnough) return false;
+        if (dy > 0 && scrollOffsetY.current <= 0) return true;
+        if (dy < 0 && lastTranslateY.current > 1) return true;
+        return false;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        if (!verticalEnough) return false;
+        if (dy > 0 && scrollOffsetY.current <= 0) return true;
+        if (dy < 0 && lastTranslateY.current > 1) return true;
+        return false;
+      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant,
+      onPanResponderMove,
+      onPanResponderRelease,
+      onPanResponderTerminate: () => {},
+    })
+  ).current;
+
+  // Latest warnings, readable from the map's (stale-closure) message handlers.
+  const warningsRef = useRef<WarningItem[]>([]);
+  useEffect(() => {
+    warningsRef.current = warnings;
+  }, [warnings]);
+
+  // Open the action card for a tapped marker (looked up by id from the map).
+  const openWarningById = useCallback((id: string) => {
+    const warning = warningsRef.current.find((w) => w.id === id);
+    if (warning) {
+      analytics.trackWarningClick();
+      setSelectedWarning(warning);
+    }
+  }, []);
 
   // Analytics & Active Journey Lifecycles
   useEffect(() => {
@@ -270,8 +390,8 @@ export default function JourneyScreen() {
     const handleWebMessage = (event: MessageEvent) => {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data.type === 'warningClick') {
-          analytics.trackWarningClick();
+        if (data.type === 'warningClick' && data.id) {
+          openWarningById(data.id);
         }
       } catch {
         // Ignore other/external window messages
@@ -289,7 +409,7 @@ export default function JourneyScreen() {
       }
       analytics.endJourney();
     };
-  }, []);
+  }, [openWarningById]);
 
   // Concatenate path coordinates from all route legs
   const allPathCoords = useMemo(() => {
@@ -308,154 +428,60 @@ export default function JourneyScreen() {
     return coords;
   }, [route]);
 
-  // Fetch / initialize warnings
-  useEffect(() => {
-    async function loadWarnings() {
-      const activeRoute = route;
-      if (!activeRoute) return;
-      try {
-        const lineSet = new Set<string>();
-        const stationSet = new Set<string>();
-        activeRoute.legs?.forEach((leg) => {
-          if (leg.line) lineSet.add(leg.line);
-          if (leg.departure) stationSet.add(leg.departure);
-          if (leg.arrival) stationSet.add(leg.arrival);
-          leg.stops?.forEach((stop) => stationSet.add(stop));
-        });
+  // Fetch the real, user-reported warnings near this journey. Live TfL/weather
+  // warnings (no coordinates) are intentionally not placed on the journey map —
+  // that's a separate story — so we keep only items reported by users.
+  const loadingRef = useRef(false);
+  const loadWarnings = useCallback(async () => {
+    const activeRoute = route;
+    if (!activeRoute || loadingRef.current) return;
+    loadingRef.current = true;
+    try {
+      const lineSet = new Set<string>();
+      const stationSet = new Set<string>();
+      activeRoute.legs?.forEach((leg) => {
+        if (leg.line) lineSet.add(leg.line);
+        if (leg.departure) stationSet.add(leg.departure);
+        if (leg.arrival) stationSet.add(leg.arrival);
+        leg.stops?.forEach((stop) => stationSet.add(stop));
+      });
 
-        const routeContext = {
-          lines: Array.from(lineSet),
-          stations: Array.from(stationSet),
-        };
+      const routeContext = {
+        lines: Array.from(lineSet),
+        stations: Array.from(stationSet),
+      };
 
-        const liveWarnings = await routesService.getWarnings(username || '', false, routeContext);
+      const liveWarnings = await routesService.getWarnings(username || '', false, routeContext);
 
-        const initialWarnings = [
-          {
-            id: 'w_mock_piccadilly',
-            title: 'Piccadilly line, Port closure',
-            desc: 'Short description of impacts i.e. Bus services delayed',
-            severity: 'high',
-            icon: 'alert-circle',
-            emoji: '❌',
-            color: accents.pink,
-            lat: null,
-            lon: null,
-          },
-          {
-            id: 'w_mock_protest',
-            title: 'Protest at SK, ~2000 people',
-            desc: 'Short description of impacts i.e. Bus services affected',
-            severity: 'high',
-            icon: 'people',
-            emoji: '👥',
-            color: accents.orange,
-            lat: null,
-            lon: null,
-          },
-          {
-            id: 'w_mock_forest',
-            title: 'Forest, No vehicles found',
-            desc: 'No vehicles found right now',
-            severity: 'info',
-            icon: 'warning',
-            emoji: '⚠️',
-            color: accents.yellow,
-            lat: null,
-            lon: null,
-          },
-          ...liveWarnings.map((w) => ({
-            ...w,
-            emoji: w.icon === 'thermometer' ? '🔥' : w.icon === 'volume-high' ? '🔊' : w.icon === 'people' ? '👥' : '⚠️',
-            color:
-              w.icon === 'thermometer'
-                ? accents.pink
-                : w.icon === 'volume-high'
-                  ? accents.cyan
-                  : w.icon === 'people'
-                    ? accents.orange
-                    : accents.yellow,
-            lat: null,
-            lon: null,
-          })),
-        ];
-
-        // Map warnings along path
-        const mapped = initialWarnings.map((w, index) => {
-          let lat = null,
-            lon = null;
-          if (activeRoute.legs) {
-            for (const leg of activeRoute.legs) {
-              if (leg.departure && w.title.toLowerCase().includes(leg.departure.toLowerCase())) {
-                lat = leg.departure_lat;
-                lon = leg.departure_lon;
-                break;
-              }
-              if (leg.arrival && w.title.toLowerCase().includes(leg.arrival.toLowerCase())) {
-                lat = leg.arrival_lat;
-                lon = leg.arrival_lon;
-                break;
-              }
-            }
-          }
-
-          if (lat == null && allPathCoords.length > 0) {
-            const ratio = (index + 1) / (initialWarnings.length + 1);
-            const coordIndex = Math.floor(allPathCoords.length * ratio);
-            const pt = allPathCoords[coordIndex] || allPathCoords[0];
-            lat = pt[0];
-            lon = pt[1];
-          }
-
-          return { ...w, lat, lon };
-        });
-
-        setWarnings(mapped);
-      } catch (e) {
-        console.warn('Error loading route warnings:', e);
-        if (allPathCoords.length > 0) {
-          const fallbacks = [
-            {
-              id: 'w_mock_piccadilly',
-              title: 'Piccadilly line, Port closure',
-              desc: 'Short description of impacts i.e. Bus services delayed',
-              severity: 'high',
-              icon: 'alert-circle',
-              emoji: '❌',
-              color: accents.pink,
-              lat: allPathCoords[Math.floor(allPathCoords.length * 0.3)][0],
-              lon: allPathCoords[Math.floor(allPathCoords.length * 0.3)][1],
-            },
-            {
-              id: 'w_mock_protest',
-              title: 'Protest at SK, ~2000 people',
-              desc: 'Short description of impacts i.e. Bus services affected',
-              severity: 'high',
-              icon: 'people',
-              emoji: '👥',
-              color: accents.orange,
-              lat: allPathCoords[Math.floor(allPathCoords.length * 0.6)][0],
-              lon: allPathCoords[Math.floor(allPathCoords.length * 0.6)][1],
-            },
-            {
-              id: 'w_mock_forest',
-              title: 'Forest, No vehicles found',
-              desc: 'No vehicles found right now',
-              severity: 'info',
-              icon: 'warning',
-              emoji: '⚠️',
-              color: accents.yellow,
-              lat: allPathCoords[Math.floor(allPathCoords.length * 0.8)][0],
-              lon: allPathCoords[Math.floor(allPathCoords.length * 0.8)][1],
-            },
-          ];
-          setWarnings(fallbacks);
-        }
-      }
+      // User reports are the only ones with a reporter and real coordinates.
+      const userReports = liveWarnings.filter(
+        (w) => w.username != null && w.lat != null && w.lon != null,
+      );
+      // Avoid re-rendering (and a marker flicker) when the set is unchanged.
+      setWarnings((prev) => {
+        const prevIds = new Set(prev.map((p) => p.id));
+        const unchanged = prev.length === userReports.length && userReports.every((w) => prevIds.has(w.id));
+        return unchanged ? prev : userReports;
+      });
+    } catch (e) {
+      console.warn('Error loading route warnings:', e);
+    } finally {
+      loadingRef.current = false;
     }
+  }, [route, routesService, username]);
 
+  // Poll so warnings reported by others appear, and expired ones drop off.
+  useEffect(() => {
     loadWarnings();
-  }, [route, allPathCoords, accents.cyan, accents.orange, accents.pink, accents.yellow, routesService, username]);
+    const interval = setInterval(loadWarnings, 20000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadWarnings();
+    });
+    return () => {
+      clearInterval(interval);
+      sub.remove();
+    };
+  }, [loadWarnings]);
 
   // User location starts at the journey origin, facing the first leg.
   const userCoords = useMemo<[number, number]>(() => {
@@ -469,17 +495,20 @@ export default function JourneyScreen() {
 
   // Sync state to Leaflet map
   const formattedWarnings = useMemo(() => {
-    return warnings.map((w) => ({
-      id: w.id,
-      title: w.title,
-      desc: w.desc,
-      emoji: w.emoji,
-      color: w.color,
-      lat: w.lat,
-      lon: w.lon,
-      hidden: warningsSettings[w.id]?.showOnMap === false,
-    }));
-  }, [warnings, warningsSettings]);
+    return warnings.map((w) => {
+      const { emoji, color } = warningVisual(w.icon, accents);
+      return {
+        id: w.id,
+        title: w.title,
+        desc: w.desc,
+        emoji,
+        color,
+        lat: w.lat,
+        lon: w.lon,
+        hidden: dismissedIds.has(w.id),
+      };
+    });
+  }, [warnings, dismissedIds, accents]);
 
   useEffect(() => {
     const jsonString = JSON.stringify(formattedWarnings);
@@ -500,60 +529,78 @@ export default function JourneyScreen() {
     }
   }, [userCoords, heading, formattedWarnings]);
 
-  const activeWarningsCount = useMemo(() => {
-    return warnings.filter((w) => warningsSettings[w.id]?.showOnMap !== false).length;
-  }, [warnings, warningsSettings]);
-
   const handleMapMessage = (event: any) => {
     try {
       const dataStr = event.nativeEvent.data;
       const data = JSON.parse(dataStr);
-      if (data.type === 'warningClick') {
-        analytics.trackWarningClick();
+      if (data.type === 'warningClick' && data.id) {
+        openWarningById(data.id);
       }
     } catch {
       // Ignore
     }
   };
 
-  // Actions
-  const submitReport = (wouldContribute: boolean) => {
+  // Own warning: delete from the DB (gone for everyone). Optimistically drop it.
+  const removeOwnWarning = async (warning: WarningItem) => {
+    setSelectedWarning(null);
+    setWarnings((prev) => prev.filter((w) => w.id !== warning.id));
+    try {
+      await routesService.deleteWarning(warning.id, username || 'anonymous');
+    } catch (err) {
+      console.warn('Failed to delete warning on backend:', err);
+    }
+  };
+
+  // Someone else's warning: hide it for this user only, no API call.
+  const dismissWarning = (warning: WarningItem) => {
+    setSelectedWarning(null);
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.add(warning.id);
+      return next;
+    });
+  };
+
+  const selectedIsOwn = !!selectedWarning && !!username && selectedWarning.username === username;
+
+  // Actions — report a sensory warning at the (simulated) current location.
+  const submitReport = async () => {
     if (!reportingType) return;
     const option = REPORT_OPTIONS.find((o) => o.type === reportingType);
     if (!option) return;
 
-    const newReport = {
+    const body = {
       id: `w_user_${Date.now()}`,
-      title: `${option.label} Warning`,
-      desc: `User reported sensory warning (${option.label.toLowerCase()}) at current location.`,
-      severity: 'medium' as const,
-      icon: option.icon,
-      emoji: option.emoji,
-      color: option.color,
+      username: username || 'anonymous',
+      warning_type: option.icon,
+      title: `${option.label} reported`,
+      desc: `${option.label} flagged here by a traveller.`,
       lat: userCoords[0],
       lon: userCoords[1],
     };
 
-    // Call API to persist it on the backend
-    routesService.reportWarning({
-      id: newReport.id,
-      username: username || 'anonymous',
-      warning_type: newReport.icon,
-      title: newReport.title,
-      desc: newReport.desc,
-      lat: newReport.lat,
-      lon: newReport.lon,
-    }).catch((err) => console.warn('Failed to persist warning report on backend:', err));
-
-    setWarnings((prev) => [newReport, ...prev]);
     setReportingType(null);
-    analytics.endDisruptionReport(wouldContribute);
+    analytics.endDisruptionReport(true);
+
+    try {
+      const result = await routesService.reportWarning(body);
+      if (result.duplicate) {
+        setReportNotice('Already reported nearby');
+      } else {
+        setWarnings((prev) => [result.warning, ...prev]);
+      }
+    } catch (err) {
+      console.warn('Failed to persist warning report on backend:', err);
+    }
   };
 
-  // Check if any warning is avoiding / rerouting
-  const avoidingWarningsCount = useMemo(() => {
-    return Object.values(warningsSettings).filter((s) => s.avoidReroute).length;
-  }, [warningsSettings]);
+  // Auto-dismiss the transient notice after a few seconds.
+  useEffect(() => {
+    if (!reportNotice) return;
+    const timer = setTimeout(() => setReportNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [reportNotice]);
 
   const mapHtml = useMemo(() => (route ? buildJourneyMap(route, accents) : ''), [route, accents]);
 
@@ -617,17 +664,15 @@ export default function JourneyScreen() {
         </View>
       </View>
 
-      {/* Rerouted Indicator Banner */}
-      {avoidingWarningsCount > 0 && (
-        <View style={[styles.rerouteBanner, { backgroundColor: semantic.warningSurface, borderColor: semantic.warningBorder }]}>
-          <Ionicons name="shuffle-outline" size={16} color={semantic.warningIcon} />
-          <Text style={[styles.rerouteBannerText, { color: semantic.warningText }]}>
-            Rerouted: Avoiding {avoidingWarningsCount} warning{avoidingWarningsCount > 1 ? 's' : ''}
-          </Text>
+      {/* Transient notice (e.g. duplicate report rejected) */}
+      {reportNotice && (
+        <View style={[styles.noticeBanner, { backgroundColor: accents.yellow, borderColor: palette.border }]}>
+          <Ionicons name="information-circle-outline" size={16} color={palette.textPrimary} />
+          <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>{reportNotice}</Text>
         </View>
       )}
 
-      {/* Grouped Right Capsule-style Rail */}
+      {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
       <View style={[styles.reportCapsule, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         {REPORT_OPTIONS.map((option) => (
           <TouchableOpacity
@@ -640,7 +685,7 @@ export default function JourneyScreen() {
             style={[
               styles.reportCapsuleBtn,
               {
-                backgroundColor: reportingType === option.type ? option.color : palette.surface,
+                backgroundColor: reportingType === option.type ? accents[option.accent] : palette.surface,
               },
             ]}
           >
@@ -650,231 +695,40 @@ export default function JourneyScreen() {
         ))}
       </View>
 
-      {/* Bottom Information Trip Bar */}
-      <View style={[styles.tripBar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackClick();
-            setDetailsVisible(true);
-          }}
-          style={[styles.tripActionBtn, { borderColor: palette.border, backgroundColor: accents.cyan }]}
-          accessibilityRole="button"
-          accessibilityLabel="Journey details"
-        >
-          <Ionicons name="list-outline" size={15} color={palette.textPrimary} />
-          <Text style={[styles.tripActionBtnText, { color: palette.textPrimary }]}>DETAILS</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackWarningClick();
-            setWarningsModalVisible(true);
-          }}
-          style={[styles.tripActionBtn, { borderColor: accents.orange }]}
-        >
-          <Ionicons name="warning-outline" size={15} color={accents.orange} />
-          <Text style={[styles.tripActionBtnText, { color: palette.textPrimary }]}>
-            WARNINGS ({activeWarningsCount})
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.tripRightBlock}>
-          <Text style={[styles.tripDuration, { color: palette.textPrimary }]}>{route.duration} min</Text>
-          <Text style={[styles.tripPrice, { color: palette.textSecondary }]}>£{route.price.toFixed(2)}</Text>
-        </View>
-      </View>
-
-      {/* Waze style reporting action bar — centred on screen */}
-      {reportingType && activeReport && (
-        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
-          <View style={styles.reportBackdrop} pointerEvents="none" />
-          <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.reportInputPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <TouchableOpacity
-                onPress={() => {
-                  analytics.trackClick();
-                  setReportingType(null);
-                  analytics.endDisruptionReport(null);
-                }}
-                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel report"
-              >
-                <Ionicons name="close" size={16} color={palette.textPrimary} />
-              </TouchableOpacity>
-
-              <View style={[styles.reportTypeCircle, { backgroundColor: activeReport.color, borderColor: palette.border }]}>
-                <Ionicons name={activeReport.icon} size={26} color={palette.textPrimary} />
-                <Text style={[styles.reportTypeCircleText, { color: palette.textPrimary }]}>{activeReport.label}</Text>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => submitReport(true)}
-                activeOpacity={0.85}
-                style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
-              >
-                <Text style={[styles.reportSubmitBtnText, { color: palette.textPrimary }]}>Submit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Select Warnings Modal List Overlay */}
-      <Modal
-        visible={warningsModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setWarningsModalVisible(false)}
+      {/* Swipe-up journey sheet — collapsed shows duration·cost; swipe up for details */}
+      <Animated.View
+        style={[
+          styles.sheetPanel,
+          {
+            backgroundColor: palette.surface,
+            borderColor: palette.border,
+            height: SHEET_HEIGHT,
+            transform: [{ translateY: panY }],
+          },
+        ]}
       >
-        <SafeAreaView style={[styles.overlayScreen, { backgroundColor: palette.surface }]}>
-          {/* Header controls inside the overlay */}
-          <View style={styles.overlayHeader}>
-            <View style={styles.navButtonsRow}>
-              <TouchableOpacity
-                onPress={() => {
-                  analytics.trackClick();
-                  setWarningsModalVisible(false);
-                }}
-                style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-              >
-                <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  analytics.trackClick();
-                  setWarningsModalVisible(false);
-                  router.replace('/(tabs)/routes');
-                }}
-                style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-              >
-                <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.overlayTitle, { color: palette.textPrimary }]}>Select warning</Text>
+        <View style={styles.sheetHeaderTouch} {...headerPanResponder.panHandlers}>
+          <View style={styles.sheetHandleContainer}>
+            <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
           </View>
+          {/* Duration & cost, minimised, on the left */}
+          <View style={[styles.sheetStatsRow, { borderBottomColor: palette.divider }]}>
+            <Text style={[styles.sheetDuration, { color: palette.textPrimary }]}>{route.duration} min</Text>
+            <Text style={[styles.sheetDot, { color: palette.textMuted }]}>·</Text>
+            <Text style={[styles.sheetCost, { color: palette.textSecondary }]}>£{route.price.toFixed(2)}</Text>
+          </View>
+        </View>
 
-          {/* Warnings List */}
-          <ScrollView contentContainerStyle={styles.overlayListContainer} showsVerticalScrollIndicator={false}>
-            {warnings.length === 0 ? (
-              <Text style={[styles.emptyWarningsText, { color: palette.textMuted }]}>
-                No warnings active for this journey.
-              </Text>
-            ) : (
-              warnings.map((w) => {
-                const setting = warningsSettings[w.id] || { showOnMap: true, avoidReroute: false };
-                return (
-                  <View key={w.id} style={[styles.warningListCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                    <View style={[styles.warningListIconCircle, { backgroundColor: w.color, borderColor: palette.border }]}>
-                      <Text style={styles.warningListEmoji}>{w.emoji}</Text>
-                    </View>
-
-                    <View style={styles.warningListInfo}>
-                      <Text style={[styles.warningListTitle, { color: palette.textPrimary }]}>{w.title}</Text>
-                      <Text style={[styles.warningListDesc, { color: palette.textSecondary }]}>
-                        &gt; {w.desc}
-                      </Text>
-                    </View>
-
-                    {/* Actions block (Show on map / Avoid) */}
-                    <View style={styles.warningListActions}>
-                      <TouchableOpacity
-                        onPress={() => {
-                          analytics.trackWarningClick();
-                          setWarningsSettings((prev) => ({
-                            ...prev,
-                            [w.id]: {
-                              ...setting,
-                              showOnMap: !setting.showOnMap,
-                            },
-                          }));
-                        }}
-                        style={[
-                          styles.listActionCheckbox,
-                          {
-                            borderColor: palette.border,
-                            backgroundColor: setting.showOnMap ? accents.green : palette.divider,
-                          },
-                        ]}
-                      >
-                        <Ionicons name="map-outline" size={14} color={palette.textPrimary} />
-                        {setting.showOnMap && <Ionicons name="checkmark" size={10} color={palette.textPrimary} style={styles.checkMini} />}
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => {
-                          analytics.trackWarningClick();
-                          setWarningsSettings((prev) => ({
-                            ...prev,
-                            [w.id]: {
-                              ...setting,
-                              avoidReroute: !setting.avoidReroute,
-                            },
-                          }));
-                        }}
-                        style={[
-                          styles.listActionCheckbox,
-                          {
-                            borderColor: palette.border,
-                            backgroundColor: setting.avoidReroute ? accents.orange : palette.divider,
-                          },
-                        ]}
-                      >
-                        <Ionicons name="close-circle-outline" size={14} color={palette.textPrimary} />
-                        {setting.avoidReroute && <Ionicons name="checkmark" size={10} color={palette.textPrimary} style={styles.checkMini} />}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })
-            )}
-          </ScrollView>
-
-          <TouchableOpacity
-            onPress={() => {
-              analytics.trackClick();
-              setWarningsModalVisible(false);
+        <View style={{ flex: 1 }} {...sheetPanResponder.panHandlers}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.detailsScrollContent}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              scrollOffsetY.current = e.nativeEvent.contentOffset.y;
             }}
-            style={[styles.closeOverlayBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
           >
-            <Text style={[styles.closeOverlayBtnText, { color: palette.textPrimary }]}>Apply</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Journey Details Overlay — read sensory load & the full step list mid-trip */}
-      <Modal
-        visible={detailsVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setDetailsVisible(false)}
-      >
-        <SafeAreaView style={[styles.overlayScreen, { backgroundColor: palette.surface }]}>
-          <View style={styles.overlayHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                analytics.trackClick();
-                setDetailsVisible(false);
-              }}
-              style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Close journey details"
-            >
-              <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-            </TouchableOpacity>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.overlayTitle, { color: palette.textPrimary }]} numberOfLines={1}>
-                {route.name}
-              </Text>
-              {route.subName ? (
-                <Text style={[styles.detailsSubtitle, { color: palette.textSecondary }]} numberOfLines={1}>
-                  {route.subName}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.detailsScrollContent} showsVerticalScrollIndicator={false}>
             {/* Sensory alignment dashboard */}
             <View style={[styles.detailsCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
               <Text style={[styles.detailsCardHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
@@ -951,8 +805,98 @@ export default function JourneyScreen() {
               )}
             </View>
           </ScrollView>
-        </SafeAreaView>
-      </Modal>
+        </View>
+      </Animated.View>
+
+      {/* Waze style reporting action bar — centred on screen */}
+      {reportingType && activeReport && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <View style={styles.reportBackdrop} pointerEvents="none" />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.reportInputPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <TouchableOpacity
+                onPress={() => {
+                  analytics.trackClick();
+                  setReportingType(null);
+                  analytics.endDisruptionReport(null);
+                }}
+                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel report"
+              >
+                <Ionicons name="close" size={16} color={palette.textPrimary} />
+              </TouchableOpacity>
+
+              <View style={[styles.reportTypeCircle, { backgroundColor: accents[activeReport.accent], borderColor: palette.border }]}>
+                <Ionicons name={activeReport.icon} size={26} color={palette.textPrimary} />
+                <Text style={[styles.reportTypeCircleText, { color: palette.textPrimary }]}>{activeReport.label}</Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => submitReport()}
+                activeOpacity={0.85}
+                style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
+              >
+                <Text style={[styles.reportSubmitBtnText, { color: palette.textPrimary }]}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Tapped-warning action card — Remove (own) or Close (someone else's) */}
+      {selectedWarning && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.reportBackdrop}
+            activeOpacity={1}
+            onPress={() => setSelectedWarning(null)}
+          />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <TouchableOpacity
+                onPress={() => setSelectedWarning(null)}
+                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+              >
+                <Ionicons name="close" size={16} color={palette.textPrimary} />
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.warningCardIcon,
+                  { backgroundColor: warningVisual(selectedWarning.icon, accents).color, borderColor: palette.border },
+                ]}
+              >
+                <Text style={styles.warningListEmoji}>{warningVisual(selectedWarning.icon, accents).emoji}</Text>
+              </View>
+
+              <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
+              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
+
+              <TouchableOpacity
+                onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
+                activeOpacity={0.85}
+                style={[
+                  styles.warningCardAction,
+                  { backgroundColor: selectedIsOwn ? accents.pink : accents.green, borderColor: palette.border },
+                ]}
+              >
+                <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
+                <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                  {selectedIsOwn ? 'Remove' : 'Close'}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
+                {selectedIsOwn ? 'Removes it from the map for everyone' : 'Hides it for you only'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
     </SafeAreaView>
   );
 }
@@ -996,25 +940,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...hardShadow(3),
   },
-  rerouteBanner: {
+  noticeBanner: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 76 : 96,
     left: 16,
     right: 16,
-    zIndex: 9,
+    zIndex: 11,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 2,
-    gap: 8,
-    ...hardShadow(2),
+    ...hardShadow(3),
   },
-  rerouteBannerText: {
+  noticeBannerText: {
     fontSize: 11,
-    fontWeight: '700',
-    fontFamily: Fonts?.body,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   reportCapsule: {
     position: 'absolute',
@@ -1042,50 +988,53 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  tripBar: {
+  sheetPanel: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 18,
-    zIndex: 10,
-    borderWidth: 3,
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    overflow: 'hidden',
+    ...hardShadow(10),
+  },
+  sheetHeaderTouch: {
+    width: '100%',
+  },
+  sheetHandleContainer: {
     alignItems: 'center',
-    ...hardShadow(5),
+    paddingVertical: 10,
   },
-  tripActionBtn: {
-    borderWidth: 2,
-    borderRadius: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  sheetStatsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    ...hardShadow(2),
+    alignItems: 'baseline',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1.5,
   },
-  tripActionBtnText: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  tripRightBlock: {
-    alignItems: 'flex-end',
-  },
-  tripDuration: {
-    fontSize: 13,
+  sheetDuration: {
+    fontSize: 17,
     fontFamily: Fonts?.display,
     fontWeight: '900',
   },
-  tripPrice: {
-    fontSize: 9,
-    fontFamily: Fonts?.display,
+  sheetDot: {
+    fontSize: 15,
     fontWeight: '900',
-    marginTop: 1,
+  },
+  sheetCost: {
+    fontSize: 14,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
   },
   reportOverlayRoot: {
     ...StyleSheet.absoluteFillObject,
@@ -1157,107 +1106,66 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  overlayScreen: {
-    flex: 1,
+  warningListEmoji: {
+    fontSize: 22,
   },
-  overlayHeader: {
-    flexDirection: 'row',
+  warningCard: {
+    borderWidth: 3,
+    borderRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 12 : 32,
-    paddingBottom: 12,
-    gap: 14,
+    width: '100%',
+    maxWidth: 300,
+    gap: 8,
+    ...hardShadow(6),
   },
-  overlayTitle: {
-    fontSize: 18,
+  warningCardIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warningCardTitle: {
+    fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
-  },
-  overlayListContainer: {
-    padding: 16,
-    gap: 14,
-  },
-  emptyWarningsText: {
     textAlign: 'center',
-    paddingVertical: 36,
-    fontSize: 12,
-  },
-  warningListCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 2,
-    gap: 12,
-    ...hardShadow(2),
-  },
-  warningListIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  warningListEmoji: {
-    fontSize: 18,
-  },
-  warningListInfo: {
-    flex: 1,
-  },
-  warningListTitle: {
-    fontSize: 13,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-  },
-  warningListDesc: {
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
     marginTop: 2,
   },
-  warningListActions: {
-    flexDirection: 'row',
-    gap: 6,
+  warningCardDesc: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    textAlign: 'center',
   },
-  listActionCheckbox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 2,
+  warningCardAction: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-  },
-  checkMini: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    backgroundColor: '#ffffff',
-    borderRadius: 6,
-    borderWidth: 1,
-    padding: 1,
-  },
-  closeOverlayBtn: {
-    margin: 16,
+    gap: 6,
     borderWidth: 2.5,
     borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...hardShadow(3),
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    alignSelf: 'stretch',
+    marginTop: 4,
+    ...hardShadow(2),
   },
-  closeOverlayBtnText: {
+  warningCardActionText: {
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  detailsSubtitle: {
-    fontSize: 11,
+  warningCardHint: {
+    fontSize: 10,
     fontWeight: '600',
-    marginTop: 2,
+    textAlign: 'center',
   },
   detailsScrollContent: {
     padding: 16,

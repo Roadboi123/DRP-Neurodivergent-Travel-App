@@ -249,7 +249,12 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         const isWalking = leg.mode.toLowerCase() === 'walking';
 
         let polylinePointsStr = '';
-        if (leg.path_coords && leg.path_coords.length > 0) {
+        // Need at least 2 points for a real path. A leg whose geometry was pruned
+        // to a single point (the backend's monotonic-progress filter can do this on
+        // short legs) must fall back to the straight dep→arr line below — otherwise
+        // snapping both endpoints onto index 0 collapses it to a zero-length,
+        // invisible polyline (this was the missing Mildmay line before "Go").
+        if (leg.path_coords && leg.path_coords.length >= 2) {
           const pathPoints = [...leg.path_coords];
           // Some providers return a leg's geometry in the opposite order to the
           // leg's own dep→arr direction. Snapping the endpoints (below) onto
@@ -425,28 +430,43 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
       onRequestClose={onClose}
     >
       <SafeAreaView style={[styles.modalSheet, { backgroundColor: palette.surface }]}>
-        {/* Header row */}
+        {/* Header row — back + home top-left (mirrors the journey screen) */}
         <View style={[styles.headerRow, { borderBottomColor: palette.divider }]}>
+          <View style={styles.navButtonsRow}>
+            <TouchableOpacity
+              onPress={() => {
+                analytics.trackClick();
+                onClose();
+              }}
+              style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Back to routes list"
+            >
+              <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                analytics.trackClick();
+                onClose();
+                router.replace('/');
+              }}
+              style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Home"
+            >
+              <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+          </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.routeTitle, { color: palette.textPrimary }]}>
+            <Text style={[styles.routeTitle, { color: palette.textPrimary }]} numberOfLines={1}>
               {route.name}
             </Text>
             {route.subName ? (
-              <Text style={[styles.routeSub, { color: palette.textSecondary }]}>
+              <Text style={[styles.routeSub, { color: palette.textSecondary }]} numberOfLines={1}>
                 {route.subName}
               </Text>
             ) : null}
           </View>
-          <TouchableOpacity
-            onPress={() => {
-              analytics.trackClick();
-              onClose();
-            }}
-            style={[styles.closeBtn, { backgroundColor: semantic.neutralSurface, borderColor: palette.border }]}
-            accessibilityLabel="Close detailed route overlay"
-          >
-            <Ionicons name="close" size={20} color={palette.textPrimary} />
-          </TouchableOpacity>
         </View>
 
         {/* Content Area - Map fills the screen, sheet Panel sits absolutely at the bottom */}
@@ -683,8 +703,23 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     padding: 16,
     borderBottomWidth: 1.5,
+  },
+  navButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  circleButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...hardShadow(3),
   },
   routeTitle: {
     fontSize: 16,
@@ -697,15 +732,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
   },
   mapContainer: {
     height: 270,

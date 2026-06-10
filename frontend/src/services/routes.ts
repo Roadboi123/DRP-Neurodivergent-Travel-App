@@ -33,6 +33,11 @@ function buildWarningsQuery(
   return `routes/warnings${queryStr}`;
 }
 
+/** Outcome of {@link RoutesService.reportWarning}. */
+export type ReportWarningResult =
+  | { duplicate: false; warning: WarningItem }
+  | { duplicate: true };
+
 export interface RoutesService {
   /**
    * Fetch route suggestions. Throws if the (possibly failover-wrapped) client
@@ -53,6 +58,10 @@ export interface RoutesService {
 
   /**
    * Submit a user-reported sensory warning to persist on the backend.
+   *
+   * Resolves to `{ duplicate: true }` when the backend rejects the report as a
+   * spam/near-duplicate (HTTP 409) so the caller can show a friendly notice,
+   * or `{ duplicate: false, warning }` with the persisted item on success.
    */
   reportWarning(body: {
     id: string;
@@ -62,12 +71,13 @@ export interface RoutesService {
     desc: string;
     lat: number;
     lon: number;
-  }): Promise<WarningItem>;
+  }): Promise<ReportWarningResult>;
 
   /**
-   * Delete a warning from the database (e.g. when it is no longer there).
+   * Delete a warning from the database. Owner-only on the backend: pass the
+   * current `username`; only the reporter's own warning is removed.
    */
-  deleteWarning(warningId: string): Promise<any>;
+  deleteWarning(warningId: string, username: string): Promise<{ deleted: boolean }>;
 
   /**
    * Fetch location suggestions based on search text query.
@@ -91,11 +101,23 @@ export function createRoutesService(client: HttpClient): RoutesService {
       const query = buildWarningsQuery(username, generic, routeContext);
       return client.get<WarningItem[]>(`/${query}`);
     },
-    reportWarning(body) {
-      return client.post<WarningItem>('/routes/warnings/report', body);
+    async reportWarning(body) {
+      // Use the raw response so a 409 (near-duplicate) is treated as data, not a
+      // thrown error that would otherwise trip the production→local failover.
+      const res = await client.postResponse('/routes/warnings/report', body);
+      if (res.status === 409) {
+        return { duplicate: true };
+      }
+      if (!res.ok) {
+        throw new Error(`Failed to report warning: HTTP ${res.status}`);
+      }
+      const warning = (await res.json()) as WarningItem;
+      return { duplicate: false, warning };
     },
-    deleteWarning(warningId) {
-      return client.delete<any>(`/routes/warnings/${encodeURIComponent(warningId)}`);
+    deleteWarning(warningId, username) {
+      return client.delete<{ deleted: boolean }>(
+        `/routes/warnings/${encodeURIComponent(warningId)}?username=${encodeURIComponent(username)}`,
+      );
     },
     suggestLocations(query, userCoords) {
       const queryParam = encodeURIComponent(query.trim());

@@ -1,9 +1,9 @@
 from typing import List, Optional
 import jwt
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.schemas.route import RouteOption, WarningItemSchema, LocationSuggestion, ReportWarningSchema
-from app.services.routes import get_route_suggestions, get_user_warnings
+from app.services.routes import get_route_suggestions, get_user_warnings, is_duplicate_report
 from app.api.auth import oauth2_scheme, ALGORITHM, JWT_SECRET
 from app.integrations.tlf_client import clean_station_name
 
@@ -97,8 +97,18 @@ async def suggest_locations(q: str, user_coords: Optional[str] = None):
 
 @router.post("/warnings/report", response_model=WarningItemSchema)
 async def report_warning(body: ReportWarningSchema):
-    """Save a user-reported sensory warning to the database so other users can see it."""
+    """Save a user-reported sensory warning to the database so other users can see it.
+
+    Rejects with 409 if a same-type warning was already reported nearby (anti-spam).
+    """
     from app.integrations.supabase import supabase
+
+    if is_duplicate_report(body.warning_type, body.lat, body.lon):
+        raise HTTPException(
+            status_code=409,
+            detail="A similar warning has already been reported nearby.",
+        )
+
     supabase.table("reported_warnings").insert({
         "id": body.id,
         "username": body.username,
@@ -117,15 +127,28 @@ async def report_warning(body: ReportWarningSchema):
         icon=body.warning_type,
         lat=body.lat,
         lon=body.lon,
+        username=body.username,
     )
 
 
 @router.delete("/warnings/{warning_id}")
-async def delete_warning(warning_id: str):
-    """Delete a user-reported warning from the database (e.g. when it is no longer there)."""
+async def delete_warning(warning_id: str, username: str):
+    """Delete a user-reported warning from the database.
+
+    Owner-only: a warning is removed for everyone only when ``username`` matches
+    the reporter. Other users dismiss a warning locally (client-side), never via
+    this endpoint. Returns ``deleted`` so the client knows whether a row went.
+    """
     from app.integrations.supabase import supabase
-    supabase.table("reported_warnings").delete().eq("id", warning_id).execute()
-    return {"status": "success", "message": f"Warning {warning_id} deleted successfully"}
+    res = (
+        supabase.table("reported_warnings")
+        .delete()
+        .eq("id", warning_id)
+        .eq("username", username)
+        .execute()
+    )
+    deleted = bool(getattr(res, "data", None))
+    return {"status": "success", "deleted": deleted, "id": warning_id}
 
 
 

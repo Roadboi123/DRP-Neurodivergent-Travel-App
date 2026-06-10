@@ -60,6 +60,59 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return R * c
 
+
+# User-reported warnings are short-lived: they drop off the map this long after
+# being reported. Also the window used for the anti-spam duplicate check.
+REPORTED_WARNING_TTL_MINUTES = 20
+
+# A new report is rejected if a non-expired warning of the same type already
+# sits this close, so users can't spam-report the same spot.
+DUPLICATE_RADIUS_M = 75.0
+
+
+def is_duplicate_report(warning_type: str, lat: float, lon: float) -> bool:
+    """True if a non-expired warning of the same ``warning_type`` already exists
+    within ``DUPLICATE_RADIUS_M`` of ``(lat, lon)``.
+
+    Used by the report endpoint to stop a user (or several) piling duplicate
+    reports onto one location. Reuses the same TTL window as the read path so an
+    expired report no longer blocks a fresh one.
+    """
+    from datetime import datetime, timezone, timedelta
+    try:
+        res = (
+            supabase.table("reported_warnings")
+            .select("warning_type,lat,lon,created_at")
+            .eq("warning_type", warning_type)
+            .execute()
+        )
+    except Exception as e:
+        print(f"Error checking for duplicate warning report: {e}")
+        return False
+
+    if not res.data:
+        return False
+
+    now_dt = datetime.now(timezone.utc)
+    for row in res.data:
+        if not isinstance(row, dict):
+            continue
+        created_at_str = row.get("created_at")
+        if created_at_str:
+            try:
+                created_at = datetime.fromisoformat(str(created_at_str).replace("Z", "+00:00"))
+                if now_dt - created_at > timedelta(minutes=REPORTED_WARNING_TTL_MINUTES):
+                    continue
+            except Exception:
+                pass
+        r_lat = row.get("lat")
+        r_lon = row.get("lon")
+        if r_lat is None or r_lon is None:
+            continue
+        if _haversine_distance(lat, lon, float(r_lat), float(r_lon)) <= DUPLICATE_RADIUS_M:
+            return True
+    return False
+
 # Mapping Supabase integer sensitivities (1 = little, 2 = medium, 3 = high,
 # 4 = very high) to discomfort multiplier weights. Higher sensitivity = more
 # strongly affected = larger weight.
@@ -947,7 +1000,7 @@ async def get_user_warnings(
         _u_light = 3
         _u_smell = 3
 
-    warnings = []
+    warnings: List[Dict[str, Any]] = []
     warning_id_counter = 1
 
     # 2. Temperature check
@@ -1194,7 +1247,7 @@ async def get_user_warnings(
                 if created_at_str:
                     try:
                         created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-                        if now_dt - created_at > timedelta(hours=6):
+                        if now_dt - created_at > timedelta(minutes=REPORTED_WARNING_TTL_MINUTES):
                             continue
                     except Exception:
                         pass
@@ -1221,6 +1274,7 @@ async def get_user_warnings(
                             "icon": str(row.get("warning_type") or ""),
                             "lat": w_lat,
                             "lon": w_lon,
+                            "username": str(row.get("username") or "") or None,
                         })
     except Exception as e:
         print(f"Error fetching user reported warnings: {e}")

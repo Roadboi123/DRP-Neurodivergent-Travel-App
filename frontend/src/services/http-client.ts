@@ -31,6 +31,12 @@ export interface HttpClient {
    * rather than an error.
    */
   getResponse(path: string): Promise<Response>;
+  /**
+   * POST `body` returning the raw {@link Response} without status checking or
+   * parsing — for callers that treat a specific status (e.g. 409 conflict) as
+   * data rather than an error.
+   */
+  postResponse(path: string, body: unknown): Promise<Response>;
 }
 
 export interface HttpClientOptions {
@@ -90,6 +96,18 @@ export function createHttpClient({ baseUrl }: HttpClientOptions): HttpClient {
     async getResponse(path: string): Promise<Response> {
       const res = await fetch(url(path), {
         headers: getHeaders(),
+      });
+      if (res.status === 401) {
+        authStore.triggerUnauthorized();
+      }
+      return res;
+    },
+
+    async postResponse(path: string, body: unknown): Promise<Response> {
+      const res = await fetch(url(path), {
+        method: 'POST',
+        headers: getHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
       });
       if (res.status === 401) {
         authStore.triggerUnauthorized();
