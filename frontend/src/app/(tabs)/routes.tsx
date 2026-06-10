@@ -85,20 +85,33 @@ export default function RoutesScreen() {
   const [coords, setCoords] = useState<string | null>(null);
 
   const fetchCurrentLocation = async () => {
+    const defaultCoords = '51.4944,-0.1829';
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        const currentCoords = `${loc.coords.latitude},${loc.coords.longitude}`;
-        setCoords(currentCoords);
-        return currentCoords;
+      const getCoordsPromise = async () => {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          return `${loc.coords.latitude},${loc.coords.longitude}`;
+        }
+        return null;
+      };
+
+      const timeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), 3000)
+      );
+
+      const result = await Promise.race([getCoordsPromise(), timeoutPromise]);
+      if (result) {
+        setCoords(result);
+        return result;
       }
     } catch (e) {
       console.warn('Could not retrieve real-time location:', e);
     }
-    return null;
+    setCoords(defaultCoords);
+    return defaultCoords;
   };
 
   useEffect(() => {
