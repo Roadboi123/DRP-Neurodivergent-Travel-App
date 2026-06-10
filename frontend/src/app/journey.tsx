@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { AppState, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Modal, ScrollView } from 'react-native';
+import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
@@ -266,7 +266,99 @@ export default function JourneyScreen() {
   const [selectedWarning, setSelectedWarning] = useState<WarningItem | null>(null);
   // Transient banner shown e.g. when a report is rejected as a near-duplicate.
   const [reportNotice, setReportNotice] = useState<string | null>(null);
-  const [detailsVisible, setDetailsVisible] = useState(false);
+
+  // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
+  // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const SHEET_HEIGHT = SCREEN_HEIGHT * 0.7;
+  const COLLAPSED_HEIGHT = 96;
+  const MAX_TRANSLATE_Y = SHEET_HEIGHT - COLLAPSED_HEIGHT;
+
+  const panY = useRef(new Animated.Value(MAX_TRANSLATE_Y)).current;
+  const lastTranslateY = useRef(MAX_TRANSLATE_Y);
+  const startTranslateY = useRef(MAX_TRANSLATE_Y);
+  const scrollOffsetY = useRef(0);
+
+  useEffect(() => {
+    const id = panY.addListener(({ value }) => {
+      lastTranslateY.current = value;
+    });
+    return () => panY.removeListener(id);
+  }, [panY]);
+
+  const onPanResponderGrant = () => {
+    startTranslateY.current = lastTranslateY.current;
+    panY.setOffset(startTranslateY.current);
+    panY.setValue(0);
+  };
+
+  const onPanResponderMove = (_: any, gestureState: any) => {
+    const minVal = -startTranslateY.current;
+    const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
+    panY.setValue(Math.max(minVal, Math.min(maxVal, gestureState.dy)));
+  };
+
+  const onPanResponderRelease = (_: any, gestureState: any) => {
+    panY.flattenOffset();
+    const currentY = lastTranslateY.current;
+    const velocityY = gestureState.vy;
+    let targetY = MAX_TRANSLATE_Y;
+    if (velocityY < -0.3) {
+      targetY = 0;
+    } else if (velocityY > 0.3) {
+      targetY = MAX_TRANSLATE_Y;
+    } else {
+      targetY = currentY < MAX_TRANSLATE_Y / 2 ? 0 : MAX_TRANSLATE_Y;
+    }
+    Animated.spring(panY, {
+      toValue: targetY,
+      useNativeDriver: Platform.OS !== 'web',
+      tension: 50,
+      friction: 8,
+    }).start();
+  };
+
+  const headerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant,
+      onPanResponderMove,
+      onPanResponderRelease,
+      onPanResponderTerminate: () => {},
+    })
+  ).current;
+
+  const sheetPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        if (!verticalEnough) return false;
+        if (dy > 0 && scrollOffsetY.current <= 0) return true;
+        if (dy < 0 && lastTranslateY.current > 1) return true;
+        return false;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        if (!verticalEnough) return false;
+        if (dy > 0 && scrollOffsetY.current <= 0) return true;
+        if (dy < 0 && lastTranslateY.current > 1) return true;
+        return false;
+      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant,
+      onPanResponderMove,
+      onPanResponderRelease,
+      onPanResponderTerminate: () => {},
+    })
+  ).current;
 
   // Latest warnings, readable from the map's (stale-closure) message handlers.
   const warningsRef = useRef<WarningItem[]>([]);
@@ -603,26 +695,118 @@ export default function JourneyScreen() {
         ))}
       </View>
 
-      {/* Bottom Information Trip Bar */}
-      <View style={[styles.tripBar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackClick();
-            setDetailsVisible(true);
-          }}
-          style={[styles.tripActionBtn, { borderColor: palette.border, backgroundColor: accents.cyan }]}
-          accessibilityRole="button"
-          accessibilityLabel="Journey details"
-        >
-          <Ionicons name="list-outline" size={15} color={palette.textPrimary} />
-          <Text style={[styles.tripActionBtnText, { color: palette.textPrimary }]}>DETAILS</Text>
-        </TouchableOpacity>
-
-        <View style={styles.tripRightBlock}>
-          <Text style={[styles.tripDuration, { color: palette.textPrimary }]}>{route.duration} min</Text>
-          <Text style={[styles.tripPrice, { color: palette.textSecondary }]}>£{route.price.toFixed(2)}</Text>
+      {/* Swipe-up journey sheet — collapsed shows duration·cost; swipe up for details */}
+      <Animated.View
+        style={[
+          styles.sheetPanel,
+          {
+            backgroundColor: palette.surface,
+            borderColor: palette.border,
+            height: SHEET_HEIGHT,
+            transform: [{ translateY: panY }],
+          },
+        ]}
+      >
+        <View style={styles.sheetHeaderTouch} {...headerPanResponder.panHandlers}>
+          <View style={styles.sheetHandleContainer}>
+            <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
+          </View>
+          {/* Duration & cost, minimised, on the left */}
+          <View style={[styles.sheetStatsRow, { borderBottomColor: palette.divider }]}>
+            <Text style={[styles.sheetDuration, { color: palette.textPrimary }]}>{route.duration} min</Text>
+            <Text style={[styles.sheetDot, { color: palette.textMuted }]}>·</Text>
+            <Text style={[styles.sheetCost, { color: palette.textSecondary }]}>£{route.price.toFixed(2)}</Text>
+          </View>
         </View>
-      </View>
+
+        <View style={{ flex: 1 }} {...sheetPanResponder.panHandlers}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.detailsScrollContent}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              scrollOffsetY.current = e.nativeEvent.contentOffset.y;
+            }}
+          >
+            {/* Sensory alignment dashboard */}
+            <View style={[styles.detailsCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+              <Text style={[styles.detailsCardHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
+              <View style={styles.detailsSensoryRow}>
+                <SensoryMeter level={route.noise} label="Sound" />
+                <SensoryMeter level={route.crowds} label="Crowds" />
+                <SensoryMeter level={route.heat} label="Heat" />
+                <SensoryMeter level={route.light} label="Light" />
+                <SensoryMeter level={route.smell} label="Smell" />
+              </View>
+              {route.sensory_description ? (
+                <Text style={[styles.detailsSensoryDesc, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
+                  {route.sensory_description}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Step-by-step leg timeline */}
+            <View style={styles.detailsTimeline}>
+              {route.legs && route.legs.map((leg, lIdx) => {
+                const { iconName, bgColor: lineBgColor, textColor: lineTextColor } = getLegUIProps(
+                  leg.mode,
+                  leg.line,
+                  leg.instruction,
+                  accents
+                );
+                const isWalking = leg.mode.toLowerCase() === 'walking' || leg.mode.toLowerCase() === 'walk';
+                return (
+                  <View key={lIdx} style={styles.detailStepContainer}>
+                    <View style={styles.stepIndicatorCol}>
+                      <View style={[styles.stepNode, { backgroundColor: lineBgColor, borderColor: palette.border }]}>
+                        <Ionicons name={iconName} size={11} color={lineTextColor} />
+                      </View>
+                      <View style={[styles.stepLine, { backgroundColor: lineBgColor }]} />
+                    </View>
+                    <View style={styles.stepContentCol}>
+                      <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>{leg.departure}</Text>
+                      <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
+                        {leg.instruction} ({leg.duration_mins} mins)
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <Ionicons
+                          name={isWalking ? 'walk-outline' : 'exit-outline'}
+                          size={13}
+                          color={palette.textSecondary}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={[styles.detailsArrival, { color: palette.textSecondary }]}>
+                          {isWalking ? 'Walk to ' : 'Get off at '}
+                          <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{leg.arrival}</Text>
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+
+              {route.legs && route.legs.length > 0 && (
+                <View style={styles.detailStepContainer}>
+                  <View style={styles.stepIndicatorCol}>
+                    <View style={[styles.stepNode, { backgroundColor: palette.textPrimary, borderColor: palette.border }]}>
+                      <Ionicons name="pin" size={11} color={palette.surface} />
+                    </View>
+                  </View>
+                  <View style={styles.stepContentCol}>
+                    <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>
+                      {route.legs[route.legs.length - 1].arrival}
+                    </Text>
+                    <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
+                      Arrive at destination
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      </Animated.View>
 
       {/* Waze style reporting action bar — centred on screen */}
       {reportingType && activeReport && (
@@ -713,117 +897,6 @@ export default function JourneyScreen() {
         </View>
       )}
 
-      {/* Journey Details Overlay — read sensory load & the full step list mid-trip */}
-      <Modal
-        visible={detailsVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setDetailsVisible(false)}
-      >
-        <SafeAreaView style={[styles.overlayScreen, { backgroundColor: palette.surface }]}>
-          <View style={styles.overlayHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                analytics.trackClick();
-                setDetailsVisible(false);
-              }}
-              style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Close journey details"
-            >
-              <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-            </TouchableOpacity>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.overlayTitle, { color: palette.textPrimary }]} numberOfLines={1}>
-                {route.name}
-              </Text>
-              {route.subName ? (
-                <Text style={[styles.detailsSubtitle, { color: palette.textSecondary }]} numberOfLines={1}>
-                  {route.subName}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.detailsScrollContent} showsVerticalScrollIndicator={false}>
-            {/* Sensory alignment dashboard */}
-            <View style={[styles.detailsCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-              <Text style={[styles.detailsCardHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
-              <View style={styles.detailsSensoryRow}>
-                <SensoryMeter level={route.noise} label="Sound" />
-                <SensoryMeter level={route.crowds} label="Crowds" />
-                <SensoryMeter level={route.heat} label="Heat" />
-                <SensoryMeter level={route.light} label="Light" />
-                <SensoryMeter level={route.smell} label="Smell" />
-              </View>
-              {route.sensory_description ? (
-                <Text style={[styles.detailsSensoryDesc, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
-                  {route.sensory_description}
-                </Text>
-              ) : null}
-            </View>
-
-            {/* Step-by-step leg timeline */}
-            <View style={styles.detailsTimeline}>
-              {route.legs && route.legs.map((leg, lIdx) => {
-                const { iconName, bgColor: lineBgColor, textColor: lineTextColor } = getLegUIProps(
-                  leg.mode,
-                  leg.line,
-                  leg.instruction,
-                  accents
-                );
-                const isWalking = leg.mode.toLowerCase() === 'walking' || leg.mode.toLowerCase() === 'walk';
-                return (
-                  <View key={lIdx} style={styles.detailStepContainer}>
-                    <View style={styles.stepIndicatorCol}>
-                      <View style={[styles.stepNode, { backgroundColor: lineBgColor, borderColor: palette.border }]}>
-                        <Ionicons name={iconName} size={11} color={lineTextColor} />
-                      </View>
-                      <View style={[styles.stepLine, { backgroundColor: lineBgColor }]} />
-                    </View>
-                    <View style={styles.stepContentCol}>
-                      <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>{leg.departure}</Text>
-                      <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
-                        {leg.instruction} ({leg.duration_mins} mins)
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                        <Ionicons
-                          name={isWalking ? 'walk-outline' : 'exit-outline'}
-                          size={13}
-                          color={palette.textSecondary}
-                          style={{ marginRight: 4 }}
-                        />
-                        <Text style={[styles.detailsArrival, { color: palette.textSecondary }]}>
-                          {isWalking ? 'Walk to ' : 'Get off at '}
-                          <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{leg.arrival}</Text>
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
-
-              {route.legs && route.legs.length > 0 && (
-                <View style={styles.detailStepContainer}>
-                  <View style={styles.stepIndicatorCol}>
-                    <View style={[styles.stepNode, { backgroundColor: palette.textPrimary, borderColor: palette.border }]}>
-                      <Ionicons name="pin" size={11} color={palette.surface} />
-                    </View>
-                  </View>
-                  <View style={styles.stepContentCol}>
-                    <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>
-                      {route.legs[route.legs.length - 1].arrival}
-                    </Text>
-                    <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
-                      Arrive at destination
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -915,50 +988,53 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  tripBar: {
+  sheetPanel: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 18,
-    zIndex: 10,
-    borderWidth: 3,
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    overflow: 'hidden',
+    ...hardShadow(10),
+  },
+  sheetHeaderTouch: {
+    width: '100%',
+  },
+  sheetHandleContainer: {
     alignItems: 'center',
-    ...hardShadow(5),
+    paddingVertical: 10,
   },
-  tripActionBtn: {
-    borderWidth: 2,
-    borderRadius: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  sheetStatsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    ...hardShadow(2),
+    alignItems: 'baseline',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1.5,
   },
-  tripActionBtnText: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  tripRightBlock: {
-    alignItems: 'flex-end',
-  },
-  tripDuration: {
-    fontSize: 13,
+  sheetDuration: {
+    fontSize: 17,
     fontFamily: Fonts?.display,
     fontWeight: '900',
   },
-  tripPrice: {
-    fontSize: 9,
-    fontFamily: Fonts?.display,
+  sheetDot: {
+    fontSize: 15,
     fontWeight: '900',
-    marginTop: 1,
+  },
+  sheetCost: {
+    fontSize: 14,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
   },
   reportOverlayRoot: {
     ...StyleSheet.absoluteFillObject,
@@ -1030,23 +1106,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  overlayScreen: {
-    flex: 1,
-  },
-  overlayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 12 : 32,
-    paddingBottom: 12,
-    gap: 14,
-  },
-  overlayTitle: {
-    fontSize: 18,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
   warningListEmoji: {
     fontSize: 22,
   },
@@ -1107,11 +1166,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  detailsSubtitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
   },
   detailsScrollContent: {
     padding: 16,
