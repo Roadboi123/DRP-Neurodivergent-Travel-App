@@ -25,6 +25,7 @@ import {
   type RouteFilters,
   type SortMode,
 } from '@/components/routes/route-filtering';
+import { PresetIndicator } from '@/components/routes/preset-indicator';
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
@@ -303,6 +304,9 @@ export default function RoutesScreen() {
       )}
 
       <ScrollView style={{ backgroundColor: palette.background }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {/* Which sensory preset these results are scored against (+ shortcut to change) */}
+        {isLoggedIn && pool.length > 0 && <PresetIndicator />}
 
         {/* Warnings Banner — only shown once routes are loaded for a specific journey */}
         {pool.length > 0 && <WarningsPanel warnings={warnings} />}
