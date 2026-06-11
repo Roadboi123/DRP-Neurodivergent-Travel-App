@@ -1,45 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
+import {
+  REPORT_OPTIONS,
+  warningMarkerScript,
+  warningVisual,
+  type SensoryReportType,
+} from '@/components/routes/warning-markers';
 import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
-import type { RouteOption, WarningItem } from '@/types/route';
+import type { RouteOption } from '@/types/route';
 import { analytics } from '@/services/analytics';
-
-type SensoryReportType = 'sound' | 'heat' | 'smell' | 'crowds' | 'other';
-type Accents = ReturnType<typeof getAccents>;
-
-const REPORT_OPTIONS: {
-  type: SensoryReportType;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  emoji: string;
-  accent: keyof Accents;
-}[] = [
-  { type: 'sound', label: 'Sound', icon: 'radio-outline', emoji: '🔊', accent: 'cyan' },
-  { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🔥', accent: 'pink' },
-  { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '👃', accent: 'green' },
-  { type: 'crowds', label: 'Crowds', icon: 'people-outline', emoji: '👥', accent: 'orange' },
-  { type: 'other', label: 'Other', icon: 'add-circle-outline', emoji: '⚠️', accent: 'yellow' },
-];
-
-/**
- * Map a warning's stored `icon` (an Ionicon name, set when it was reported) to
- * the marker emoji and an accent-ramp colour, so journey markers stay readable
- * in both themes. Unknown icons fall back to the generic "other" look.
- */
-function warningVisual(icon: string, accents: Accents): { emoji: string; color: string } {
-  const option = REPORT_OPTIONS.find((o) => o.icon === icon) ?? REPORT_OPTIONS[REPORT_OPTIONS.length - 1];
-  return { emoji: option.emoji, color: accents[option.accent] };
-}
 
 function calculateHeading(from: [number, number], to: [number, number]): number {
   const dLon = ((to[1] - from[1]) * Math.PI) / 180;
@@ -184,47 +164,8 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
           map.panTo([lat, lon]);
         };
 
-        // Warning markers (Waze-style sensory icons)
-        let warningMarkers = {};
-        window.updateWarnings = function(warningsJson) {
-          const warnings = JSON.parse(warningsJson);
-          
-          // Remove old warning markers
-          for (const id in warningMarkers) {
-            map.removeLayer(warningMarkers[id]);
-          }
-          warningMarkers = {};
-
-          warnings.forEach((w) => {
-            if (w.lat == null || w.lon == null || w.hidden) return;
-
-            const markerHtml = \`
-              <div style="background-color: \${w.color}; width: 36px; height: 36px; border-radius: 50%; border: 3px solid #1d1c1c; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-weight: bold; position: relative;">
-                <span style="font-size: 16px;">\${w.emoji}</span>
-              </div>
-            \`;
-
-            const warningIcon = L.divIcon({
-              html: markerHtml,
-              className: 'warning-marker-icon',
-              iconSize: [36, 36],
-              iconAnchor: [18, 18]
-            });
-
-            const marker = L.marker([w.lat, w.lon], { icon: warningIcon }).addTo(map);
-
-            marker.on('click', function() {
-              const msg = JSON.stringify({ type: 'warningClick', id: w.id });
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(msg);
-              } else {
-                window.parent.postMessage(msg, '*');
-              }
-            });
-            
-            warningMarkers[w.id] = marker;
-          });
-        };
+        // Warning markers (Waze-style sensory icons) — shared with route details
+        ${warningMarkerScript()}
 
         // Listen for postMessage updates from Web iframe
         window.addEventListener('message', function(event) {
@@ -256,14 +197,22 @@ export default function JourneyScreen() {
 
   const webViewRef = useRef<WebView>(null);
 
+  // Warnings state, polling and remove/hide actions — shared with route details.
+  const {
+    formattedWarnings,
+    selectedWarning,
+    setSelectedWarning,
+    openWarningById,
+    selectedIsOwn,
+    removeOwnWarning,
+    dismissWarning,
+    addWarning,
+    hideAll,
+    setHideAll,
+  } = useRouteWarnings(route, accents);
+
   // States
   const [reportingType, setReportingType] = useState<SensoryReportType | null>(null);
-  // Real user-reported warnings near this journey (no mocks, no live TfL items).
-  const [warnings, setWarnings] = useState<WarningItem[]>([]);
-  // Other users' warnings this user has closed — hidden locally only, never deleted.
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
-  // The warning whose action card (Remove / Close) is currently open.
-  const [selectedWarning, setSelectedWarning] = useState<WarningItem | null>(null);
   // Transient banner shown e.g. when a report is rejected as a near-duplicate.
   const [reportNotice, setReportNotice] = useState<string | null>(null);
 
@@ -360,21 +309,6 @@ export default function JourneyScreen() {
     })
   ).current;
 
-  // Latest warnings, readable from the map's (stale-closure) message handlers.
-  const warningsRef = useRef<WarningItem[]>([]);
-  useEffect(() => {
-    warningsRef.current = warnings;
-  }, [warnings]);
-
-  // Open the action card for a tapped marker (looked up by id from the map).
-  const openWarningById = useCallback((id: string) => {
-    const warning = warningsRef.current.find((w) => w.id === id);
-    if (warning) {
-      analytics.trackWarningClick();
-      setSelectedWarning(warning);
-    }
-  }, []);
-
   // Analytics & Active Journey Lifecycles
   useEffect(() => {
     // Increment initial access on mount
@@ -428,61 +362,6 @@ export default function JourneyScreen() {
     return coords;
   }, [route]);
 
-  // Fetch the real, user-reported warnings near this journey. Live TfL/weather
-  // warnings (no coordinates) are intentionally not placed on the journey map —
-  // that's a separate story — so we keep only items reported by users.
-  const loadingRef = useRef(false);
-  const loadWarnings = useCallback(async () => {
-    const activeRoute = route;
-    if (!activeRoute || loadingRef.current) return;
-    loadingRef.current = true;
-    try {
-      const lineSet = new Set<string>();
-      const stationSet = new Set<string>();
-      activeRoute.legs?.forEach((leg) => {
-        if (leg.line) lineSet.add(leg.line);
-        if (leg.departure) stationSet.add(leg.departure);
-        if (leg.arrival) stationSet.add(leg.arrival);
-        leg.stops?.forEach((stop) => stationSet.add(stop));
-      });
-
-      const routeContext = {
-        lines: Array.from(lineSet),
-        stations: Array.from(stationSet),
-      };
-
-      const liveWarnings = await routesService.getWarnings(username || '', false, routeContext);
-
-      // User reports are the only ones with a reporter and real coordinates.
-      const userReports = liveWarnings.filter(
-        (w) => w.username != null && w.lat != null && w.lon != null,
-      );
-      // Avoid re-rendering (and a marker flicker) when the set is unchanged.
-      setWarnings((prev) => {
-        const prevIds = new Set(prev.map((p) => p.id));
-        const unchanged = prev.length === userReports.length && userReports.every((w) => prevIds.has(w.id));
-        return unchanged ? prev : userReports;
-      });
-    } catch (e) {
-      console.warn('Error loading route warnings:', e);
-    } finally {
-      loadingRef.current = false;
-    }
-  }, [route, routesService, username]);
-
-  // Poll so warnings reported by others appear, and expired ones drop off.
-  useEffect(() => {
-    loadWarnings();
-    const interval = setInterval(loadWarnings, 20000);
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') loadWarnings();
-    });
-    return () => {
-      clearInterval(interval);
-      sub.remove();
-    };
-  }, [loadWarnings]);
-
   // User location starts at the journey origin, facing the first leg.
   const userCoords = useMemo<[number, number]>(() => {
     return allPathCoords[0] || [51.5074, -0.1278];
@@ -493,23 +372,7 @@ export default function JourneyScreen() {
     return calculateHeading(allPathCoords[0], allPathCoords[1]);
   }, [allPathCoords]);
 
-  // Sync state to Leaflet map
-  const formattedWarnings = useMemo(() => {
-    return warnings.map((w) => {
-      const { emoji, color } = warningVisual(w.icon, accents);
-      return {
-        id: w.id,
-        title: w.title,
-        desc: w.desc,
-        emoji,
-        color,
-        lat: w.lat,
-        lon: w.lon,
-        hidden: dismissedIds.has(w.id),
-      };
-    });
-  }, [warnings, dismissedIds, accents]);
-
+  // Sync warnings + user location to the Leaflet map.
   useEffect(() => {
     const jsonString = JSON.stringify(formattedWarnings);
     if (Platform.OS === 'web') {
@@ -541,29 +404,6 @@ export default function JourneyScreen() {
     }
   };
 
-  // Own warning: delete from the DB (gone for everyone). Optimistically drop it.
-  const removeOwnWarning = async (warning: WarningItem) => {
-    setSelectedWarning(null);
-    setWarnings((prev) => prev.filter((w) => w.id !== warning.id));
-    try {
-      await routesService.deleteWarning(warning.id, username || 'anonymous');
-    } catch (err) {
-      console.warn('Failed to delete warning on backend:', err);
-    }
-  };
-
-  // Someone else's warning: hide it for this user only, no API call.
-  const dismissWarning = (warning: WarningItem) => {
-    setSelectedWarning(null);
-    setDismissedIds((prev) => {
-      const next = new Set(prev);
-      next.add(warning.id);
-      return next;
-    });
-  };
-
-  const selectedIsOwn = !!selectedWarning && !!username && selectedWarning.username === username;
-
   // Actions — report a sensory warning at the (simulated) current location.
   const submitReport = async () => {
     if (!reportingType) return;
@@ -588,7 +428,7 @@ export default function JourneyScreen() {
       if (result.duplicate) {
         setReportNotice('Already reported nearby');
       } else {
-        setWarnings((prev) => [result.warning, ...prev]);
+        addWarning(result.warning);
       }
     } catch (err) {
       console.warn('Failed to persist warning report on backend:', err);
@@ -662,6 +502,22 @@ export default function JourneyScreen() {
             <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
           </TouchableOpacity>
         </View>
+
+        {/* Hide / show all warning markers */}
+        <TouchableOpacity
+          onPress={() => {
+            analytics.trackClick();
+            setHideAll(!hideAll);
+          }}
+          style={[
+            styles.circleButton,
+            { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+        >
+          <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={20} color={palette.textPrimary} />
+        </TouchableOpacity>
       </View>
 
       {/* Transient notice (e.g. duplicate report rejected) */}
