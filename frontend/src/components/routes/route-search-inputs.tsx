@@ -23,7 +23,19 @@ interface RouteSearchInputsProps {
 }
 
 const RECENTS_KEY = 'calm_travel_recent_locations';
-const FRONTEND_SUGGESTIONS_CACHE: Record<string, LocationSuggestion[]> = {};
+// Module-level suggestion cache, capped so it can't grow unbounded across a long
+// session (e.g. the same query typed from many different GPS locations). A Map
+// keeps insertion order, so we evict the oldest entry once over the cap.
+const SUGGESTIONS_CACHE_MAX = 20;
+const FRONTEND_SUGGESTIONS_CACHE = new Map<string, LocationSuggestion[]>();
+
+function cacheSuggestions(key: string, value: LocationSuggestion[]) {
+  FRONTEND_SUGGESTIONS_CACHE.set(key, value);
+  if (FRONTEND_SUGGESTIONS_CACHE.size > SUGGESTIONS_CACHE_MAX) {
+    const oldest = FRONTEND_SUGGESTIONS_CACHE.keys().next().value;
+    if (oldest !== undefined) FRONTEND_SUGGESTIONS_CACHE.delete(oldest);
+  }
+}
 
 export function RouteSearchInputs({
   startLoc,
@@ -171,8 +183,9 @@ export function RouteSearchInputs({
 
     // Check frontend cache
     const cacheKey = `${normQuery}:${userLat}:${userLon}`;
-    if (FRONTEND_SUGGESTIONS_CACHE[cacheKey]) {
-      setSuggestions(FRONTEND_SUGGESTIONS_CACHE[cacheKey]);
+    const cached = FRONTEND_SUGGESTIONS_CACHE.get(cacheKey);
+    if (cached) {
+      setSuggestions(cached);
       setSuggestionsLoading(false);
       return;
     }
@@ -200,7 +213,7 @@ export function RouteSearchInputs({
           merged.sort(compareSuggestions);
 
           // Save to frontend cache
-          FRONTEND_SUGGESTIONS_CACHE[cacheKey] = merged;
+          cacheSuggestions(cacheKey, merged);
           return merged;
         });
       } catch (err) {
