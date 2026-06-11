@@ -75,14 +75,14 @@ class AnalyticsService {
     console.log(`[Analytics] Starting journey. time_to_start=${timeToStart}s, actions=${actions}, route_changed=${routeChangedAfterWarning}`);
     
     // Post to backend
-    this.postJourneyMetrics(timeToStart, actions, routeChangedAfterWarning, this.warningClickedForInfo);
+    this.postJourneyMetrics(timeToStart, actions, routeChangedAfterWarning, null);
   }
 
   endJourney() {
     if (this.isJourneyActive) {
-      console.log(`[Analytics] Ending journey. App accesses during journey: ${this.appAccessesDuringJourney}`);
-      // Post updated app accesses to backend by reporting another metrics log containing just accesses
-      this.postJourneyMetrics(null, null, null, null, this.appAccessesDuringJourney);
+      console.log(`[Analytics] Ending journey. App accesses during journey: ${this.appAccessesDuringJourney}, warnings clicked: ${this.warningClickedForInfo}`);
+      // Post updated app accesses and warning click interaction stats to backend at the end of the journey
+      this.postJourneyMetrics(null, null, null, this.warningClickedForInfo, this.appAccessesDuringJourney);
       this.isJourneyActive = false;
       this.appAccessesDuringJourney = 0;
     }
