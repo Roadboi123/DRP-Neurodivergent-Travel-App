@@ -15,6 +15,7 @@ import {
 } from '@/services/warning-store';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { filterWarningsNearRoute } from '@/utils/geo';
+import { sendLocalNotification } from '@/services/notifications';
 
 type Accents = ReturnType<typeof getAccents>;
 
@@ -89,7 +90,7 @@ export function useRouteWarnings(
   const openWarningById = useCallback((id: string) => {
     const warning = warningsRef.current.find((w) => w.id === id);
     if (warning) {
-      analytics.trackWarningClick();
+      analytics.trackWarningInteraction();
       setSelectedWarning(warning);
     }
   }, []);
@@ -112,6 +113,34 @@ export function useRouteWarnings(
     };
   }, [enabled, reload]);
 
+  // Keep track of warning IDs we already know about for this route.
+  // We reset this set whenever the route changes so we don't notify for pre-existing warnings.
+  const knownWarningIdsRef = useRef<Set<string>>(new Set());
+  const prevRouteIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentRouteId = route?.id || null;
+    if (currentRouteId !== prevRouteIdRef.current) {
+      // Route changed or was cleared. Reset our known warnings set.
+      knownWarningIdsRef.current = new Set(warnings.map((w) => w.id));
+      prevRouteIdRef.current = currentRouteId;
+    } else if (route && enabled) {
+      // Same route, check if any warning is new
+      for (const w of warnings) {
+        if (!knownWarningIdsRef.current.has(w.id)) {
+          knownWarningIdsRef.current.add(w.id);
+          // Only notify if it was reported by someone else (not the current user)
+          if (!username || w.username !== username) {
+            sendLocalNotification(
+              'New Real-time Warning on your Route!',
+              `${w.title}: ${w.desc}`
+            ).catch((err) => console.warn('Failed to send local notification:', err));
+          }
+        }
+      }
+    }
+  }, [warnings, route, enabled, username]);
+
   const formattedWarnings = useMemo(
     () => formatWarnings(warnings, accents, dismissedIds, hideAll),
     [warnings, accents, dismissedIds, hideAll],
@@ -120,6 +149,7 @@ export function useRouteWarnings(
   // Own warning: delete from the DB (gone for everyone). Optimistically drop it.
   const removeOwnWarning = useCallback(
     async (warning: WarningItem) => {
+      analytics.trackWarningInteraction();
       setSelectedWarning(null);
       removeReportedWarning(warning.id);
       try {
@@ -133,6 +163,7 @@ export function useRouteWarnings(
 
   // Someone else's warning: hide it for this user only, no API call.
   const dismissWarning = useCallback((warning: WarningItem) => {
+    analytics.trackWarningInteraction();
     setSelectedWarning(null);
     setDismissedIds((prev) => {
       const next = new Set(prev);

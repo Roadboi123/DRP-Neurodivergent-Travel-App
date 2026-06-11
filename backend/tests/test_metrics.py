@@ -17,7 +17,7 @@ def test_post_journey_metrics():
             "actions_in_timeframe": 5,
             "route_changed_after_warning": True,
             "app_accesses_during_journey": 2,
-            "warning_clicked_for_info": False
+            "warning_interacted_with": False
         }
         res = client.post("/metrics/journey", json=payload)
         
@@ -33,7 +33,7 @@ def test_post_journey_metrics():
         assert inserted_row["actions_in_timeframe"] == 5
         assert inserted_row["route_changed_after_warning"] is True
         assert inserted_row["app_accesses_during_journey"] == 2
-        assert inserted_row["warning_clicked_for_info"] is False
+        assert inserted_row["warning_interacted_with"] is False
 
 
 def test_post_disruption_metrics():
@@ -65,9 +65,9 @@ def test_get_metrics_summary():
     
     # Mock data returned from DB
     journey_mock_data = [
-        {"time_to_start_seconds": 30.0, "actions_in_timeframe": 4, "route_changed_after_warning": True, "app_accesses_during_journey": 1, "warning_clicked_for_info": True},
-        {"time_to_start_seconds": 60.0, "actions_in_timeframe": 6, "route_changed_after_warning": False, "app_accesses_during_journey": 3, "warning_clicked_for_info": False},
-        {"time_to_start_seconds": None, "actions_in_timeframe": None, "route_changed_after_warning": None, "app_accesses_during_journey": None, "warning_clicked_for_info": None},
+        {"time_to_start_seconds": 30.0, "actions_in_timeframe": 4, "route_changed_after_warning": True, "app_accesses_during_journey": 1, "warning_interacted_with": True},
+        {"time_to_start_seconds": 60.0, "actions_in_timeframe": 6, "route_changed_after_warning": False, "app_accesses_during_journey": 3, "warning_interacted_with": False},
+        {"time_to_start_seconds": None, "actions_in_timeframe": None, "route_changed_after_warning": None, "app_accesses_during_journey": None, "warning_interacted_with": None},
     ]
     disruption_mock_data = [
         {"time_taken_seconds": 10.0, "would_contribute": True},
@@ -108,7 +108,7 @@ def test_get_metrics_summary():
         assert data["avg_app_accesses_during_journey"] == 2.0
         
         # pct warning clicked: 1 True out of 2 non-nulls = 50.0%
-        assert data["pct_warning_clicked_for_info"] == 50.0
+        assert data["pct_warning_interacted_with"] == 50.0
         
         # avg time to report: (10 + 20) / 2 = 15.0
         assert data["avg_time_taken_to_report"] == 15.0

@@ -88,7 +88,7 @@
             ],
             "title": "Time To Start Seconds"
           },
-          "warning_clicked_for_info": {
+          "warning_interacted_with": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -97,7 +97,7 @@
                 "type": "null"
               }
             ],
-            "title": "Warning Clicked For Info"
+            "title": "Warning Interacted With"
           }
         },
         "title": "JourneyMetricsCreate",
@@ -326,7 +326,7 @@
             ],
             "title": "Pct Route Changed After Warning"
           },
-          "pct_warning_clicked_for_info": {
+          "pct_warning_interacted_with": {
             "anyOf": [
               {
                 "type": "number"
@@ -335,7 +335,7 @@
                 "type": "null"
               }
             ],
-            "title": "Pct Warning Clicked For Info"
+            "title": "Pct Warning Interacted With"
           },
           "pct_would_contribute": {
             "anyOf": [

@@ -434,6 +434,7 @@ export default function JourneyScreen() {
 
     setReportingType(null);
     analytics.endDisruptionReport(true);
+    analytics.trackWarningInteraction();
 
     try {
       const result = await routesService.reportWarning(body);

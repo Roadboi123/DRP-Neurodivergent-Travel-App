@@ -12,7 +12,8 @@ class AnalyticsService {
   private originalRouteId: string | null = null;
   private chosenRouteId: string | null = null;
   private warningsSeen: boolean = false;
-  private warningClickedForInfo: boolean = false;
+  private warningInteractedWith: boolean = false;
+  private isSessionLogged: boolean = false;
   
   // Active journey stats
   private appAccessesDuringJourney: number = 0;
@@ -22,14 +23,32 @@ class AnalyticsService {
   private reportOpenTime: number | null = null;
 
   startSearch(startName: string, endName: string) {
+    // Log previous search session if it wasn't logged yet
+    this.endSearchSession();
+
     this.destinationSearchTime = Date.now();
     this.clickCount = 0;
     this.screenChangeCount = 0;
     this.originalRouteId = null;
     this.chosenRouteId = null;
     this.warningsSeen = false;
-    this.warningClickedForInfo = false;
+    this.warningInteractedWith = false;
+    this.isSessionLogged = false;
     console.log('[Analytics] Search started. Tracking initialized.');
+  }
+
+  endSearchSession() {
+    if (this.destinationSearchTime && !this.isSessionLogged) {
+      const actions = this.clickCount + this.screenChangeCount;
+      const routeChanged = (this.originalRouteId && this.chosenRouteId) ? (this.originalRouteId !== this.chosenRouteId) : false;
+      const routeChangedAfterWarning = this.warningsSeen ? routeChanged : false;
+
+      console.log(`[Analytics] Ending search session (no Go). actions=${actions}, warning_interacted=${this.warningInteractedWith}`);
+      
+      // Log session with null time_to_start_seconds to indicate they did not hit Go
+      this.postJourneyMetrics(null, actions, routeChangedAfterWarning, this.warningInteractedWith, null);
+      this.isSessionLogged = true;
+    }
   }
 
   trackClick() {
@@ -53,10 +72,10 @@ class AnalyticsService {
     console.log(`[Analytics] Route viewed. originalRouteId=${this.originalRouteId}, chosenRouteId=${this.chosenRouteId}, hasWarnings=${hasWarnings}`);
   }
 
-  trackWarningClick() {
-    this.warningClickedForInfo = true;
+  trackWarningInteraction() {
+    this.warningInteractedWith = true;
     this.trackClick();
-    console.log('[Analytics] Warning/report clicked for details.');
+    console.log('[Analytics] Warning/report interacted with.');
   }
 
   startJourney(routeId: string) {
@@ -74,15 +93,18 @@ class AnalyticsService {
 
     console.log(`[Analytics] Starting journey. time_to_start=${timeToStart}s, actions=${actions}, route_changed=${routeChangedAfterWarning}`);
     
-    // Post to backend
+    // Post to backend (send null warning_interacted_with to prevent double-counting, since we send final boolean at end of journey)
     this.postJourneyMetrics(timeToStart, actions, routeChangedAfterWarning, null);
+    
+    // Mark session as logged so endSearchSession doesn't trigger again
+    this.isSessionLogged = true;
   }
 
   endJourney() {
     if (this.isJourneyActive) {
-      console.log(`[Analytics] Ending journey. App accesses during journey: ${this.appAccessesDuringJourney}, warnings clicked: ${this.warningClickedForInfo}`);
-      // Post updated app accesses and warning click interaction stats to backend at the end of the journey
-      this.postJourneyMetrics(null, null, null, this.warningClickedForInfo, this.appAccessesDuringJourney);
+      console.log(`[Analytics] Ending journey. App accesses during journey: ${this.appAccessesDuringJourney}, warnings interacted with: ${this.warningInteractedWith}`);
+      // Post updated app accesses and warning interaction stats to backend at the end of the journey
+      this.postJourneyMetrics(null, null, null, this.warningInteractedWith, this.appAccessesDuringJourney);
       this.isJourneyActive = false;
       this.appAccessesDuringJourney = 0;
     }
@@ -122,7 +144,7 @@ class AnalyticsService {
     timeToStart: number | null,
     actions: number | null,
     routeChanged: boolean | null,
-    warningClicked: boolean | null,
+    warningInteracted: boolean | null,
     accesses: number | null = null
   ) {
     try {
@@ -131,7 +153,7 @@ class AnalyticsService {
         actions_in_timeframe: actions,
         route_changed_after_warning: routeChanged,
         app_accesses_during_journey: accesses,
-        warning_clicked_for_info: warningClicked,
+        warning_interacted_with: warningInteracted,
       };
       
       await client.post('/metrics/journey', body);
