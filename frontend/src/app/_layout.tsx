@@ -19,6 +19,7 @@ import { ServicesProvider } from '@/services/services-context';
 import { AuthProvider, useAuth } from '@/context/auth-context';
 import { PresetsProvider } from '@/context/presets-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
+import { requestNotificationPermissions } from '@/services/notifications';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -69,6 +70,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
+      requestNotificationPermissions().catch((e) => {
+        console.warn('Failed to request notification permissions:', e);
+      });
     }
   }, [fontsLoaded]);
 
