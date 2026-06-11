@@ -6,8 +6,10 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
+import { warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
 import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
 import { analytics } from '@/services/analytics';
@@ -25,7 +27,55 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   const semantic = getSemanticColors(isDark);
   const linkColor = semantic.link;
 
+  // User-reported warnings on the pre-Go map — same source, markers and
+  // remove/hide actions as the live journey. Poll only while the sheet is open.
+  const {
+    formattedWarnings,
+    selectedWarning,
+    setSelectedWarning,
+    openWarningById,
+    selectedIsOwn,
+    removeOwnWarning,
+    dismissWarning,
+    hideAll,
+    setHideAll,
+  } = useRouteWarnings(route, accents, visible);
+
+  const webViewRef = React.useRef<WebView>(null);
+
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
+
+  // Push the latest markers to the map, and listen for marker taps coming back.
+  React.useEffect(() => {
+    if (!visible) return;
+    const jsonString = JSON.stringify(formattedWarnings);
+    if (Platform.OS === 'web') {
+      const iframe = document.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'updateWarnings', warnings: jsonString }, '*');
+      }
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `if (window.updateWarnings) { window.updateWarnings('${jsonString.replace(/'/g, "\\'")}'); } true;`,
+      );
+    }
+  }, [visible, formattedWarnings]);
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleWebMessage = (event: MessageEvent) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data.type === 'warningClick' && data.id) {
+          openWarningById(data.id);
+        }
+      } catch {
+        // Ignore other/external window messages
+      }
+    };
+    window.addEventListener('message', handleWebMessage);
+    return () => window.removeEventListener('message', handleWebMessage);
+  }, [openWarningById]);
 
   // Bottom Sheet animations and dimensions
   const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -395,6 +445,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         .leaflet-tile-container img {
           box-shadow: 0 0 1px rgba(0,0,0,0.05);
         }
+        .warning-marker-icon { background: none; border: none; }
       </style>
     </head>
     <body>
@@ -417,6 +468,19 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         if (bounds.length > 0) {
           map.fitBounds(bounds, { padding: [35, 35] });
         }
+
+        // Warning markers (Waze-style sensory icons) — shared with the journey map.
+        ${warningMarkerScript()}
+
+        // Receive marker updates pushed from React.
+        window.addEventListener('message', function(event) {
+          try {
+            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            if (data.type === 'updateWarnings') {
+              window.updateWarnings(data.warnings);
+            }
+          } catch (e) {}
+        });
       </script>
     </body>
     </html>
@@ -488,14 +552,43 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                   />
                 ) : (
                   <WebView
+                    ref={webViewRef}
                     source={{ html: leafletHtml }}
                     style={{ flex: 1, backgroundColor: 'transparent' }}
                     originWhitelist={['*']}
                     domStorageEnabled={true}
                     javaScriptEnabled={true}
+                    onMessage={(event) => {
+                      try {
+                        const data = JSON.parse(event.nativeEvent.data);
+                        if (data.type === 'warningClick' && data.id) {
+                          openWarningById(data.id);
+                        }
+                      } catch {
+                        // Ignore
+                      }
+                    }}
                   />
                 )}
               </View>
+            )}
+
+            {/* Hide / show all warning markers (mirrors the journey screen) */}
+            {hasMapCoords && (
+              <TouchableOpacity
+                onPress={() => {
+                  analytics.trackClick();
+                  setHideAll(!hideAll);
+                }}
+                style={[
+                  styles.hideWarningsBtn,
+                  { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+              >
+                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={20} color={palette.textPrimary} />
+              </TouchableOpacity>
             )}
           </View>
 
@@ -685,6 +778,59 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
               </ScrollView>
             </View>
           </Animated.View>
+
+          {/* Tapped-warning action card — Remove (own) or Close (someone else's) */}
+          {selectedWarning && (
+            <View style={styles.warningOverlayRoot} pointerEvents="box-none">
+              <TouchableOpacity
+                style={styles.warningBackdrop}
+                activeOpacity={1}
+                onPress={() => setSelectedWarning(null)}
+              />
+              <View style={styles.warningCenterContainer} pointerEvents="box-none">
+                <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedWarning(null)}
+                    style={[styles.warningCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss"
+                  >
+                    <Ionicons name="close" size={16} color={palette.textPrimary} />
+                  </TouchableOpacity>
+
+                  <View
+                    style={[
+                      styles.warningCardIcon,
+                      { backgroundColor: warningVisual(selectedWarning.icon, accents).color, borderColor: palette.border },
+                    ]}
+                  >
+                    <Text style={styles.warningCardEmoji}>{warningVisual(selectedWarning.icon, accents).emoji}</Text>
+                  </View>
+
+                  <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
+                  <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
+
+                  <TouchableOpacity
+                    onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.warningCardAction,
+                      { backgroundColor: selectedIsOwn ? accents.pink : accents.green, borderColor: palette.border },
+                    ]}
+                  >
+                    <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
+                    <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                      {selectedIsOwn ? 'Remove' : 'Close'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
+                    {selectedIsOwn ? 'Removes it from the map for everyone' : 'Hides it for you only'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
       </SafeAreaView>
     </Modal>
@@ -934,5 +1080,105 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: '75%',
     zIndex: 5,
+  },
+  hideWarningsBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    ...hardShadow(3),
+  },
+  warningOverlayRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+  },
+  warningBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  warningCenterContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  warningCard: {
+    borderWidth: 3,
+    borderRadius: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 300,
+    gap: 8,
+    ...hardShadow(6),
+  },
+  warningCancelBtn: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...hardShadow(2),
+  },
+  warningCardIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  warningCardEmoji: {
+    fontSize: 22,
+  },
+  warningCardTitle: {
+    fontSize: 15,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  warningCardDesc: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  warningCardAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 2.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    alignSelf: 'stretch',
+    marginTop: 4,
+    ...hardShadow(2),
+  },
+  warningCardActionText: {
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  warningCardHint: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
