@@ -1013,6 +1013,18 @@
       "WarningItemSchema": {
         "description": "Client-facing live warning item schema, filtered by user sensory sensitivities.",
         "properties": {
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1.0,
+            "title": "Confidence Score"
+          },
           "desc": {
             "title": "Desc",
             "type": "string"
@@ -1046,6 +1058,18 @@
               }
             ],
             "title": "Lon"
+          },
+          "report_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "title": "Report Count"
           },
           "severity": {
             "enum": [

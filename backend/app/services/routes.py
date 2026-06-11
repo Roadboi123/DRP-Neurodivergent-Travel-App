@@ -1242,6 +1242,9 @@ async def get_user_warnings(
         if res.data:
             from datetime import datetime, timezone, timedelta
             now_dt = datetime.now(timezone.utc)
+            
+            # Step A: Filter by TTL and relevance
+            relevant_rows = []
             for row in res.data:
                 if not isinstance(row, dict):
                     continue
@@ -1266,18 +1269,126 @@ async def get_user_warnings(
                             if dist <= 1500:
                                 is_relevant = True
                                 break
-
                     if is_relevant:
-                        warnings.append({
-                            "id": str(row.get("id") or ""),
-                            "title": str(row.get("title") or ""),
-                            "desc": str(row.get("description") or ""),
-                            "severity": "medium",
-                            "icon": str(row.get("warning_type") or ""),
-                            "lat": w_lat,
-                            "lon": w_lon,
-                            "username": str(row.get("username") or "") or None,
-                        })
+                        relevant_rows.append(row)
+
+            if relevant_rows:
+                # Step B: Batch fetch reporter sensitivities
+                user_sens_map: dict[str, dict[str, Any]] = {}
+                usernames = list({r.get("username") for r in relevant_rows if r.get("username")})
+                if usernames:
+                    try:
+                        sens_res = supabase.table("user_sensitivities").select("*").in_("username", usernames).execute()
+                        if sens_res.data:
+                            for s_row in sens_res.data:
+                                if isinstance(s_row, dict):
+                                    username_val = s_row.get("username")
+                                    if username_val:
+                                        user_sens_map[str(username_val)] = s_row
+                    except Exception as e:
+                        print(f"Error fetching user sensitivities batch: {e}")
+
+                # Step C: Calculate weights for each report
+                valid_reports: list[dict[str, Any]] = []
+                for row in relevant_rows:
+                    r_user = row.get("username")
+                    warning_type = str(row.get("warning_type") or "")
+                    
+                    # Determine sensitivity setting for this warning type
+                    sens_key = None
+                    if "radio" in warning_type or "sound" in warning_type or "noise" in warning_type:
+                        sens_key = "noise_sensitivity"
+                    elif "people" in warning_type or "crowd" in warning_type:
+                        sens_key = "crowd_sensitivity"
+                    elif "thermometer" in warning_type or "heat" in warning_type or "temp" in warning_type:
+                        sens_key = "heat_sensitivity"
+                    elif "flower" in warning_type or "smell" in warning_type:
+                        sens_key = "smell_sensitivity"
+
+                    weight = 1.0
+                    if r_user and r_user in user_sens_map and sens_key:
+                        sens_val = user_sens_map[r_user].get(sens_key)
+                        if sens_val is not None:
+                            try:
+                                sens_val = int(sens_val)
+                                if sens_val == 3:
+                                    weight = 0.5
+                                elif sens_val == 1:
+                                    weight = 2.0
+                            except (ValueError, TypeError):
+                                pass
+
+                    lat_val = row.get("lat")
+                    lon_val = row.get("lon")
+                    lat_float = float(lat_val) if lat_val is not None else 0.0
+                    lon_float = float(lon_val) if lon_val is not None else 0.0
+
+                    valid_reports.append({
+                        "id": str(row.get("id") or ""),
+                        "title": str(row.get("title") or ""),
+                        "desc": str(row.get("description") or ""),
+                        "warning_type": warning_type,
+                        "lat": lat_float,
+                        "lon": lon_float,
+                        "username": r_user,
+                        "created_at_str": str(row.get("created_at") or ""),
+                        "weight": weight
+                    })
+
+                # Step D: Group/cluster warnings of same type within 150 meters
+                clusters: list[list[dict[str, Any]]] = []
+                for report in valid_reports:
+                    matched_cluster = None
+                    for cluster in clusters:
+                        rep = cluster[0]
+                        if rep["warning_type"] == report["warning_type"]:
+                            dist = _haversine_distance(report["lat"], report["lon"], rep["lat"], rep["lon"])
+                            if dist <= 150: # _haversine_distance returns meters
+                                matched_cluster = cluster
+                                break
+                    if matched_cluster is not None:
+                        matched_cluster.append(report)
+                    else:
+                        clusters.append([report])
+
+                # Step E: Format and aggregate each cluster
+                for cluster in clusters:
+                    # Sort reports by created_at_str descending to find the latest
+                    cluster.sort(key=lambda x: str(x.get("created_at_str") or ""), reverse=True)
+                    representative = cluster[0]
+                    total_weight = sum(float(r["weight"]) for r in cluster)
+                    report_count = len(cluster)
+
+                    if total_weight >= 3.0:
+                        confidence_level = "High"
+                        severity = "high"
+                    elif total_weight >= 1.5:
+                        confidence_level = "Medium"
+                        severity = "medium"
+                    else:
+                        confidence_level = "Low"
+                        severity = "info"
+
+                    # Format dynamic description
+                    prefix = f"[Confidence: {confidence_level} ({report_count} report{'s' if report_count > 1 else ''})] "
+                    desc = prefix + str(representative["desc"])
+
+                    # Check if the current user requesting warnings was one of the reporters
+                    own_report = next((r for r in cluster if username and r["username"] == username), None)
+                    final_username = username if own_report else representative["username"]
+
+                    warnings.append({
+                        "id": str(representative["id"]),
+                        "title": str(representative["title"]),
+                        "desc": desc,
+                        "severity": severity,
+                        "icon": str(representative["warning_type"]),
+                        "lat": float(representative["lat"]) if representative["lat"] is not None else None,
+                        "lon": float(representative["lon"]) if representative["lon"] is not None else None,
+                        "username": final_username or None,
+                        "confidence_score": float(total_weight),
+                        "report_count": int(report_count)
+                    })
     except Exception as e:
         print(f"Error fetching user reported warnings: {e}")
 

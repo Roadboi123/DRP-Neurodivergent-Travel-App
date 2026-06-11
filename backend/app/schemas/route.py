@@ -79,6 +79,8 @@ class WarningItemSchema(BaseModel):
     # TfL/weather/event warnings. The client uses this to tell its own reports
     # (which it may delete from the DB) apart from everyone else's.
     username: Optional[str] = None
+    confidence_score: Optional[float] = 1.0
+    report_count: Optional[int] = 1
 
 
 class ReportWarningSchema(BaseModel):
