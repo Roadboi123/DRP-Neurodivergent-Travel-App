@@ -24,6 +24,13 @@ const listeners = new Set<Listener>();
 let snapshot: WarningItem[] = [];
 
 let loading = false;
+let lastLoadedAt = 0;
+
+// Collapse the bursts of reloads that fire close together (routes fetch + screen
+// focus + each warning-hook mounting), which would otherwise hit the backend
+// several times within a few ms for the same data. The 20s poll interval is well
+// outside this window, so periodic refresh is unaffected.
+const MIN_RELOAD_INTERVAL_MS = 8000;
 
 function emit() {
   snapshot = Array.from(warnings.values());
@@ -61,15 +68,19 @@ export function removeReportedWarning(id: string): void {
  * the full set of non-expired reported warnings, unfiltered by sensitivity or
  * route — each screen narrows to its own route client-side. Replacing the map
  * each load lets expired/removed warnings drop off; concurrent calls are deduped
- * via the `loading` guard. Optimistic adds survive until the next load, by which
- * point they've been persisted and are returned by the fetch.
+ * via the `loading` guard, and rapid repeat calls are throttled to
+ * `MIN_RELOAD_INTERVAL_MS` (pass `force` to bypass). Optimistic adds survive
+ * until the next load, by which point they've been persisted and are returned.
  */
 export async function loadWarningStore(
   service: RoutesService,
   username: string,
+  force = false,
 ): Promise<void> {
   if (loading) return;
+  if (!force && Date.now() - lastLoadedAt < MIN_RELOAD_INTERVAL_MS) return;
   loading = true;
+  lastLoadedAt = Date.now();
   try {
     const all = await service.getWarnings(username || '', true);
     // Only geolocated user reports can be drawn as map markers.
