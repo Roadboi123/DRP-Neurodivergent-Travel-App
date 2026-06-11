@@ -159,7 +159,9 @@ COMMON_STATIONS = {
 }
 
 
-async def _get_station_coords(station_name: str) -> Optional[tuple[float, float]]:
+def _get_station_coords(station_name: str) -> Optional[tuple[float, float]]:
+    # Pure in-memory lookup (no I/O) — kept synchronous so callers don't pay an
+    # await round-trip per station when resolving a route's coordinates.
     if not station_name:
         return None
     name_clean = station_name.lower()
@@ -741,7 +743,7 @@ async def get_route_suggestions(
                 # Option B: Exit at an intermediate stop of this leg
                 stops = leg.get("stops", [])
                 for stop_idx, stop_name in enumerate(stops):
-                    stop_coords = await _get_station_coords(stop_name)
+                    stop_coords = _get_station_coords(stop_name)
                     if stop_coords:
                         stop_lat, stop_lon = stop_coords
                         
@@ -1232,7 +1234,7 @@ async def get_user_warnings(
         route_coords = []
         if route_stations:
             for s in route_stations:
-                coords = await _get_station_coords(s)
+                coords = _get_station_coords(s)
                 if coords:
                     route_coords.append(coords)
 
