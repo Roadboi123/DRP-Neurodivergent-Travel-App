@@ -20,12 +20,25 @@ interface RouteDetailsModalProps {
   onClose: () => void;
 }
 
-export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModalProps) {
+export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteDetailsModalProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
   const semantic = getSemanticColors(isDark);
   const linkColor = semantic.link;
+
+  // Cache the route prop so that when selectedRoute becomes null on the parent,
+  // the Modal remains mounted and can perform its closing transition/cleanup
+  // with visible=false.
+  const [cachedRoute, setCachedRoute] = useState<RouteOption | null>(null);
+
+  React.useEffect(() => {
+    if (propRoute) {
+      setCachedRoute(propRoute);
+    }
+  }, [propRoute]);
+
+  const route = propRoute || cachedRoute;
 
   // User-reported warnings on the pre-Go map — same source, markers and
   // remove/hide actions as the live journey. Poll only while the sheet is open.
