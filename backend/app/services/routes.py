@@ -1274,19 +1274,22 @@ async def get_user_warnings(
 
             if relevant_rows:
                 # Step B: Batch fetch reporter sensitivities
-                user_sens_map = {}
+                user_sens_map: dict[str, dict[str, Any]] = {}
                 usernames = list({r.get("username") for r in relevant_rows if r.get("username")})
                 if usernames:
                     try:
                         sens_res = supabase.table("user_sensitivities").select("*").in_("username", usernames).execute()
                         if sens_res.data:
                             for s_row in sens_res.data:
-                                user_sens_map[s_row.get("username")] = s_row
+                                if isinstance(s_row, dict):
+                                    username_val = s_row.get("username")
+                                    if username_val:
+                                        user_sens_map[str(username_val)] = s_row
                     except Exception as e:
                         print(f"Error fetching user sensitivities batch: {e}")
 
                 # Step C: Calculate weights for each report
-                valid_reports = []
+                valid_reports: list[dict[str, Any]] = []
                 for row in relevant_rows:
                     r_user = row.get("username")
                     warning_type = str(row.get("warning_type") or "")
@@ -1315,20 +1318,25 @@ async def get_user_warnings(
                             except (ValueError, TypeError):
                                 pass
 
+                    lat_val = row.get("lat")
+                    lon_val = row.get("lon")
+                    lat_float = float(lat_val) if lat_val is not None else 0.0
+                    lon_float = float(lon_val) if lon_val is not None else 0.0
+
                     valid_reports.append({
                         "id": str(row.get("id") or ""),
                         "title": str(row.get("title") or ""),
                         "desc": str(row.get("description") or ""),
                         "warning_type": warning_type,
-                        "lat": row.get("lat"),
-                        "lon": row.get("lon"),
+                        "lat": lat_float,
+                        "lon": lon_float,
                         "username": r_user,
-                        "created_at_str": row.get("created_at") or "",
+                        "created_at_str": str(row.get("created_at") or ""),
                         "weight": weight
                     })
 
                 # Step D: Group/cluster warnings of same type within 150 meters
-                clusters = []
+                clusters: list[list[dict[str, Any]]] = []
                 for report in valid_reports:
                     matched_cluster = None
                     for cluster in clusters:
@@ -1346,9 +1354,9 @@ async def get_user_warnings(
                 # Step E: Format and aggregate each cluster
                 for cluster in clusters:
                     # Sort reports by created_at_str descending to find the latest
-                    cluster.sort(key=lambda x: x.get("created_at_str", ""), reverse=True)
+                    cluster.sort(key=lambda x: str(x.get("created_at_str") or ""), reverse=True)
                     representative = cluster[0]
-                    total_weight = sum(r["weight"] for r in cluster)
+                    total_weight = sum(float(r["weight"]) for r in cluster)
                     report_count = len(cluster)
 
                     if total_weight >= 3.0:
@@ -1363,20 +1371,20 @@ async def get_user_warnings(
 
                     # Format dynamic description
                     prefix = f"[Confidence: {confidence_level} ({report_count} report{'s' if report_count > 1 else ''})] "
-                    desc = prefix + representative["desc"]
+                    desc = prefix + str(representative["desc"])
 
                     # Check if the current user requesting warnings was one of the reporters
                     own_report = next((r for r in cluster if username and r["username"] == username), None)
                     final_username = username if own_report else representative["username"]
 
                     warnings.append({
-                        "id": representative["id"],
-                        "title": representative["title"],
+                        "id": str(representative["id"]),
+                        "title": str(representative["title"]),
                         "desc": desc,
                         "severity": severity,
-                        "icon": representative["warning_type"],
-                        "lat": representative["lat"],
-                        "lon": representative["lon"],
+                        "icon": str(representative["warning_type"]),
+                        "lat": float(representative["lat"]) if representative["lat"] is not None else None,
+                        "lon": float(representative["lon"]) if representative["lon"] is not None else None,
                         "username": final_username or None,
                         "confidence_score": float(total_weight),
                         "report_count": int(report_count)
