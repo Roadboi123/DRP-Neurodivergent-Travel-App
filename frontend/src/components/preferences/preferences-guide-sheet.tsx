@@ -9,19 +9,9 @@ import {
   View,
 } from 'react-native';
 
-import { getOptionColors, OPTIONS } from '@/components/preferences/options';
+import { getOptionColors, LEVEL_GLOSS, OPTIONS } from '@/components/preferences/options';
 import { Fonts, getPalette } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-// Spell out exactly what each level does to a route, keyed by the contract value
-// so it stays aligned with OPTIONS even if the labels are reworded. Being concrete
-// (rather than "affects you a bit") was direct user feedback.
-const LEVEL_GLOSS: Record<string, string> = {
-  little: 'we do not avoid this',
-  medium: 'we avoid more than 30 mins of this on a route where possible',
-  high: 'we avoid more than 15 mins of this on a route where possible',
-  veryhigh: 'we avoid this entirely where possible',
-};
 
 export function PreferencesGuideSheet({
   visible,
