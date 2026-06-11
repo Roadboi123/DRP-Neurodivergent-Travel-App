@@ -28,7 +28,7 @@ async def report_journey_metrics(
         "actions_in_timeframe": body.actions_in_timeframe,
         "route_changed_after_warning": body.route_changed_after_warning,
         "app_accesses_during_journey": body.app_accesses_during_journey,
-        "warning_clicked_for_info": body.warning_clicked_for_info,
+        "warning_interacted_with": body.warning_interacted_with,
     }
 
     supabase.table("journey_metrics").insert(row).execute()
@@ -75,7 +75,7 @@ async def get_metrics_summary():
     actions = [j["actions_in_timeframe"] for j in journeys if j.get("actions_in_timeframe") is not None]
     route_changes = [j["route_changed_after_warning"] for j in journeys if j.get("route_changed_after_warning") is not None]
     app_accesses = [j["app_accesses_during_journey"] for j in journeys if j.get("app_accesses_during_journey") is not None]
-    warning_clicks = [j["warning_clicked_for_info"] for j in journeys if j.get("warning_clicked_for_info") is not None]
+    warning_interactions = [j["warning_interacted_with"] for j in journeys if j.get("warning_interacted_with") is not None]
 
     if times_to_start:
         summary.avg_time_to_start_seconds = sum(times_to_start) / len(times_to_start)
@@ -85,8 +85,8 @@ async def get_metrics_summary():
         summary.pct_route_changed_after_warning = (sum(1 for rc in route_changes if rc is True) * 100.0) / len(route_changes)
     if app_accesses:
         summary.avg_app_accesses_during_journey = sum(app_accesses) / len(app_accesses)
-    if warning_clicks:
-        summary.pct_warning_clicked_for_info = (sum(1 for wc in warning_clicks if wc is True) * 100.0) / len(warning_clicks)
+    if warning_interactions:
+        summary.pct_warning_interacted_with = (sum(1 for wi in warning_interactions if wi is True) * 100.0) / len(warning_interactions)
 
     # Process disruption metrics
     times_to_report = [d["time_taken_seconds"] for d in disruptions if d.get("time_taken_seconds") is not None]

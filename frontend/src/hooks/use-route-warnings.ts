@@ -90,7 +90,7 @@ export function useRouteWarnings(
   const openWarningById = useCallback((id: string) => {
     const warning = warningsRef.current.find((w) => w.id === id);
     if (warning) {
-      analytics.trackWarningClick();
+      analytics.trackWarningInteraction();
       setSelectedWarning(warning);
     }
   }, []);
@@ -149,6 +149,7 @@ export function useRouteWarnings(
   // Own warning: delete from the DB (gone for everyone). Optimistically drop it.
   const removeOwnWarning = useCallback(
     async (warning: WarningItem) => {
+      analytics.trackWarningInteraction();
       setSelectedWarning(null);
       removeReportedWarning(warning.id);
       try {
@@ -162,6 +163,7 @@ export function useRouteWarnings(
 
   // Someone else's warning: hide it for this user only, no API call.
   const dismissWarning = useCallback((warning: WarningItem) => {
+    analytics.trackWarningInteraction();
     setSelectedWarning(null);
     setDismissedIds((prev) => {
       const next = new Set(prev);

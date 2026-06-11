@@ -6,7 +6,7 @@ class JourneyMetricsCreate(BaseModel):
     actions_in_timeframe: Optional[int] = None
     route_changed_after_warning: Optional[bool] = None
     app_accesses_during_journey: Optional[int] = None
-    warning_clicked_for_info: Optional[bool] = None
+    warning_interacted_with: Optional[bool] = None
 
 class DisruptionReportMetricsCreate(BaseModel):
     time_taken_seconds: Optional[float] = None
@@ -19,4 +19,4 @@ class MetricsSummary(BaseModel):
     pct_would_contribute: Optional[float] = None
     pct_route_changed_after_warning: Optional[float] = None
     avg_app_accesses_during_journey: Optional[float] = None
-    pct_warning_clicked_for_info: Optional[float] = None
+    pct_warning_interacted_with: Optional[float] = None

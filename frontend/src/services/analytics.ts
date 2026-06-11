@@ -12,7 +12,7 @@ class AnalyticsService {
   private originalRouteId: string | null = null;
   private chosenRouteId: string | null = null;
   private warningsSeen: boolean = false;
-  private warningClickedForInfo: boolean = false;
+  private warningInteractedWith: boolean = false;
   
   // Active journey stats
   private appAccessesDuringJourney: number = 0;
@@ -28,7 +28,7 @@ class AnalyticsService {
     this.originalRouteId = null;
     this.chosenRouteId = null;
     this.warningsSeen = false;
-    this.warningClickedForInfo = false;
+    this.warningInteractedWith = false;
     console.log('[Analytics] Search started. Tracking initialized.');
   }
 
@@ -53,10 +53,10 @@ class AnalyticsService {
     console.log(`[Analytics] Route viewed. originalRouteId=${this.originalRouteId}, chosenRouteId=${this.chosenRouteId}, hasWarnings=${hasWarnings}`);
   }
 
-  trackWarningClick() {
-    this.warningClickedForInfo = true;
+  trackWarningInteraction() {
+    this.warningInteractedWith = true;
     this.trackClick();
-    console.log('[Analytics] Warning/report clicked for details.');
+    console.log('[Analytics] Warning/report interacted with.');
   }
 
   startJourney(routeId: string) {
@@ -80,9 +80,9 @@ class AnalyticsService {
 
   endJourney() {
     if (this.isJourneyActive) {
-      console.log(`[Analytics] Ending journey. App accesses during journey: ${this.appAccessesDuringJourney}, warnings clicked: ${this.warningClickedForInfo}`);
-      // Post updated app accesses and warning click interaction stats to backend at the end of the journey
-      this.postJourneyMetrics(null, null, null, this.warningClickedForInfo, this.appAccessesDuringJourney);
+      console.log(`[Analytics] Ending journey. App accesses during journey: ${this.appAccessesDuringJourney}, warnings interacted with: ${this.warningInteractedWith}`);
+      // Post updated app accesses and warning interaction stats to backend at the end of the journey
+      this.postJourneyMetrics(null, null, null, this.warningInteractedWith, this.appAccessesDuringJourney);
       this.isJourneyActive = false;
       this.appAccessesDuringJourney = 0;
     }
@@ -122,7 +122,7 @@ class AnalyticsService {
     timeToStart: number | null,
     actions: number | null,
     routeChanged: boolean | null,
-    warningClicked: boolean | null,
+    warningInteracted: boolean | null,
     accesses: number | null = null
   ) {
     try {
@@ -131,7 +131,7 @@ class AnalyticsService {
         actions_in_timeframe: actions,
         route_changed_after_warning: routeChanged,
         app_accesses_during_journey: accesses,
-        warning_clicked_for_info: warningClicked,
+        warning_interacted_with: warningInteracted,
       };
       
       await client.post('/metrics/journey', body);
