@@ -33,6 +33,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import { consumeReopenJourneyDetails, getActiveJourneyRoute } from '@/services/active-journey';
+import { loadWarningStore } from '@/services/warning-store';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
@@ -143,11 +144,15 @@ export default function RoutesScreen() {
   // Coming back from an active journey re-opens the details sheet the user
   // saw before pressing "Go", so Back lands there rather than on the list.
   useEffect(() => {
-    if (isFocused && consumeReopenJourneyDetails()) {
+    if (!isFocused) return;
+    // Refresh the shared store on focus so a sheet re-opened after a journey
+    // (or a tab revisit) reflects warnings reported elsewhere.
+    loadWarningStore(routesService, username);
+    if (consumeReopenJourneyDetails()) {
       const activeRoute = getActiveJourneyRoute();
       if (activeRoute) setSelectedRoute(activeRoute);
     }
-  }, [isFocused]);
+  }, [isFocused, routesService, username]);
 
   // Hydration fix
   const [mounted, setMounted] = useState(false);
@@ -205,6 +210,9 @@ export default function RoutesScreen() {
         if (active) {
           setRoutes(routeData);
           setWarnings(warningData);
+          // Warm the shared map-marker store so opening a route's map shows the
+          // reported warnings instantly, without its own DB round-trip.
+          loadWarningStore(routesService, username);
         }
       } catch (error) {
         console.warn('Local backend unavailable...', error);
