@@ -10,6 +10,17 @@ export const OPTIONS: { value: SensitivityLevel; label: string }[] = [
   { value: 'veryhigh', label: 'Too much' },
 ];
 
+// Spell out exactly what each level does to a route, keyed by the contract value
+// so it stays aligned with OPTIONS even if the labels are reworded. Being concrete
+// (rather than "affects you a bit") was direct user feedback. Shared by the inline
+// scale legend and the guide sheet so they never drift.
+export const LEVEL_GLOSS: Record<SensitivityLevel, string> = {
+  little: 'we do not avoid this',
+  medium: 'we avoid more than 30 mins of this where possible',
+  high: 'we avoid more than 15 mins of this where possible',
+  veryhigh: 'we avoid this entirely where possible',
+};
+
 type ChipColors = { bg: string; text: string; border: string };
 
 // Wero ramp: green → yellow → orange → pink, all outlined in ink.

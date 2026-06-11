@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
+import { PreferenceScaleLegend } from '@/components/preferences/preference-scale-legend';
 import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetNameEditor } from '@/components/preferences/preset-name-editor';
@@ -148,6 +149,12 @@ export default function UserPreferencesScreen() {
               )}
             </View>
 
+            <Text style={[styles.sectionHelper, { color: palette.textSecondary }]}>
+              Higher means we work harder to route you around it. Tap a level for each below.
+            </Text>
+
+            <PreferenceScaleLegend />
+
             <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               {preferences.map((pref, i) => (
                 <View key={pref.id}>
@@ -212,6 +219,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     marginBottom: 12,
   },
+
+  sectionHelper: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    marginTop: -4,
+    marginBottom: 12,
+  } as TextStyle,
 
   presetHeaderRow: {
     flexDirection: 'row',
