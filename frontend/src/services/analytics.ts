@@ -13,6 +13,7 @@ class AnalyticsService {
   private chosenRouteId: string | null = null;
   private warningsSeen: boolean = false;
   private warningInteractedWith: boolean = false;
+  private isSessionLogged: boolean = false;
   
   // Active journey stats
   private appAccessesDuringJourney: number = 0;
@@ -22,6 +23,9 @@ class AnalyticsService {
   private reportOpenTime: number | null = null;
 
   startSearch(startName: string, endName: string) {
+    // Log previous search session if it wasn't logged yet
+    this.endSearchSession();
+
     this.destinationSearchTime = Date.now();
     this.clickCount = 0;
     this.screenChangeCount = 0;
@@ -29,7 +33,22 @@ class AnalyticsService {
     this.chosenRouteId = null;
     this.warningsSeen = false;
     this.warningInteractedWith = false;
+    this.isSessionLogged = false;
     console.log('[Analytics] Search started. Tracking initialized.');
+  }
+
+  endSearchSession() {
+    if (this.destinationSearchTime && !this.isSessionLogged) {
+      const actions = this.clickCount + this.screenChangeCount;
+      const routeChanged = (this.originalRouteId && this.chosenRouteId) ? (this.originalRouteId !== this.chosenRouteId) : false;
+      const routeChangedAfterWarning = this.warningsSeen ? routeChanged : false;
+
+      console.log(`[Analytics] Ending search session (no Go). actions=${actions}, warning_interacted=${this.warningInteractedWith}`);
+      
+      // Log session with null time_to_start_seconds to indicate they did not hit Go
+      this.postJourneyMetrics(null, actions, routeChangedAfterWarning, this.warningInteractedWith, null);
+      this.isSessionLogged = true;
+    }
   }
 
   trackClick() {
@@ -74,8 +93,11 @@ class AnalyticsService {
 
     console.log(`[Analytics] Starting journey. time_to_start=${timeToStart}s, actions=${actions}, route_changed=${routeChangedAfterWarning}`);
     
-    // Post to backend
+    // Post to backend (send null warning_interacted_with to prevent double-counting, since we send final boolean at end of journey)
     this.postJourneyMetrics(timeToStart, actions, routeChangedAfterWarning, null);
+    
+    // Mark session as logged so endSearchSession doesn't trigger again
+    this.isSessionLogged = true;
   }
 
   endJourney() {

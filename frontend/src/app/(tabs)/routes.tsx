@@ -117,6 +117,10 @@ export default function RoutesScreen() {
     if (isFocused) {
       analytics.trackScreenChange();
     }
+    return () => {
+      // Log session if they leave the routes screen or switch tabs
+      analytics.endSearchSession();
+    };
   }, [isFocused]);
 
   // Google-Maps-style swap of the start and end locations.
