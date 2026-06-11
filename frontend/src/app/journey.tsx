@@ -14,6 +14,7 @@ import {
 } from '@/components/routes/warning-markers';
 import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useLiveLocation } from '@/hooks/use-live-location';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
@@ -366,15 +367,21 @@ export default function JourneyScreen() {
     return coords;
   }, [route]);
 
-  // User location starts at the journey origin, facing the first leg.
+  // Live device GPS drives the "you are here" marker and the report location.
+  // Until there's a fix (or if permission is denied) we fall back to the journey
+  // origin so the screen still works.
+  const { coords: liveCoords, heading: liveHeading, permission: locationPermission } =
+    useLiveLocation();
+
   const userCoords = useMemo<[number, number]>(() => {
-    return allPathCoords[0] || [51.5074, -0.1278];
-  }, [allPathCoords]);
+    return liveCoords ?? allPathCoords[0] ?? [51.5074, -0.1278];
+  }, [liveCoords, allPathCoords]);
 
   const heading = useMemo(() => {
+    if (liveHeading != null) return liveHeading;
     if (allPathCoords.length < 2) return 0;
     return calculateHeading(allPathCoords[0], allPathCoords[1]);
-  }, [allPathCoords]);
+  }, [liveHeading, allPathCoords]);
 
   // Sync warnings + user location to the Leaflet map.
   useEffect(() => {
@@ -408,7 +415,8 @@ export default function JourneyScreen() {
     }
   };
 
-  // Actions — report a sensory warning at the (simulated) current location.
+  // Actions — report a sensory warning at the traveller's live GPS location
+  // (falls back to the route origin when location is unavailable).
   const submitReport = async () => {
     if (!reportingType) return;
     const option = REPORT_OPTIONS.find((o) => o.type === reportingType);
@@ -535,6 +543,16 @@ export default function JourneyScreen() {
         <View style={[styles.noticeBanner, { backgroundColor: accents.yellow, borderColor: palette.border }]}>
           <Ionicons name="information-circle-outline" size={16} color={palette.textPrimary} />
           <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>{reportNotice}</Text>
+        </View>
+      )}
+
+      {/* Location-off fallback notice — reports/marker use the route start instead */}
+      {!reportNotice && locationPermission === 'denied' && (
+        <View style={[styles.noticeBanner, { backgroundColor: accents.orange, borderColor: palette.border }]}>
+          <Ionicons name="location-outline" size={16} color={palette.textPrimary} />
+          <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>
+            Location off — using route start
+          </Text>
         </View>
       )}
 
