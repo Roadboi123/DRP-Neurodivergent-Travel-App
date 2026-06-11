@@ -42,6 +42,11 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
   } = useRouteWarnings(route, accents, visible);
 
   const webViewRef = React.useRef<WebView>(null);
+  // Bumped when the map iframe/WebView finishes loading, so the marker-sync
+  // effect re-pushes once the map can receive messages (the first push races the
+  // async map load and is otherwise dropped — markers wouldn't show until the
+  // user toggled the hide button).
+  const [mapReadyTick, setMapReadyTick] = React.useState(0);
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
 
@@ -59,7 +64,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
         `if (window.updateWarnings) { window.updateWarnings('${jsonString.replace(/'/g, "\\'")}'); } true;`,
       );
     }
-  }, [visible, formattedWarnings]);
+  }, [visible, formattedWarnings, mapReadyTick]);
 
   React.useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -549,6 +554,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                     srcDoc={leafletHtml}
                     style={{ width: '100%', height: '100%', border: 'none' }}
                     title="Route Map"
+                    onLoad={() => setMapReadyTick((t) => t + 1)}
                   />
                 ) : (
                   <WebView
@@ -568,6 +574,7 @@ export function RouteDetailsModal({ visible, route, onClose }: RouteDetailsModal
                         // Ignore
                       }
                     }}
+                    onLoadEnd={() => setMapReadyTick((t) => t + 1)}
                   />
                 )}
               </View>

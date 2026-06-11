@@ -215,6 +215,10 @@ export default function JourneyScreen() {
   const [reportingType, setReportingType] = useState<SensoryReportType | null>(null);
   // Transient banner shown e.g. when a report is rejected as a near-duplicate.
   const [reportNotice, setReportNotice] = useState<string | null>(null);
+  // Bumped when the map iframe/WebView finishes loading, so the marker-sync
+  // effect re-pushes once the map can actually receive messages (the first push
+  // races the async map load and is otherwise dropped).
+  const [mapReadyTick, setMapReadyTick] = useState(0);
 
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
@@ -390,7 +394,7 @@ export default function JourneyScreen() {
         webViewRef.current.injectJavaScript(js);
       }
     }
-  }, [userCoords, heading, formattedWarnings]);
+  }, [userCoords, heading, formattedWarnings, mapReadyTick]);
 
   const handleMapMessage = (event: any) => {
     try {
@@ -464,7 +468,12 @@ export default function JourneyScreen() {
     <SafeAreaView style={[styles.screen, { backgroundColor: palette.surface }]}>
       <View style={StyleSheet.absoluteFill}>
         {Platform.OS === 'web' ? (
-          <iframe srcDoc={mapHtml} style={{ width: '100%', height: '100%', border: 'none' }} title="Journey Map" />
+          <iframe
+            srcDoc={mapHtml}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title="Journey Map"
+            onLoad={() => setMapReadyTick((t) => t + 1)}
+          />
         ) : (
           <WebView
             ref={webViewRef}
@@ -474,6 +483,7 @@ export default function JourneyScreen() {
             domStorageEnabled={true}
             javaScriptEnabled={true}
             onMessage={handleMapMessage}
+            onLoadEnd={() => setMapReadyTick((t) => t + 1)}
           />
         )}
       </View>
