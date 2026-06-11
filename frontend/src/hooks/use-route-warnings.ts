@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
 import { formatWarnings, type FormattedWarning } from '@/components/routes/warning-markers';
@@ -6,12 +6,20 @@ import { getAccents } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { analytics } from '@/services/analytics';
 import { useRoutesService } from '@/services/services-context';
+import {
+  addReportedWarning,
+  getWarningsSnapshot,
+  loadWarningStore,
+  removeReportedWarning,
+  subscribeWarnings,
+} from '@/services/warning-store';
 import type { RouteOption, WarningItem } from '@/types/route';
+import { filterWarningsNearRoute } from '@/utils/geo';
 
 type Accents = ReturnType<typeof getAccents>;
 
 export interface RouteWarnings {
-  /** Raw user-reported warnings near this route. */
+  /** Reported warnings near this route (from the shared store). */
   warnings: WarningItem[];
   /** Markers ready for the Leaflet map (`hidden` reflects dismiss + hide-all). */
   formattedWarnings: FormattedWarning[];
@@ -26,19 +34,21 @@ export interface RouteWarnings {
   removeOwnWarning: (warning: WarningItem) => Promise<void>;
   /** Someone else's warning: hide for this user only. */
   dismissWarning: (warning: WarningItem) => void;
-  /** Prepend a freshly reported warning (optimistic). */
+  /** Add a freshly reported warning to the shared store (optimistic). */
   addWarning: (warning: WarningItem) => void;
   /** Hide every warning marker without dismissing any individually. */
   hideAll: boolean;
   setHideAll: (next: boolean) => void;
-  /** Manually refetch (also polled while enabled). */
+  /** Manually refresh the shared store (also polled while enabled). */
   reload: () => void;
 }
 
 /**
- * Owns the user-reported warnings shown on a route map: fetching/polling,
- * per-user dismissal, owner deletion, and a hide-all toggle. Shared by the
- * pre-Go route details and the live journey so both behave identically.
+ * Surfaces the reported warnings relevant to a given route. Warning data lives
+ * in a process-wide store (`services/warning-store.ts`) seeded on the routes
+ * page, so every screen sees the same set instantly and a report on one screen
+ * shows on the others. This hook narrows the store to warnings near `route` and
+ * layers on per-screen view state (dismissed items, hide-all, the open card).
  *
  * Pass `enabled: false` (e.g. a closed modal) to pause polling.
  */
@@ -50,8 +60,13 @@ export function useRouteWarnings(
   const routesService = useRoutesService();
   const { username } = useAuth();
 
-  // Real user-reported warnings near this journey (no mocks, no live TfL items).
-  const [warnings, setWarnings] = useState<WarningItem[]>([]);
+  // Shared, process-wide reported warnings (all routes).
+  const allWarnings = useSyncExternalStore(
+    subscribeWarnings,
+    getWarningsSnapshot,
+    getWarningsSnapshot,
+  );
+
   // Other users' warnings this user has closed — hidden locally only, never deleted.
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   // The warning whose action card (Remove / Close) is currently open.
@@ -59,7 +74,13 @@ export function useRouteWarnings(
   // Hide the whole warning layer from the map without dismissing any item.
   const [hideAll, setHideAll] = useState(false);
 
-  // Latest warnings, readable from the map's (stale-closure) message handlers.
+  // Narrow the store to warnings along this route's traced path (not just stations).
+  const warnings = useMemo(
+    () => filterWarningsNearRoute(allWarnings, route),
+    [allWarnings, route],
+  );
+
+  // Latest nearby warnings, readable from the map's (stale-closure) handlers.
   const warningsRef = useRef<WarningItem[]>([]);
   useEffect(() => {
     warningsRef.current = warnings;
@@ -73,46 +94,9 @@ export function useRouteWarnings(
     }
   }, []);
 
-  // Fetch the real, user-reported warnings near this route. Live TfL/weather
-  // warnings (no coordinates) are intentionally not placed on the map — we keep
-  // only items reported by users (they have a reporter and real coordinates).
-  const loadingRef = useRef(false);
-  const reload = useCallback(async () => {
-    if (!route || loadingRef.current) return;
-    loadingRef.current = true;
-    try {
-      const lineSet = new Set<string>();
-      const stationSet = new Set<string>();
-      route.legs?.forEach((leg) => {
-        if (leg.line) lineSet.add(leg.line);
-        if (leg.departure) stationSet.add(leg.departure);
-        if (leg.arrival) stationSet.add(leg.arrival);
-        leg.stops?.forEach((stop) => stationSet.add(stop));
-      });
-
-      const routeContext = {
-        lines: Array.from(lineSet),
-        stations: Array.from(stationSet),
-      };
-
-      const liveWarnings = await routesService.getWarnings(username || '', false, routeContext);
-
-      const userReports = liveWarnings.filter(
-        (w) => w.username != null && w.lat != null && w.lon != null,
-      );
-      // Avoid re-rendering (and a marker flicker) when the set is unchanged.
-      setWarnings((prev) => {
-        const prevIds = new Set(prev.map((p) => p.id));
-        const unchanged =
-          prev.length === userReports.length && userReports.every((w) => prevIds.has(w.id));
-        return unchanged ? prev : userReports;
-      });
-    } catch (e) {
-      console.warn('Error loading route warnings:', e);
-    } finally {
-      loadingRef.current = false;
-    }
-  }, [route, routesService, username]);
+  const reload = useCallback(() => {
+    loadWarningStore(routesService, username || '');
+  }, [routesService, username]);
 
   // Poll so warnings reported by others appear, and expired ones drop off.
   useEffect(() => {
@@ -137,7 +121,7 @@ export function useRouteWarnings(
   const removeOwnWarning = useCallback(
     async (warning: WarningItem) => {
       setSelectedWarning(null);
-      setWarnings((prev) => prev.filter((w) => w.id !== warning.id));
+      removeReportedWarning(warning.id);
       try {
         await routesService.deleteWarning(warning.id, username || 'anonymous');
       } catch (err) {
@@ -158,7 +142,7 @@ export function useRouteWarnings(
   }, []);
 
   const addWarning = useCallback((warning: WarningItem) => {
-    setWarnings((prev) => [warning, ...prev]);
+    addReportedWarning(warning);
   }, []);
 
   const selectedIsOwn = !!selectedWarning && !!username && selectedWarning.username === username;
