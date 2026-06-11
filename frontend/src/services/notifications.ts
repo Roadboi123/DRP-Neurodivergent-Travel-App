@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { analytics } from '@/services/analytics';
 
 // Configure notification behavior for mobile devices
 if (Platform.OS !== 'web') {
@@ -46,7 +47,12 @@ export async function sendLocalNotification(title: string, body: string): Promis
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (window.Notification.permission === 'granted') {
-        new window.Notification(title, { body });
+        const notification = new window.Notification(title, { body });
+        notification.onclick = () => {
+          window.focus();
+          console.log('[Web Notification] Notification clicked (tap)');
+          analytics.trackWarningInteraction();
+        };
         return;
       }
     }
