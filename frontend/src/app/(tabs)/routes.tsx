@@ -32,6 +32,7 @@ import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { Fonts, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useNavBar } from '@/contexts/navbar-context';
 import { useRoutesService } from '@/services/services-context';
 import { consumeReopenJourneyDetails, getActiveJourneyRoute } from '@/services/active-journey';
 import { loadWarningStore } from '@/services/warning-store';
@@ -145,6 +146,14 @@ export default function RoutesScreen() {
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
+
+  // The route-details modal is full-screen; hide the floating tab bar while it's
+  // open so the pill doesn't bleed over it (and restore it on close/unmount).
+  const { setHidden } = useNavBar();
+  useEffect(() => {
+    setHidden(!!selectedRoute);
+  }, [selectedRoute, setHidden]);
+  useEffect(() => () => setHidden(false), [setHidden]);
 
   // Coming back from an active journey re-opens the details sheet the user
   // saw before pressing "Go", so Back lands there rather than on the list.

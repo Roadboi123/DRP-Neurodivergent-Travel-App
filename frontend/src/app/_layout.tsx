@@ -16,6 +16,7 @@ import * as Notifications from 'expo-notifications';
 
 import { BRAND } from '@/constants/theme';
 import { ThemeProvider } from '@/contexts/theme-context';
+import { NavBarProvider } from '@/contexts/navbar-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ServicesProvider } from '@/services/services-context';
 import { AuthProvider, useAuth } from '@/context/auth-context';
@@ -101,7 +102,9 @@ export default function RootLayout() {
       <AuthProvider>
         <PresetsProvider>
           <ThemeProvider>
-            <ThemedApp />
+            <NavBarProvider>
+              <ThemedApp />
+            </NavBarProvider>
           </ThemeProvider>
         </PresetsProvider>
       </AuthProvider>
