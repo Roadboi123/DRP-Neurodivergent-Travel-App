@@ -49,6 +49,8 @@ function WebSafeModal({ visible, onRequestClose, children }: WebSafeModalProps) 
           left: 0,
           right: 0,
           bottom: 0,
+          width: '100%',
+          height: '100%',
           zIndex: 99999,
         }}
       >
@@ -307,21 +309,12 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
     })
   ).current;
 
-  if (!route) return null;
-
   const startJourney = () => {
+    if (!route) return;
     analytics.startJourney(route.id);
     setActiveJourneyRoute(route);
     onClose();
-    // Allow a tiny delay on Web for React Native Web's modal to cleanly transition
-    // and restore body styling before navigating.
-    if (Platform.OS === 'web') {
-      setTimeout(() => {
-        router.push('/journey');
-      }, 150);
-    } else {
-      router.push('/journey');
-    }
+    router.push('/journey');
   };
 
   const toggleStops = (idx: number) => {
@@ -332,271 +325,264 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
     }));
   };
 
-  const legs = route.legs || [];
-
-  // 1. Map each leg's departure/arrival onto map coordinates.
-  const processedLegs = legs.map((leg) => ({
-    ...leg,
-    dep_lat: leg.departure_lat,
-    dep_lon: leg.departure_lon,
-    arr_lat: leg.arrival_lat,
-    arr_lon: leg.arrival_lon,
-  }));
-
-  // 2. Build the station nodes shown on the map. Where one leg ends and the
-  // next begins at the same place (you alight a bus and start walking from that
-  // very stop), that's ONE physical point — draw a single circle, not two. Nodes
-  // are added in journey order and merged into the previous one when they share
-  // a name or sit within ~30m, so an alight+board point becomes one interchange.
-  type MapNode = {
-    lat: number;
-    lon: number;
-    label: string;
-    isStart: boolean;
-    isEnd: boolean;
-    isTransfer: boolean;
-  };
-  const pointsList: MapNode[] = [];
-
-  const addNode = (
-    lat: number | null | undefined,
-    lon: number | null | undefined,
-    label: string,
-    flags: { isStart?: boolean; isEnd?: boolean; isTransfer?: boolean }
-  ) => {
-    if (lat == null || lon == null) return;
-    const last = pointsList[pointsList.length - 1];
-    if (last) {
-      const sameName = !!label && last.label.toLowerCase() === label.toLowerCase();
-      const nearby =
-        Math.abs(last.lat - lat) < 0.0003 && Math.abs(last.lon - lon) < 0.0003;
-      if (sameName || nearby) {
-        last.isStart = last.isStart || !!flags.isStart;
-        last.isEnd = last.isEnd || !!flags.isEnd;
-        last.isTransfer = last.isTransfer || !!flags.isTransfer;
-        return;
-      }
+  const { leafletHtml, hasMapCoords } = React.useMemo(() => {
+    if (!route) {
+      return { leafletHtml: '', hasMapCoords: false };
     }
-    pointsList.push({
-      lat,
-      lon,
-      label,
-      isStart: !!flags.isStart,
-      isEnd: !!flags.isEnd,
-      isTransfer: !!flags.isTransfer,
-    });
-  };
+    const legs = route.legs || [];
 
-  processedLegs.forEach((leg, lIdx) => {
-    const isFirst = lIdx === 0;
-    const isLast = lIdx === processedLegs.length - 1;
-    // A mid-journey departure/arrival is an interchange (you change vehicles).
-    addNode(leg.dep_lat, leg.dep_lon, leg.departure, { isStart: isFirst, isTransfer: !isFirst });
-    addNode(leg.arr_lat, leg.arr_lon, leg.arrival, { isEnd: isLast, isTransfer: !isLast });
-  });
-  const latitudes = pointsList.map((p) => p.lat);
-  const longitudes = pointsList.map((p) => p.lon);
+    // 1. Map each leg's departure/arrival onto map coordinates.
+    const processedLegs = legs.map((leg) => ({
+      ...leg,
+      dep_lat: leg.departure_lat,
+      dep_lon: leg.departure_lon,
+      arr_lat: leg.arrival_lat,
+      arr_lon: leg.arrival_lon,
+    }));
 
-  const hasMapCoords = pointsList.length > 0;
-  const centerLat = latitudes.length > 0 ? latitudes.reduce((a, b) => a + b, 0) / latitudes.length : 51.5074;
-  const centerLon = longitudes.length > 0 ? longitudes.reduce((a, b) => a + b, 0) / longitudes.length : -0.1278;
+    // 2. Build the station nodes shown on the map. Where one leg ends and the
+    // next begins at the same place (you alight a bus and start walking from that
+    // very stop), that's ONE physical point — draw a single circle, not two. Nodes
+    // are added in journey order and merged into the previous one when they share
+    // a name or sit within ~30m, so an alight+board point becomes one interchange.
+    type MapNode = {
+      lat: number;
+      lon: number;
+      label: string;
+      isStart: boolean;
+      isEnd: boolean;
+      isTransfer: boolean;
+    };
+    const pointsList: MapNode[] = [];
 
-  // 3. Compile Leaflet script dynamically with gorgeous Wero styles
-  let leafletJS = '';
-  if (route.legs) {
-    // A. Draw transit and walking paths
-    processedLegs.forEach((leg) => {
-      if (leg.dep_lat != null && leg.dep_lon != null && leg.arr_lat != null && leg.arr_lon != null) {
-        const { bgColor } = getLegUIProps(leg.mode, leg.line, leg.instruction, accents);
-        const isWalking = leg.mode.toLowerCase() === 'walking';
-
-        let polylinePointsStr = '';
-        // Need at least 2 points for a real path. A leg whose geometry was pruned
-        // to a single point (the backend's monotonic-progress filter can do this on
-        // short legs) must fall back to the straight dep→arr line below — otherwise
-        // snapping both endpoints onto index 0 collapses it to a zero-length,
-        // invisible polyline (this was the missing Mildmay line before "Go").
-        if (leg.path_coords && leg.path_coords.length >= 2) {
-          const pathPoints = [...leg.path_coords];
-          // Some providers return a leg's geometry in the opposite order to the
-          // leg's own dep→arr direction. Snapping the endpoints (below) onto
-          // reversed geometry makes the drawn line shoot across to the far end
-          // and trace back — the "dots going round in circles" artifact. Flip
-          // the path first when that orientation reduces the endpoint mismatch.
-          if (
-            pathPoints.length > 1 &&
-            leg.dep_lat != null && leg.dep_lon != null &&
-            leg.arr_lat != null && leg.arr_lon != null
-          ) {
-            const sq = (aLat: number, aLon: number, bLat: number, bLon: number) =>
-              (aLat - bLat) ** 2 + (aLon - bLon) ** 2;
-            const head = pathPoints[0];
-            const tail = pathPoints[pathPoints.length - 1];
-            const asIs =
-              sq(head[0], head[1], leg.dep_lat, leg.dep_lon) +
-              sq(tail[0], tail[1], leg.arr_lat, leg.arr_lon);
-            const flipped =
-              sq(head[0], head[1], leg.arr_lat, leg.arr_lon) +
-              sq(tail[0], tail[1], leg.dep_lat, leg.dep_lon);
-            if (flipped < asIs) {
-              pathPoints.reverse();
-            }
-          }
-          if (leg.dep_lat != null && leg.dep_lon != null && pathPoints.length > 0) {
-            pathPoints[0] = [leg.dep_lat, leg.dep_lon];
-          }
-          if (leg.arr_lat != null && leg.arr_lon != null && pathPoints.length > 0) {
-            pathPoints[pathPoints.length - 1] = [leg.arr_lat, leg.arr_lon];
-          }
-          polylinePointsStr = JSON.stringify(pathPoints);
-        } else {
-          polylinePointsStr = `[[${leg.dep_lat}, ${leg.dep_lon}], [${leg.arr_lat}, ${leg.arr_lon}]]`;
-        }
-
-        if (isWalking) {
-          // Walking: ink-outlined dotted line in the leg's own colour, so it
-          // matches the walk badge on the route card (cyan) instead of reusing
-          // the End marker's pink — keeps the map legible without a legend.
-          leafletJS += `
-            L.polyline(${polylinePointsStr}, {
-              color: '#1d1c1c',
-              weight: 10,
-              dashArray: '1, 15',
-              lineCap: 'round',
-              lineJoin: 'round'
-            }).addTo(map);
-
-            L.polyline(${polylinePointsStr}, {
-              color: '${bgColor}',
-              weight: 6,
-              dashArray: '1, 15',
-              lineCap: 'round',
-              lineJoin: 'round'
-            }).addTo(map);
-          `;
-        } else {
-          // Transit represented as bold ink-outlined solid lines!
-          leafletJS += `
-            L.polyline(${polylinePointsStr}, {
-              color: '#1d1c1c',
-              weight: 9,
-              lineCap: 'round',
-              lineJoin: 'round'
-            }).addTo(map);
-
-            L.polyline(${polylinePointsStr}, {
-              color: '${bgColor}',
-              weight: 5,
-              lineCap: 'round',
-              lineJoin: 'round'
-            }).addTo(map);
-          `;
+    const addNode = (
+      lat: number | null | undefined,
+      lon: number | null | undefined,
+      label: string,
+      flags: { isStart?: boolean; isEnd?: boolean; isTransfer?: boolean }
+    ) => {
+      if (lat == null || lon == null) return;
+      const last = pointsList[pointsList.length - 1];
+      if (last) {
+        const sameName = !!label && last.label.toLowerCase() === label.toLowerCase();
+        const nearby =
+          Math.abs(last.lat - lat) < 0.0003 && Math.abs(last.lon - lon) < 0.0003;
+        if (sameName || nearby) {
+          last.isStart = last.isStart || !!flags.isStart;
+          last.isEnd = last.isEnd || !!flags.isEnd;
+          last.isTransfer = last.isTransfer || !!flags.isTransfer;
+          return;
         }
       }
+      pointsList.push({
+        lat,
+        lon,
+        label,
+        isStart: !!flags.isStart,
+        isEnd: !!flags.isEnd,
+        isTransfer: !!flags.isTransfer,
+      });
+    };
+
+    processedLegs.forEach((leg, lIdx) => {
+      const isFirst = lIdx === 0;
+      const isLast = lIdx === processedLegs.length - 1;
+      addNode(leg.dep_lat, leg.dep_lon, leg.departure, { isStart: isFirst, isTransfer: !isFirst });
+      addNode(leg.arr_lat, leg.arr_lon, leg.arrival, { isEnd: isLast, isTransfer: !isLast });
     });
+    const latitudes = pointsList.map((p) => p.lat);
+    const longitudes = pointsList.map((p) => p.lon);
 
-    // B. Draw station nodes — one circle per physical point (see addNode).
-    pointsList.forEach((p) => {
-      let fillColor = '#ffffff';
-      let radius = 6;
-      if (p.isStart) {
-        fillColor = '#83f582'; // Wero Green
-        radius = 9;
-      } else if (p.isEnd) {
-        fillColor = '#ff158a'; // Wero Pink
-        radius = 9;
-      } else if (p.isTransfer) {
-        fillColor = '#fdad70'; // Wero Orange
-        radius = 7;
-      } else {
-        fillColor = '#7af7f7'; // Wero Cyan
-        radius = 6;
-      }
+    const hasMapCoords = pointsList.length > 0;
+    const centerLat = latitudes.length > 0 ? latitudes.reduce((a, b) => a + b, 0) / latitudes.length : 51.5074;
+    const centerLon = longitudes.length > 0 ? longitudes.reduce((a, b) => a + b, 0) / longitudes.length : -0.1278;
 
-      leafletJS += `
-        L.circleMarker([${p.lat}, ${p.lon}], {
-          radius: ${radius},
-          fillColor: '${fillColor}',
-          color: '#1d1c1c',
-          weight: 2.5,
-          opacity: 1,
-          fillOpacity: 1
-        }).addTo(map).bindPopup("<b>${p.label.replace(/"/g, '\\"')}</b>");
-      `;
-    });
+    // 3. Compile Leaflet script dynamically with gorgeous Wero styles
+    let leafletJS = '';
+    if (route.legs) {
+      // A. Draw transit and walking paths
+      processedLegs.forEach((leg) => {
+        if (leg.dep_lat != null && leg.dep_lon != null && leg.arr_lat != null && leg.arr_lon != null) {
+          const { bgColor } = getLegUIProps(leg.mode, leg.line, leg.instruction, accents);
+          const isWalking = leg.mode.toLowerCase() === 'walking';
 
-  }
-
-  const leafletHtml = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-      <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100vw; background-color: #f2efe9; }
-        .leaflet-bar a { background-color: #ffffff !important; color: #1d1c1c !important; border-color: #ccc !important; }
-        .leaflet-popup-content-wrapper {
-          background-color: #ffffff;
-          color: #1d1c1c;
-          border: 2px solid #1d1c1c;
-          border-radius: 8px;
-          box-shadow: 4px 4px 0px #1d1c1c;
-        }
-        .leaflet-popup-tip {
-          background-color: #ffffff;
-          border: 2px solid #1d1c1c;
-        }
-        .leaflet-tile {
-          filter: none;
-          /* Mitigate gaps/seams between map tiles under scaling/fractional pixels */
-          outline: 1px solid transparent;
-        }
-        .leaflet-tile-container img {
-          box-shadow: 0 0 1px rgba(0,0,0,0.05);
-        }
-        .warning-marker-icon { background: none; border: none; }
-      </style>
-    </head>
-    <body>
-      <div id="map"></div>
-      <script>
-        const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([${centerLat}, ${centerLon}], 13);
-        
-        // Use colorful OpenStreetMap standard tiles
-        const tilesUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-        
-        L.tileLayer(tilesUrl, {
-          attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
-
-        ${leafletJS}
-
-        const bounds = [
-          ${pointsList.map(p => `[${p.lat}, ${p.lon}]`).join(',')}
-        ];
-        if (bounds.length > 0) {
-          map.fitBounds(bounds, { padding: [35, 35] });
-        }
-
-        // Warning markers (Waze-style sensory icons) — shared with the journey map.
-        ${warningMarkerScript()}
-
-        // Receive marker updates pushed from React.
-        window.addEventListener('message', function(event) {
-          try {
-            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-            if (data.type === 'updateWarnings') {
-              window.updateWarnings(data.warnings);
+          let polylinePointsStr = '';
+          if (leg.path_coords && leg.path_coords.length >= 2) {
+            const pathPoints = [...leg.path_coords];
+            if (
+              pathPoints.length > 1 &&
+              leg.dep_lat != null && leg.dep_lon != null &&
+              leg.arr_lat != null && leg.arr_lon != null
+            ) {
+              const sq = (aLat: number, aLon: number, bLat: number, bLon: number) =>
+                (aLat - bLat) ** 2 + (aLon - bLon) ** 2;
+              const head = pathPoints[0];
+              const tail = pathPoints[pathPoints.length - 1];
+              const asIs =
+                sq(head[0], head[1], leg.dep_lat, leg.dep_lon) +
+                sq(tail[0], tail[1], leg.arr_lat, leg.arr_lon);
+              const flipped =
+                sq(head[0], head[1], leg.arr_lat, leg.arr_lon) +
+                sq(tail[0], tail[1], leg.dep_lat, leg.dep_lon);
+              if (flipped < asIs) {
+                pathPoints.reverse();
+              }
             }
-          } catch (e) {}
-        });
-      </script>
-    </body>
-    </html>
-  `;
+            if (leg.dep_lat != null && leg.dep_lon != null && pathPoints.length > 0) {
+              pathPoints[0] = [leg.dep_lat, leg.dep_lon];
+            }
+            if (leg.arr_lat != null && leg.arr_lon != null && pathPoints.length > 0) {
+              pathPoints[pathPoints.length - 1] = [leg.arr_lat, leg.arr_lon];
+            }
+            polylinePointsStr = JSON.stringify(pathPoints);
+          } else {
+            polylinePointsStr = `[[${leg.dep_lat}, ${leg.dep_lon}], [${leg.arr_lat}, ${leg.arr_lon}]]`;
+          }
+
+          if (isWalking) {
+            leafletJS += `
+              L.polyline(${polylinePointsStr}, {
+                color: '#1d1c1c',
+                weight: 10,
+                dashArray: '1, 15',
+                lineCap: 'round',
+                lineJoin: 'round'
+              }).addTo(map);
+
+              L.polyline(${polylinePointsStr}, {
+                color: '${bgColor}',
+                weight: 6,
+                dashArray: '1, 15',
+                lineCap: 'round',
+                lineJoin: 'round'
+              }).addTo(map);
+            `;
+          } else {
+            leafletJS += `
+              L.polyline(${polylinePointsStr}, {
+                color: '#1d1c1c',
+                weight: 9,
+                lineCap: 'round',
+                lineJoin: 'round'
+              }).addTo(map);
+
+              L.polyline(${polylinePointsStr}, {
+                color: '${bgColor}',
+                weight: 5,
+                lineCap: 'round',
+                lineJoin: 'round'
+              }).addTo(map);
+            `;
+          }
+        }
+      });
+
+      // B. Draw station nodes — one circle per physical point (see addNode).
+      pointsList.forEach((p) => {
+        let fillColor = '#ffffff';
+        let radius = 6;
+        if (p.isStart) {
+          fillColor = '#83f582'; // Wero Green
+          radius = 9;
+        } else if (p.isEnd) {
+          fillColor = '#ff158a'; // Wero Pink
+          radius = 9;
+        } else if (p.isTransfer) {
+          fillColor = '#fdad70'; // Wero Orange
+          radius = 7;
+        } else {
+          fillColor = '#7af7f7'; // Wero Cyan
+          radius = 6;
+        }
+
+        leafletJS += `
+          L.circleMarker([${p.lat}, ${p.lon}], {
+            radius: ${radius},
+            fillColor: '${fillColor}',
+            color: '#1d1c1c',
+            weight: 2.5,
+            opacity: 1,
+            fillOpacity: 1
+          }).addTo(map).bindPopup("<b>${p.label.replace(/"/g, '\\"')}</b>");
+        `;
+      });
+    }
+
+    const leafletHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          body { margin: 0; padding: 0; }
+          #map { height: 100vh; width: 100vw; background-color: #f2efe9; }
+          .leaflet-bar a { background-color: #ffffff !important; color: #1d1c1c !important; border-color: #ccc !important; }
+          .leaflet-popup-content-wrapper {
+            background-color: #ffffff;
+            color: #1d1c1c;
+            border: 2px solid #1d1c1c;
+            border-radius: 8px;
+            box-shadow: 4px 4px 0px #1d1c1c;
+          }
+          .leaflet-popup-tip {
+            background-color: #ffffff;
+            border: 2px solid #1d1c1c;
+          }
+          .leaflet-tile {
+            filter: none;
+            /* Mitigate gaps/seams between map tiles under scaling/fractional pixels */
+            outline: 1px solid transparent;
+          }
+          .leaflet-tile-container img {
+            box-shadow: 0 0 1px rgba(0,0,0,0.05);
+          }
+          .warning-marker-icon { background: none; border: none; }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([${centerLat}, ${centerLon}], 13);
+          
+          // Use colorful OpenStreetMap standard tiles
+          const tilesUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+          
+          L.tileLayer(tilesUrl, {
+            attribution: '&copy; OpenStreetMap contributors'
+          }).addTo(map);
+
+          ${leafletJS}
+
+          const bounds = [
+            ${pointsList.map(p => `[${p.lat}, ${p.lon}]`).join(',')}
+          ];
+          if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [35, 35] });
+          }
+
+          // Warning markers (Waze-style sensory icons) — shared with the journey map.
+          ${warningMarkerScript()}
+
+          // Receive marker updates pushed from React.
+          window.addEventListener('message', function(event) {
+            try {
+              const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+              if (data.type === 'updateWarnings') {
+                window.updateWarnings(data.warnings);
+              }
+            } catch (e) {}
+          });
+        </script>
+      </body>
+      </html>
+    `;
+
+    return { leafletHtml, hasMapCoords };
+  }, [route, accents]);
+
+  if (!route) return null;
 
   return (
     <WebSafeModal
@@ -622,15 +608,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
               onPress={() => {
                 analytics.trackClick();
                 onClose();
-                // Allow a tiny delay on Web for React Native Web's modal to cleanly transition
-                // and restore body styling before navigating.
-                if (Platform.OS === 'web') {
-                  setTimeout(() => {
-                    router.replace('/');
-                  }, 150);
-                } else {
-                  router.replace('/');
-                }
+                router.replace('/');
               }}
               style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
               accessibilityRole="button"
