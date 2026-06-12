@@ -255,20 +255,16 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
 
   const headerPanResponder = React.useRef(
     PanResponder.create({
-      // Don't claim the gesture on touch-down: on touch devices that swallows
-      // taps on child controls (e.g. the Go button) before their onPress fires.
-      // Only grab the responder once the finger actually drags vertically, so
-      // the header still works as a drag handle but plain taps pass through.
-      onStartShouldSetPanResponder: () => false,
+      // Grab the gesture instantly when the bare handle is touched, so dragging
+      // the sheet stays responsive...
+      onStartShouldSetPanResponder: () => true,
+      // ...but DON'T capture on touch-down: capture=false lets a child control
+      // (the Go button) win a plain tap, so its onPress still fires on a device.
       onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        const { dy, dx } = gestureState;
-        return Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
-      },
-      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-        const { dy, dx } = gestureState;
-        return Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
-      },
+      // A drag that begins on the button is stolen back here on move, so you can
+      // still swipe the sheet from anywhere on the header.
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant,
       onPanResponderMove,

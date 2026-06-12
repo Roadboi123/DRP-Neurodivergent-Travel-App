@@ -281,8 +281,11 @@ export default function JourneyScreen() {
 
   const headerPanResponder = useRef(
     PanResponder.create({
+      // Grab instantly on the bare handle (responsive drag), but capture=false on
+      // touch-down so any child control still wins a plain tap; a drag is stolen
+      // back on move so the sheet swipes from anywhere on the header.
       onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderTerminationRequest: () => false,
