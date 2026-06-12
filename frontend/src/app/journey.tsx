@@ -6,6 +6,7 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
+import { WarningConfidence } from '@/components/routes/warning-confidence';
 import {
   REPORT_OPTIONS,
   warningMarkerScript,
@@ -758,6 +759,7 @@ export default function JourneyScreen() {
               </View>
 
               <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
+              <WarningConfidence warning={selectedWarning} />
               <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
 
               <TouchableOpacity
