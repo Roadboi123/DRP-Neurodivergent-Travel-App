@@ -80,8 +80,20 @@ export function useLiveLocation(enabled: boolean = true): LiveLocation {
 
     return () => {
       cancelled = true;
-      posSub?.remove();
-      headingSub?.remove();
+      if (posSub) {
+        try {
+          posSub.remove();
+        } catch (err) {
+          console.warn('Failed to remove location subscription:', err);
+        }
+      }
+      if (headingSub) {
+        try {
+          headingSub.remove();
+        } catch (err) {
+          console.warn('Failed to remove heading subscription:', err);
+        }
+      }
     };
   }, [enabled]);
 
