@@ -81,6 +81,9 @@ class WarningItemSchema(BaseModel):
     username: Optional[str] = None
     confidence_score: Optional[float] = 1.0
     report_count: Optional[int] = 1
+    # ISO-8601 UTC timestamp of the most recent report in this cluster, so the
+    # client can show "last reported N minutes ago" when confirming a warning.
+    last_reported: Optional[str] = None
 
 
 class ReportWarningSchema(BaseModel):

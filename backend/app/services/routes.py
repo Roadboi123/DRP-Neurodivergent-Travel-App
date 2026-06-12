@@ -1428,7 +1428,8 @@ async def get_user_warnings(
                         "lon": float(representative["lon"]) if representative["lon"] is not None else None,
                         "username": final_username or None,
                         "confidence_score": float(total_weight),
-                        "report_count": int(report_count)
+                        "report_count": int(report_count),
+                        "last_reported": str(representative.get("created_at_str") or "") or None,
                     })
     except Exception as e:
         print(f"Error fetching user reported warnings: {e}")
