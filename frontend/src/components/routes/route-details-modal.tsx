@@ -41,6 +41,43 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
 
   const route = propRoute || cachedRoute;
 
+  // Web Scroll Restoration / Layout Fix:
+  // React Native Web's Modal component locks body scrolling by applying styles to
+  // document.body/document.documentElement. If the modal is unmounted or hidden
+  // during screen transitions/navigation, these styles can get stuck, causing a
+  // white/frozen screen. We add robust force-restoration hooks to avoid this.
+  React.useEffect(() => {
+    return () => {
+      if (Platform.OS === 'web') {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.height = '';
+        if (document.documentElement) {
+          document.documentElement.style.overflow = '';
+        }
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (!visible) {
+      const restoreScroll = () => {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.height = '';
+        if (document.documentElement) {
+          document.documentElement.style.overflow = '';
+        }
+      };
+      restoreScroll();
+      const timer = setTimeout(restoreScroll, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
+
   // User-reported warnings on the pre-Go map — same source, markers and
   // remove/hide actions as the live journey. Poll only while the sheet is open.
   const {
@@ -228,7 +265,15 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
     analytics.startJourney(route.id);
     setActiveJourneyRoute(route);
     onClose();
-    router.push('/journey');
+    // Allow a tiny delay on Web for React Native Web's modal to cleanly transition
+    // and restore body styling before navigating.
+    if (Platform.OS === 'web') {
+      setTimeout(() => {
+        router.push('/journey');
+      }, 150);
+    } else {
+      router.push('/journey');
+    }
   };
 
   const toggleStops = (idx: number) => {
@@ -531,7 +576,15 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
               onPress={() => {
                 analytics.trackClick();
                 onClose();
-                router.replace('/');
+                // Allow a tiny delay on Web for React Native Web's modal to cleanly transition
+                // and restore body styling before navigating.
+                if (Platform.OS === 'web') {
+                  setTimeout(() => {
+                    router.replace('/');
+                  }, 150);
+                } else {
+                  router.replace('/');
+                }
               }}
               style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
               accessibilityRole="button"
