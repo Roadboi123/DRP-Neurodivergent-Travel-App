@@ -3,6 +3,7 @@ import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, Touch
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { PreferencesNudge } from '@/components/home/preferences-nudge';
 import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
@@ -78,10 +79,23 @@ export default function HomeScreen() {
           style={styles.planCard}
         />
 
+        {/* Signpost for travellers who haven't personalised yet: preferences are
+            account-bound, so for logged-out users this opens the login/profile
+            modal. Logged-in users get the preset section below instead. */}
+        {!isLoggedIn && (
+          <PreferencesNudge
+            message="Log in to set your sensory preferences for calmer, personalised routes."
+            onPress={() => setProfileModalVisible(true)}
+          />
+        )}
+
         {/* Preset profiles — quick way to re-tune routes, with a glimpse of the
             active profile's sensory levels. An Edit button opens the full editor. */}
         {isLoggedIn && (
           <View style={styles.presetSection}>
+            <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
+              Your sensory preferences
+            </Text>
             <Pressable
               onPress={() => router.push('/preferences')}
               accessibilityRole="button"
