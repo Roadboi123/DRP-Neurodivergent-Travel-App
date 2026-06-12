@@ -20,6 +20,54 @@ interface RouteDetailsModalProps {
   onClose: () => void;
 }
 
+interface WebSafeModalProps {
+  visible: boolean;
+  onRequestClose: () => void;
+  children: React.ReactNode;
+}
+
+function WebSafeModal({ visible, onRequestClose, children }: WebSafeModalProps) {
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || !visible) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onRequestClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visible, onRequestClose]);
+
+  if (Platform.OS === 'web') {
+    if (!visible) return null;
+    return (
+      <View
+        style={{
+          position: 'fixed' as any,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 99999,
+        }}
+      >
+        {children}
+      </View>
+    );
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={onRequestClose}
+    >
+      {children}
+    </Modal>
+  );
+}
+
 export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteDetailsModalProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -550,10 +598,8 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
   `;
 
   return (
-    <Modal
+    <WebSafeModal
       visible={visible}
-      animationType="slide"
-      transparent={false}
       onRequestClose={onClose}
     >
       <SafeAreaView style={[styles.modalSheet, { backgroundColor: palette.surface }]}>
@@ -906,7 +952,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
           )}
         </View>
       </SafeAreaView>
-    </Modal>
+    </WebSafeModal>
   );
 }
 
