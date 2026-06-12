@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
@@ -196,6 +197,11 @@ export default function JourneyScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
+
+  // Offset the floating top controls/notices by the safe-area inset so they
+  // clear the notch/status bar and sit at the same comfortable height as the
+  // route-details screen's header (which gets this for free via SafeAreaView).
+  const insets = useSafeAreaInsets();
 
   const webViewRef = useRef<WebView>(null);
 
@@ -499,7 +505,7 @@ export default function JourneyScreen() {
       </View>
 
       {/* Top Left Navigation Icons (Back and Home) */}
-      <View style={styles.topControls}>
+      <View style={[styles.topControls, { top: insets.top + 16 }]}>
         <View style={styles.navButtonsRow}>
           <TouchableOpacity
             onPress={() => {
@@ -542,7 +548,7 @@ export default function JourneyScreen() {
 
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
-        <View style={[styles.noticeBanner, { backgroundColor: accents.yellow, borderColor: palette.border }]}>
+        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.yellow, borderColor: palette.border }]}>
           <Ionicons name="information-circle-outline" size={16} color={palette.textPrimary} />
           <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>{reportNotice}</Text>
         </View>
@@ -550,7 +556,7 @@ export default function JourneyScreen() {
 
       {/* Location-off fallback notice — reports/marker use the route start instead */}
       {!reportNotice && locationPermission === 'denied' && (
-        <View style={[styles.noticeBanner, { backgroundColor: accents.orange, borderColor: palette.border }]}>
+        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.orange, borderColor: palette.border }]}>
           <Ionicons name="location-outline" size={16} color={palette.textPrimary} />
           <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>
             Location off — using route start
@@ -559,7 +565,7 @@ export default function JourneyScreen() {
       )}
 
       {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
-      <View style={[styles.reportCapsule, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <View style={[styles.reportCapsule, { top: insets.top + 144, backgroundColor: palette.surface, borderColor: palette.border }]}>
         {REPORT_OPTIONS.map((option) => (
           <TouchableOpacity
             key={option.type}
@@ -805,7 +811,8 @@ const styles = StyleSheet.create({
   },
   topControls: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 16 : 36,
+    // `top` is applied inline as insets.top + 16 (see render) so the controls
+    // clear the notch/status bar instead of being pinned to the screen edge.
     left: 16,
     right: 16,
     zIndex: 10,
@@ -829,7 +836,7 @@ const styles = StyleSheet.create({
   },
   noticeBanner: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 76 : 96,
+    // `top` applied inline as insets.top + 76 (see render).
     left: 16,
     right: 16,
     zIndex: 11,
@@ -851,7 +858,7 @@ const styles = StyleSheet.create({
   },
   reportCapsule: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 144 : 164,
+    // `top` applied inline as insets.top + 144 (see render).
     right: 16,
     zIndex: 10,
     borderWidth: 2.5,
