@@ -10,5 +10,10 @@ export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ??
   'https://drp-neurodivergent-travel-app-production.up.railway.app';
 
-/** Local FastAPI instance used as a fallback when the deployed backend is unreachable. */
-export const LOCAL_API_BASE_URL = 'http://localhost:8000';
+/**
+ * Local FastAPI instance used as a fallback when the deployed backend is
+ * unreachable. Override via `EXPO_PUBLIC_LOCAL_API_URL` (e.g. on a physical
+ * device, where `localhost` is the phone, not the dev machine).
+ */
+export const LOCAL_API_BASE_URL =
+  process.env.EXPO_PUBLIC_LOCAL_API_URL ?? 'http://localhost:8000';
