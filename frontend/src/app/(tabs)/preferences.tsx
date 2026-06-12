@@ -14,7 +14,6 @@ import {
 
 import { PreferenceRow } from '@/components/preferences/preference-row';
 import { PreferenceScaleLegend } from '@/components/preferences/preference-scale-legend';
-import { PreferencesGuideSheet } from '@/components/preferences/preferences-guide-sheet';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetNameEditor } from '@/components/preferences/preset-name-editor';
 import { GradientBackground } from '@/components/ui/gradient-background';
@@ -29,7 +28,6 @@ import type { Preference, SensitivityLevel } from '@/types/preference';
 export default function UserPreferencesScreen() {
   const { isLoggedIn, setProfileModalVisible } = useAuth();
   const { values, activeId, loading, saveStatus, setPresetValue } = usePresets();
-  const [guideVisible, setGuideVisible] = useState(false);
   const [renaming, setRenaming] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
@@ -69,14 +67,6 @@ export default function UserPreferencesScreen() {
             <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
               Your preferences
             </Text>
-
-            <TouchableOpacity
-              onPress={() => setGuideVisible(true)}
-              hitSlop={10}
-              style={styles.infoButton}
-              accessibilityLabel="About your preferences">
-              <Ionicons name="information-circle-outline" size={26} color={palette.textSecondary} />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -169,8 +159,6 @@ export default function UserPreferencesScreen() {
           </>
         )}
       </ScrollView>
-
-      <PreferencesGuideSheet visible={guideVisible} onClose={() => setGuideVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -205,10 +193,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: -1,
-  },
-
-  infoButton: {
-    marginTop: 6,
   },
 
   sectionTitle: {

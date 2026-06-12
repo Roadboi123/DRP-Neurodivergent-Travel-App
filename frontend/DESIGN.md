@@ -56,8 +56,8 @@ heavy uppercase type, pill controls). All tokens live in `src/constants/theme.ts
   hardcoded `BRAND.white`/`BRAND.ink` must be driven by `palette.surface`/`palette.border` (inline, not
   in static `StyleSheet`), or they break in dark. **Animate with RN core `Animated`** (transform/opacity
   only) — reanimated has no worklets/babel plugin configured here, so its animated styles silently no-op.
-- **Bottom sheets have no scrim.** `RouteFilterSheet` / `PreferencesGuideSheet` use a
-  **transparent** backdrop — the 2px ink border defines them; a dark scrim clashes with the gradient.
+- **Bottom sheets have no scrim.** `RouteFilterSheet` uses a **transparent** backdrop — the
+  2px ink border defines it; a dark scrim clashes with the gradient.
 - **Shadows:** the signature `hardShadow(offset)` helper — a hard, un-blurred ink offset block
   (`shadowRadius: 0`). Use offset 6 for cards, 3–4 for pills/buttons, 2 for the pressed state.
   **No soft/blurred shadows.**
