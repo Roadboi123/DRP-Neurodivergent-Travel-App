@@ -1804,7 +1804,7 @@
     },
     "/routes/warnings/report": {
       "post": {
-        "description": "Save a user-reported sensory warning to the database so other users can see it.\n\nRejects with 409 if a same-type warning was already reported nearby (anti-spam).",
+        "description": "Save a user-reported sensory warning to the database so other users can see it.\n\nRejects with 409 only if THIS user already reported the same type nearby —\ndifferent travellers reporting the same spot are allowed so reports aggregate.",
         "operationId": "report_warning_routes_warnings_report_post",
         "requestBody": {
           "content": {

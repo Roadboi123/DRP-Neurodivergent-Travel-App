@@ -65,22 +65,30 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 # being reported. Also the window used for the anti-spam duplicate check.
 REPORTED_WARNING_TTL_MINUTES = 20
 
-# A new report is rejected if a non-expired warning of the same type already
-# sits this close, so users can't spam-report the same spot.
+# A new report is rejected only if THE SAME user already has a non-expired
+# warning of the same type this close — so one person can't spam a spot, while
+# different travellers reporting the same place still stack up and aggregate.
 DUPLICATE_RADIUS_M = 75.0
 
 
 def is_duplicate_report(warning_type: str, lat: float, lon: float, username: str = "") -> bool:
-    """True if a non-expired warning of the same ``warning_type`` already exists
-    within ``DUPLICATE_RADIUS_M`` of ``(lat, lon)``.
+    """True if ``username`` already has a non-expired warning of the same
+    ``warning_type`` within ``DUPLICATE_RADIUS_M`` of ``(lat, lon)``.
 
-    Used by the report endpoint to stop a user (or several) piling duplicate
-    reports onto one location. Reuses the same TTL window as the read path so an
-    expired report no longer blocks a fresh one.
+    This is per-user on purpose: aggregation relies on multiple *distinct* users
+    reporting the same spot, so we only block a user from re-reporting their own
+    nearby warning. Reuses the same TTL window as the read path so an expired
+    report no longer blocks a fresh one. Anonymous reports are never blocked.
     """
     from datetime import datetime, timezone, timedelta
+
+    # Anonymous reports are never blocked; aggregation only dedups per real user.
     clean_username = username.strip().lower()
+    if not clean_username:
+        return False
     try:
+        # Filter by type in the query; match the reporter in Python so the
+        # username comparison can be normalised (trimmed + case-insensitive).
         res = (
             supabase.table("reported_warnings")
             .select("warning_type,lat,lon,created_at,username")
@@ -126,6 +134,19 @@ WEIGHTS_MAP = {
     3: 2.0,
     4: 3.0,
 }
+
+# How much to trust a reporter's warning based on THEIR sensitivity to that
+# stimulus (Supabase 1 = little … 4 = very high). The more sensitive someone is,
+# the more easily they're triggered, so their report is weaker evidence that the
+# area is objectively bad — hence trust falls as sensitivity rises. Used when
+# aggregating reports into a confidence score. Unset/unknown defaults to 1.0.
+REPORTER_TRUST_WEIGHTS = {
+    1: 2.0,
+    2: 1.0,
+    3: 0.5,
+    4: 0.25,
+}
+DEFAULT_REPORTER_TRUST = 1.0
 
 
 COMMON_STATIONS = {
@@ -1309,16 +1330,14 @@ async def get_user_warnings(
                     elif "flower" in warning_type or "smell" in warning_type:
                         sens_key = "smell_sensitivity"
 
-                    weight = 1.0
+                    # Trust the report less the more sensitive the reporter is to
+                    # this stimulus (full 1-4 scale; default when unset/unknown).
+                    weight = DEFAULT_REPORTER_TRUST
                     if r_user and r_user in user_sens_map and sens_key:
                         sens_val = user_sens_map[r_user].get(sens_key)
                         if sens_val is not None:
                             try:
-                                sens_val = int(sens_val)
-                                if sens_val == 3:
-                                    weight = 0.5
-                                elif sens_val == 1:
-                                    weight = 2.0
+                                weight = REPORTER_TRUST_WEIGHTS.get(int(sens_val), DEFAULT_REPORTER_TRUST)
                             except (ValueError, TypeError):
                                 pass
 
@@ -1357,25 +1376,37 @@ async def get_user_warnings(
 
                 # Step E: Format and aggregate each cluster
                 for cluster in clusters:
-                    # Sort reports by created_at_str descending to find the latest
+                    # Newest first, so the representative is the latest report and
+                    # per-user dedup keeps each user's most recent contribution.
                     cluster.sort(key=lambda x: str(x.get("created_at_str") or ""), reverse=True)
                     representative = cluster[0]
-                    total_weight = sum(float(r["weight"]) for r in cluster)
-                    report_count = len(cluster)
+
+                    # Aggregate by UNIQUE user: one user re-reporting the same spot
+                    # mustn't inflate confidence. Anonymous reports (no username)
+                    # each count once.
+                    unique_reports: list[dict[str, Any]] = []
+                    seen_users: set[str] = set()
+                    for r in cluster:
+                        r_name = r.get("username")
+                        if r_name:
+                            if r_name in seen_users:
+                                continue
+                            seen_users.add(str(r_name))
+                        unique_reports.append(r)
+
+                    total_weight = sum(float(r["weight"]) for r in unique_reports)
+                    report_count = len(unique_reports)
 
                     if total_weight >= 3.0:
-                        confidence_level = "High"
                         severity = "high"
                     elif total_weight >= 1.5:
-                        confidence_level = "Medium"
                         severity = "medium"
                     else:
-                        confidence_level = "Low"
                         severity = "info"
 
-                    # Format dynamic description
-                    prefix = f"[Confidence: {confidence_level} ({report_count} report{'s' if report_count > 1 else ''})] "
-                    desc = prefix + str(representative["desc"])
+                    # Confidence travels via severity / report_count / confidence_score
+                    # (rendered as UI on the client) — keep the description clean.
+                    desc = str(representative["desc"])
 
                     # Check if the current user requesting warnings was one of the reporters
                     own_report = next((r for r in cluster if username and r["username"] == username), None)

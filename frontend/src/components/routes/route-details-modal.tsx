@@ -6,6 +6,7 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { SensoryMeter } from '@/components/routes/sensory-meter';
+import { WarningConfidence } from '@/components/routes/warning-confidence';
 import { warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
 import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -927,6 +928,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                   </View>
 
                   <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
+                  <WarningConfidence warning={selectedWarning} />
                   <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
 
                   <TouchableOpacity

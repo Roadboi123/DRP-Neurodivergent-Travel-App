@@ -2,22 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { BRAND, Fonts, getAccents, getPalette, hardShadow, type Accents } from '@/constants/theme';
+import { confidenceColor, WarningConfidence } from '@/components/routes/warning-confidence';
+import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
-
-/** Maps severity to a background fill from the accent ramp. */
-function severityColor(severity: WarningItem['severity'], accents: Accents): string {
-  if (severity === 'high') {
-    return accents.pink;
-  }
-  if (severity === 'medium') {
-    return accents.orange;
-  }
-  return accents.cyan;
-}
 
 export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
   const isDark = useColorScheme() === 'dark';
@@ -71,7 +61,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
               <View
                 style={[
                   styles.bullet,
-                  { backgroundColor: severityColor(w.severity, accents), borderColor: palette.border },
+                  { backgroundColor: confidenceColor(w.severity, accents), borderColor: palette.border },
                 ]}
               >
                 <Ionicons name={w.icon as IoniconName} size={14} color={BRAND.ink} />
@@ -83,6 +73,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
                 <Text style={[styles.itemDesc, { color: palette.textSecondary }]}>
                   {w.desc}
                 </Text>
+                <WarningConfidence warning={w} compact />
               </View>
             </View>
             {index < warnings.length - 1 && (
