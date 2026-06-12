@@ -80,19 +80,19 @@ export function useLiveLocation(enabled: boolean = true): LiveLocation {
 
     return () => {
       cancelled = true;
-      // expo-location's web shim can throw on remove() (its LocationEventEmitter
-      // has no removeSubscription). During unmount — e.g. pressing Back out of the
-      // journey — that surfaces as an uncaught error and blanks the whole page.
-      // Guard each removal so teardown can never crash the app.
-      try {
-        posSub?.remove();
-      } catch (e) {
-        console.warn('Failed to remove location watcher:', e);
+      if (posSub) {
+        try {
+          posSub.remove();
+        } catch (err) {
+          console.warn('Failed to remove location subscription:', err);
+        }
       }
-      try {
-        headingSub?.remove();
-      } catch (e) {
-        console.warn('Failed to remove heading watcher:', e);
+      if (headingSub) {
+        try {
+          headingSub.remove();
+        } catch (err) {
+          console.warn('Failed to remove heading subscription:', err);
+        }
       }
     };
   }, [enabled]);
