@@ -255,10 +255,20 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
 
   const headerPanResponder = React.useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
+      // Don't claim the gesture on touch-down: on touch devices that swallows
+      // taps on child controls (e.g. the Go button) before their onPress fires.
+      // Only grab the responder once the finger actually drags vertically, so
+      // the header still works as a drag handle but plain taps pass through.
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        return Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        const { dy, dx } = gestureState;
+        return Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+      },
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant,
       onPanResponderMove,
