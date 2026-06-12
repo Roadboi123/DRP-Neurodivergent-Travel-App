@@ -45,6 +45,11 @@ export type FormattedWarning = {
   desc: string;
   emoji: string;
   color: string;
+  // Severity drives the marker's ring thickness/size (how strong the signal is);
+  // reportCount drives the little count badge. Together they show, at a glance,
+  // how heavily an area has been flagged.
+  severity: WarningItem['severity'];
+  reportCount: number;
   lat: number | null | undefined;
   lon: number | null | undefined;
   hidden: boolean;
@@ -68,6 +73,8 @@ export function formatWarnings(
       desc: w.desc,
       emoji,
       color,
+      severity: w.severity,
+      reportCount: w.report_count ?? 1,
       lat: w.lat,
       lon: w.lon,
       hidden: hideAll || dismissedIds.has(w.id),
@@ -97,17 +104,27 @@ export function warningMarkerScript(): string {
       warnings.forEach((w) => {
         if (w.lat == null || w.lon == null || w.hidden) return;
 
+        // Stronger signal (more / more-trusted reports) => bigger marker + thicker ring.
+        const size = w.severity === 'high' ? 46 : w.severity === 'medium' ? 40 : 34;
+        const ring = w.severity === 'high' ? 5 : w.severity === 'medium' ? 4 : 3;
+        const emojiSize = Math.round(size * 0.45);
+        const count = w.reportCount || 1;
+        const badge = count > 1
+          ? \`<div style="position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; background: #1d1c1c; color: #fff; border: 2px solid #fff; border-radius: 9px; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center;">\${count}</div>\`
+          : '';
+
         const markerHtml = \`
-          <div style="background-color: \${w.color}; width: 36px; height: 36px; border-radius: 50%; border: 3px solid #1d1c1c; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-weight: bold; position: relative;">
-            <span style="font-size: 16px;">\${w.emoji}</span>
+          <div style="background-color: \${w.color}; width: \${size}px; height: \${size}px; border-radius: 50%; border: \${ring}px solid #1d1c1c; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-weight: bold; position: relative;">
+            <span style="font-size: \${emojiSize}px;">\${w.emoji}</span>
+            \${badge}
           </div>
         \`;
 
         const warningIcon = L.divIcon({
           html: markerHtml,
           className: 'warning-marker-icon',
-          iconSize: [36, 36],
-          iconAnchor: [18, 18]
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2]
         });
 
         const marker = L.marker([w.lat, w.lon], { icon: warningIcon }).addTo(map);
