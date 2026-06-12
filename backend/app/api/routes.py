@@ -103,7 +103,7 @@ async def report_warning(body: ReportWarningSchema):
     """
     from app.integrations.supabase import supabase
 
-    if is_duplicate_report(body.warning_type, body.lat, body.lon):
+    if is_duplicate_report(body.warning_type, body.lat, body.lon, body.username):
         raise HTTPException(
             status_code=409,
             detail="A similar warning has already been reported nearby.",
