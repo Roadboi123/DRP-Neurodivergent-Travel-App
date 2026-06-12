@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,8 +21,27 @@ import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
-import type { RouteOption } from '@/types/route';
+import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
+import { haversineMeters } from '@/utils/geo';
+
+// How close (metres) the traveller must get to a warning before we ask them to
+// confirm it's still there.
+const PROXIMITY_THRESHOLD_M = 80;
+
+/** Human "N minutes ago" from an ISO timestamp; '' when unknown/unparseable. */
+function formatTimeAgo(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
 
 function calculateHeading(from: [number, number], to: [number, number]): number {
   const dLon = ((to[1] - from[1]) * Math.PI) / 180;
@@ -207,6 +226,7 @@ export default function JourneyScreen() {
 
   // Warnings state, polling and remove/hide actions — shared with route details.
   const {
+    warnings,
     formattedWarnings,
     selectedWarning,
     setSelectedWarning,
@@ -227,6 +247,12 @@ export default function JourneyScreen() {
   // effect re-pushes once the map can actually receive messages (the first push
   // races the async map load and is otherwise dropped).
   const [mapReadyTick, setMapReadyTick] = useState(0);
+
+  // Proximity confirmation: the nearby warning we're currently asking the
+  // traveller to confirm, plus the ids they've already answered (yes/no/skip)
+  // so we don't re-prompt for the same one this journey.
+  const [proximityWarning, setProximityWarning] = useState<WarningItem | null>(null);
+  const respondedWarningIds = useRef<Set<string>>(new Set());
 
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
@@ -392,6 +418,49 @@ export default function JourneyScreen() {
     if (allPathCoords.length < 2) return 0;
     return calculateHeading(allPathCoords[0], allPathCoords[1]);
   }, [liveHeading, allPathCoords]);
+
+  // When the traveller's REAL location gets within range of a warning they
+  // haven't answered yet, surface a confirm prompt. Gated on liveCoords so the
+  // route-origin fallback never triggers it, and on no prompt already showing.
+  useEffect(() => {
+    if (!liveCoords || proximityWarning) return;
+    const nearest = warnings
+      .filter(
+        (w) =>
+          w.lat != null &&
+          w.lon != null &&
+          !respondedWarningIds.current.has(w.id),
+      )
+      .map((w) => ({ w, dist: haversineMeters(userCoords, [w.lat as number, w.lon as number]) }))
+      .filter(({ dist }) => dist <= PROXIMITY_THRESHOLD_M)
+      .sort((a, b) => a.dist - b.dist)[0];
+    if (nearest) {
+      setProximityWarning(nearest.w);
+      analytics.trackWarningInteraction();
+    }
+  }, [liveCoords, userCoords, warnings, proximityWarning]);
+
+  // Record an answer so we don't immediately re-prompt for the same warning.
+  const respondProximity = useCallback(
+    (action: 'yes' | 'no' | 'skip') => {
+      const w = proximityWarning;
+      if (!w) return;
+      respondedWarningIds.current.add(w.id);
+      setProximityWarning(null);
+      analytics.trackWarningInteraction();
+      if (action === 'no') {
+        // No longer there: delete it for everyone if it's the user's own report,
+        // otherwise just hide it locally (same rules as the action card).
+        const isOwn = !!username && w.username === username;
+        if (isOwn) {
+          removeOwnWarning(w);
+        } else {
+          dismissWarning(w);
+        }
+      }
+    },
+    [proximityWarning, username, removeOwnWarning, dismissWarning],
+  );
 
   // Sync warnings + user location to the Leaflet map.
   useEffect(() => {
@@ -793,6 +862,69 @@ export default function JourneyScreen() {
         </View>
       )}
 
+      {/* Proximity confirm prompt — shown when the traveller nears a warning */}
+      {proximityWarning && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <View style={styles.reportBackdrop} pointerEvents="none" />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View
+                style={[
+                  styles.warningCardIcon,
+                  { backgroundColor: warningVisual(proximityWarning.icon, accents).color, borderColor: palette.border },
+                ]}
+              >
+                <Text style={styles.warningListEmoji}>{warningVisual(proximityWarning.icon, accents).emoji}</Text>
+              </View>
+
+              <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>Still here?</Text>
+              <Text style={[styles.proximityPromptSub, { color: palette.textSecondary }]}>{proximityWarning.title}</Text>
+              {formatTimeAgo(proximityWarning.last_reported) ? (
+                <Text style={[styles.proximityPromptMeta, { color: palette.textMuted }]}>
+                  Last reported {formatTimeAgo(proximityWarning.last_reported)}
+                </Text>
+              ) : null}
+
+              <View style={styles.proximityActionsRow}>
+                <TouchableOpacity
+                  onPress={() => respondProximity('yes')}
+                  activeOpacity={0.85}
+                  style={[styles.proximityActionBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Yes, still here"
+                >
+                  <Ionicons name="checkmark" size={16} color={palette.textPrimary} />
+                  <Text style={[styles.proximityActionText, { color: palette.textPrimary }]}>Yes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => respondProximity('no')}
+                  activeOpacity={0.85}
+                  style={[styles.proximityActionBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="No, it's gone"
+                >
+                  <Ionicons name="close" size={16} color={palette.textPrimary} />
+                  <Text style={[styles.proximityActionText, { color: palette.textPrimary }]}>No</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => respondProximity('skip')}
+                  activeOpacity={0.85}
+                  style={[styles.proximityActionBtn, { backgroundColor: palette.surface, borderColor: palette.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Skip"
+                >
+                  <Text style={[styles.proximityActionText, { color: palette.textPrimary }]}>Skip</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
+                Help keep warnings accurate for nearby travellers
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
     </SafeAreaView>
   );
 }
@@ -1063,6 +1195,40 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  proximityPromptSub: {
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  proximityPromptMeta: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: -2,
+  },
+  proximityActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignSelf: 'stretch',
+    marginTop: 4,
+  },
+  proximityActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderWidth: 2.5,
+    borderRadius: 12,
+    paddingVertical: 12,
+    ...hardShadow(2),
+  },
+  proximityActionText: {
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   detailsScrollContent: {
     padding: 16,
