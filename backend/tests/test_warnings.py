@@ -256,6 +256,27 @@ def test_duplicate_report_anonymous_never_blocked():
         assert is_duplicate_report("sound", _REF[0], _REF[1], "") is False
 
 
+def test_duplicate_report_blocks_same_user():
+    fresh = datetime.now(timezone.utc).isoformat()
+    rows = [{"warning_type": "sound", "lat": _NEARBY[0], "lon": _NEARBY[1], "created_at": fresh, "username": "alice"}]
+    with patch("app.services.routes.supabase", _supabase_returning(rows)):
+        assert is_duplicate_report("sound", _REF[0], _REF[1], "alice") is True
+
+
+def test_duplicate_report_allows_different_user():
+    fresh = datetime.now(timezone.utc).isoformat()
+    rows = [{"warning_type": "sound", "lat": _NEARBY[0], "lon": _NEARBY[1], "created_at": fresh, "username": "bob"}]
+    with patch("app.services.routes.supabase", _supabase_returning(rows)):
+        assert is_duplicate_report("sound", _REF[0], _REF[1], "alice") is False
+
+
+def test_duplicate_report_case_insensitive_usernames():
+    fresh = datetime.now(timezone.utc).isoformat()
+    rows = [{"warning_type": "sound", "lat": _NEARBY[0], "lon": _NEARBY[1], "created_at": fresh, "username": "Alice"}]
+    with patch("app.services.routes.supabase", _supabase_returning(rows)):
+        assert is_duplicate_report("sound", _REF[0], _REF[1], "  alice ") is True
+
+
 # ---------------------------------------------------------------------------
 # Aggregation of user-reported warnings (read path: get_user_warnings)
 # ---------------------------------------------------------------------------

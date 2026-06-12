@@ -71,7 +71,7 @@ REPORTED_WARNING_TTL_MINUTES = 20
 DUPLICATE_RADIUS_M = 75.0
 
 
-def is_duplicate_report(warning_type: str, lat: float, lon: float, username: str) -> bool:
+def is_duplicate_report(warning_type: str, lat: float, lon: float, username: str = "") -> bool:
     """True if ``username`` already has a non-expired warning of the same
     ``warning_type`` within ``DUPLICATE_RADIUS_M`` of ``(lat, lon)``.
 
@@ -82,14 +82,17 @@ def is_duplicate_report(warning_type: str, lat: float, lon: float, username: str
     """
     from datetime import datetime, timezone, timedelta
 
-    if not username:
+    # Anonymous reports are never blocked; aggregation only dedups per real user.
+    clean_username = username.strip().lower()
+    if not clean_username:
         return False
     try:
+        # Filter by type in the query; match the reporter in Python so the
+        # username comparison can be normalised (trimmed + case-insensitive).
         res = (
             supabase.table("reported_warnings")
             .select("warning_type,lat,lon,created_at,username")
             .eq("warning_type", warning_type)
-            .eq("username", username)
             .execute()
         )
     except Exception as e:
@@ -102,6 +105,9 @@ def is_duplicate_report(warning_type: str, lat: float, lon: float, username: str
     now_dt = datetime.now(timezone.utc)
     for row in res.data:
         if not isinstance(row, dict):
+            continue
+        row_username = str(row.get("username") or "").strip().lower()
+        if clean_username and row_username != clean_username:
             continue
         created_at_str = row.get("created_at")
         if created_at_str:
