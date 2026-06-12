@@ -1411,9 +1411,15 @@ async def get_user_warnings(
                     # Check if the current user requesting warnings was one of the reporters
                     own_report = next((r for r in cluster if username and r["username"] == username), None)
                     final_username = username if own_report else representative["username"]
+                    # Expose the requester's OWN report id when they have one, so an
+                    # owner-delete removes the row that actually belongs to them. Using
+                    # the representative's id here would silently match no row (and so
+                    # delete nothing) whenever someone else reported the same spot more
+                    # recently and became the cluster representative.
+                    marker_id = str(own_report["id"]) if own_report else str(representative["id"])
 
                     warnings.append({
-                        "id": str(representative["id"]),
+                        "id": marker_id,
                         "title": str(representative["title"]),
                         "desc": desc,
                         "severity": severity,
@@ -1422,7 +1428,8 @@ async def get_user_warnings(
                         "lon": float(representative["lon"]) if representative["lon"] is not None else None,
                         "username": final_username or None,
                         "confidence_score": float(total_weight),
-                        "report_count": int(report_count)
+                        "report_count": int(report_count),
+                        "last_reported": str(representative.get("created_at_str") or "") or None,
                     })
     except Exception as e:
         print(f"Error fetching user reported warnings: {e}")

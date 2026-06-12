@@ -1037,6 +1037,17 @@
             "title": "Id",
             "type": "string"
           },
+          "last_reported": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reported"
+          },
           "lat": {
             "anyOf": [
               {

@@ -120,6 +120,8 @@ async def report_warning(body: ReportWarningSchema):
         "lon": body.lon,
     }).execute()
     
+    from datetime import datetime, timezone
+
     return WarningItemSchema(
         id=body.id,
         title=body.title,
@@ -129,6 +131,7 @@ async def report_warning(body: ReportWarningSchema):
         lat=body.lat,
         lon=body.lon,
         username=body.username,
+        last_reported=datetime.now(timezone.utc).isoformat(),
     )
 
 
