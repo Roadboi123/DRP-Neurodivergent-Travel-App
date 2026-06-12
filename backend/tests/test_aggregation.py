@@ -89,9 +89,10 @@ def test_warning_weighting_and_severity_escalation(mock_external_apis):
         assert agg_warning["id"] == "w2"
         assert agg_warning["title"] == "Noise reported"
         assert "Extremely loud drilling" in agg_warning["desc"]
-        
-        # Description should contain confidence prefix
-        assert "[Confidence: Medium (2 reports)]" in agg_warning["desc"]
+
+        # Confidence now travels via severity/report_count/confidence_score, not
+        # an inline text prefix — the description stays clean.
+        assert "[Confidence" not in agg_warning["desc"]
 
 
 def test_warning_clustering_proximity(mock_external_apis):
@@ -181,16 +182,16 @@ def test_warning_clustering_proximity(mock_external_apis):
         cluster_w1_w2 = next((w for w in warnings if w["id"] == "w2"), None)
         assert cluster_w1_w2 is not None
         assert cluster_w1_w2["report_count"] == 2
-        assert "[Confidence: Medium (2 reports)]" in cluster_w1_w2["desc"]
-        
+        assert cluster_w1_w2["desc"] == "Loud music."  # clean representative desc
+
         # Check w3
         warn_w3 = next((w for w in warnings if w["id"] == "w3"), None)
         assert warn_w3 is not None
         assert warn_w3["report_count"] == 1
-        assert "[Confidence: Low (1 report)]" in warn_w3["desc"]
-        
+        assert "[Confidence" not in warn_w3["desc"]
+
         # Check w4
         warn_w4 = next((w for w in warnings if w["id"] == "w4"), None)
         assert warn_w4 is not None
         assert warn_w4["report_count"] == 1
-        assert "[Confidence: Low (1 report)]" in warn_w4["desc"]
+        assert "[Confidence" not in warn_w4["desc"]
