@@ -6,7 +6,6 @@ import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getLegUIProps } from '@/components/routes/route-card';
-import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { WarningConfidence } from '@/components/routes/warning-confidence';
 import {
   REPORT_OPTIONS,
@@ -24,6 +23,7 @@ import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
 import { haversineMeters } from '@/utils/geo';
+import { cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 import { sendLocalNotification } from '@/services/notifications';
 
 // How close (metres) the traveller must get to a warning before we ask them to
@@ -54,6 +54,22 @@ function calculateHeading(from: [number, number], to: [number, number]): number 
   return (brng + 360) % 360;
 }
 
+// Walking is drawn as a dotted line in this blue so the map legend can say
+// plainly "blue = walking" (distinct from the transit liveries).
+const WALK_BLUE = '#2e6bff';
+
+/** A transport-mode emoji for the white "change here" markers + the map legend. */
+function modeEmoji(mode: string | null | undefined): string {
+  const m = (mode || '').toLowerCase();
+  if (m === 'walking' || m === 'walk') return '🚶';
+  if (m.includes('bus') || m === 'coach') return '🚌';
+  if (m === 'tube' || m === 'subway' || m === 'underground' || m.includes('elizabeth')) return '🚇';
+  if (m === 'dlr') return '🚈';
+  if (m === 'tram') return '🚊';
+  if (m === 'overground' || m === 'train' || m === 'national-rail') return '🚆';
+  return '🚉';
+}
+
 function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccents>) {
   const processedLegs = (route.legs || []).map((leg) => ({
     ...leg,
@@ -63,26 +79,58 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
     arr_lon: leg.arrival_lon,
   }));
 
-  const nodes: { lat: number; lon: number; label: string; isStart: boolean; isEnd: boolean }[] = [];
+  // Merge each leg's endpoints into physical points: where one leg ends and the
+  // next begins at the same place that's a single "change here" interchange, not
+  // two dots. `boardMode` is the mode you board at that change, used to pick the
+  // transport emoji on its white marker.
+  type JNode = {
+    lat: number;
+    lon: number;
+    label: string;
+    isStart: boolean;
+    isEnd: boolean;
+    isChange: boolean;
+    boardMode: string;
+  };
+  const nodes: JNode[] = [];
+  const addNode = (
+    lat: number | null | undefined,
+    lon: number | null | undefined,
+    label: string,
+    flags: { isStart?: boolean; isEnd?: boolean; isChange?: boolean; boardMode?: string },
+  ) => {
+    if (lat == null || lon == null) return;
+    const last = nodes[nodes.length - 1];
+    if (last) {
+      const sameName = !!label && last.label.toLowerCase() === label.toLowerCase();
+      const nearby = Math.abs(last.lat - lat) < 0.0003 && Math.abs(last.lon - lon) < 0.0003;
+      if (sameName || nearby) {
+        last.isStart = last.isStart || !!flags.isStart;
+        last.isEnd = last.isEnd || !!flags.isEnd;
+        last.isChange = last.isChange || !!flags.isChange;
+        if (flags.boardMode) last.boardMode = flags.boardMode;
+        return;
+      }
+    }
+    nodes.push({
+      lat,
+      lon,
+      label,
+      isStart: !!flags.isStart,
+      isEnd: !!flags.isEnd,
+      isChange: !!flags.isChange,
+      boardMode: flags.boardMode || '',
+    });
+  };
   processedLegs.forEach((leg, index) => {
-    if (leg.dep_lat != null && leg.dep_lon != null) {
-      nodes.push({
-        lat: leg.dep_lat,
-        lon: leg.dep_lon,
-        label: leg.departure,
-        isStart: index === 0,
-        isEnd: false,
-      });
-    }
-    if (leg.arr_lat != null && leg.arr_lon != null) {
-      nodes.push({
-        lat: leg.arr_lat,
-        lon: leg.arr_lon,
-        label: leg.arrival,
-        isStart: false,
-        isEnd: index === processedLegs.length - 1,
-      });
-    }
+    const isFirst = index === 0;
+    const isLast = index === processedLegs.length - 1;
+    addNode(leg.dep_lat, leg.dep_lon, leg.departure, {
+      isStart: isFirst,
+      isChange: !isFirst,
+      boardMode: leg.mode,
+    });
+    addNode(leg.arr_lat, leg.arr_lon, leg.arrival, { isEnd: isLast, isChange: !isLast });
   });
 
   const boundsPoints: [number, number][] = [];
@@ -124,7 +172,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
         lineJoin: 'round'
       }).addTo(map);
       L.polyline(${points}, {
-        color: '${isWalking ? '#ff158a' : bgColor}',
+        color: '${isWalking ? WALK_BLUE : bgColor}',
         weight: ${isWalking ? 6 : 5},
         ${isWalking ? "dashArray: '1, 15'," : ''}
         lineCap: 'round',
@@ -133,19 +181,54 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
     `;
   });
 
+  // Start (green) and end (pink) stay as plain dots; every interior point is a
+  // "change here" and gets a white marker with the boarding mode's emoji.
+  const changeNodes: { lat: number; lon: number; label: string; emoji: string }[] = [];
   nodes.forEach((node) => {
-    const fillColor = node.isStart ? '#83f582' : node.isEnd ? '#ff158a' : '#7af7f7';
-    leafletJS += `
+    if (node.isStart || node.isEnd) {
+      const fillColor = node.isStart ? '#83f582' : '#ff158a';
+      leafletJS += `
       L.circleMarker([${node.lat}, ${node.lon}], {
-        radius: ${node.isStart || node.isEnd ? 9 : 6},
+        radius: 9,
         fillColor: '${fillColor}',
         color: '#1d1c1c',
         weight: 2.5,
         opacity: 1,
         fillOpacity: 1
-      }).addTo(map).bindPopup("<b>${node.label.replace(/"/g, '\\"')}</b>");
-    `;
+      }).addTo(map).bindPopup("<b>${cleanPlaceLabel(node.label, 'Stop').replace(/"/g, '\\"')}</b>");
+      `;
+    } else {
+      changeNodes.push({
+        lat: node.lat,
+        lon: node.lon,
+        label: cleanPlaceLabel(node.label, 'Change here'),
+        emoji: modeEmoji(node.boardMode),
+      });
+    }
   });
+
+  // White "change here" markers, toggled together by window.setChangeMarkersHidden.
+  leafletJS += `
+    const changeNodes = ${JSON.stringify(changeNodes)};
+    let changeMarkers = [];
+    let changeHidden = false;
+    function renderChangeMarkers() {
+      changeMarkers.forEach((m) => map.removeLayer(m));
+      changeMarkers = [];
+      if (changeHidden) return;
+      changeNodes.forEach((c) => {
+        const html = '<div style="background:#ffffff;width:32px;height:32px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:16px;line-height:1;">' + c.emoji + '</span></div>';
+        const icon = L.divIcon({ html: html, className: 'change-marker-icon', iconSize: [32, 32], iconAnchor: [16, 16] });
+        const m = L.marker([c.lat, c.lon], { icon: icon }).addTo(map).bindPopup('<b>' + c.label.replace(/"/g, '&quot;') + '</b>');
+        changeMarkers.push(m);
+      });
+    }
+    window.setChangeMarkersHidden = function(hidden) {
+      changeHidden = !!hidden;
+      renderChangeMarkers();
+    };
+    renderChangeMarkers();
+  `;
 
   return `
     <!DOCTYPE html>
@@ -158,7 +241,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
         body { margin: 0; padding: 0; }
         #map { height: 100vh; width: 100vw; background-color: #f2efe9; }
         .leaflet-bar a { background-color: #ffffff !important; color: #1d1c1c !important; border-color: #ccc !important; }
-        .warning-marker-icon, .user-location-icon { background: none; border: none; }
+        .warning-marker-icon, .user-location-icon, .change-marker-icon { background: none; border: none; }
       </style>
     </head>
     <body>
@@ -250,6 +333,10 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
               if (window.centerMapOnUser) {
                 window.centerMapOnUser(data.lat, data.lon, data.animate);
               }
+            } else if (data.type === 'setChangeMarkersHidden') {
+              if (window.setChangeMarkersHidden) {
+                window.setChangeMarkersHidden(data.hidden);
+              }
             }
           } catch (e) {
             console.error('Error parsing map message:', e);
@@ -318,6 +405,11 @@ export default function JourneyScreen() {
   const [isExpanded, setIsExpanded] = useState(false);
   const initialPanDone = useRef(false);
 
+  // Map legend (key) open state, and whether the white "change here" markers are
+  // hidden on the map.
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [hideChanges, setHideChanges] = useState(false);
+
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
   const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -367,6 +459,9 @@ export default function JourneyScreen() {
       useNativeDriver: Platform.OS !== 'web',
       tension: 50,
       friction: 8,
+      // Clamp overshoot so collapsing doesn't dip past the resting position and
+      // bounce back — that bounce read as a downward "glitch" on swipe-down.
+      overshootClamping: true,
     }).start();
   };
 
@@ -700,6 +795,20 @@ export default function JourneyScreen() {
     }
   }, [userCoords, heading, mapReadyTick, followUser]);
 
+  // Push the "hide change markers" state to the map (and re-push on map reload).
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const iframe = document.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'setChangeMarkersHidden', hidden: hideChanges }, '*');
+      }
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `if (window.setChangeMarkersHidden) { window.setChangeMarkersHidden(${hideChanges}); } true;`,
+      );
+    }
+  }, [hideChanges, mapReadyTick]);
+
   const handleMapMessage = (event: any) => {
     try {
       const dataStr = event.nativeEvent.data;
@@ -878,22 +987,93 @@ export default function JourneyScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Hide / show all warning markers */}
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackClick();
-            setHideAll(!hideAll);
-          }}
-          style={[
-            styles.circleButton,
-            { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
-        >
-          <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={20} color={palette.textPrimary} />
-        </TouchableOpacity>
+        {/* Right group: map key (legend), then show/hide warnings */}
+        <View style={styles.topRightGroup}>
+          {/* Map key / legend — tap to expand the meaning of every map symbol */}
+          <TouchableOpacity
+            onPress={() => {
+              analytics.trackClick();
+              setLegendOpen((v) => !v);
+            }}
+            style={[
+              styles.topPill,
+              { backgroundColor: legendOpen ? accents.cyan : palette.surface, borderColor: palette.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={legendOpen ? 'Hide map key' : 'Show map key'}
+          >
+            <Ionicons name="map-outline" size={16} color={palette.textPrimary} />
+            <Text style={[styles.topPillText, { color: palette.textPrimary }]}>Key</Text>
+          </TouchableOpacity>
+
+          {/* Hide / show all warning markers */}
+          <TouchableOpacity
+            onPress={() => {
+              analytics.trackClick();
+              setHideAll(!hideAll);
+            }}
+            style={[
+              styles.topPill,
+              { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+          >
+            <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
+            <Text style={[styles.topPillText, { color: palette.textPrimary }]}>
+              {hideAll ? 'Show warnings' : 'Hide warnings'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Map key / legend card — explains every symbol + toggles change icons */}
+      {legendOpen && (
+        <View style={[styles.legendCard, { top: insets.top + 78, backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <Text style={[styles.legendTitle, { color: palette.textPrimary }]}>Map key</Text>
+
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#83f582', borderColor: palette.border }]} />
+            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Start</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: '#ff158a', borderColor: palette.border }]} />
+            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Destination</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={styles.legendWalkDots}>
+              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+            </View>
+            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Walking</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendChangeDot, { borderColor: palette.border }]}>
+              <Text style={styles.legendChangeEmoji}>🚌</Text>
+            </View>
+            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Change here (bus/train/tube)</Text>
+          </View>
+
+          <View style={[styles.reportDivider, { backgroundColor: palette.divider, marginVertical: 8, marginHorizontal: 0 }]} />
+
+          {/* Hide / show the white change markers */}
+          <TouchableOpacity
+            onPress={() => {
+              analytics.trackClick();
+              setHideChanges((v) => !v);
+            }}
+            style={[styles.legendToggleBtn, { backgroundColor: hideChanges ? accents.yellow : palette.background, borderColor: palette.border }]}
+            accessibilityRole="button"
+            accessibilityLabel={hideChanges ? 'Show change icons on map' : 'Hide change icons from map'}
+          >
+            <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={16} color={palette.textPrimary} />
+            <Text style={[styles.legendToggleText, { color: palette.textPrimary }]}>
+              {hideChanges ? 'Show change icons' : 'Hide change icons'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
@@ -975,22 +1155,6 @@ export default function JourneyScreen() {
               scrollOffsetY.current = e.nativeEvent.contentOffset.y;
             }}
           >
-            {/* Sensory alignment dashboard */}
-            <View style={[styles.detailsCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-              <Text style={[styles.detailsCardHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
-              <View style={styles.detailsSensoryRow}>
-                <SensoryMeter level={route.noise} label="Sound" />
-                <SensoryMeter level={route.crowds} label="Crowds" />
-                <SensoryMeter level={route.heat} label="Heat" />
-                <SensoryMeter level={route.light} label="Light" />
-                <SensoryMeter level={route.smell} label="Smell" />
-              </View>
-              {route.sensory_description ? (
-                <Text style={[styles.detailsSensoryDesc, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
-                  {route.sensory_description}
-                </Text>
-              ) : null}
-            </View>
 
             {/* Step-by-step leg timeline */}
             <View style={styles.detailsTimeline}>
@@ -1011,9 +1175,11 @@ export default function JourneyScreen() {
                       <View style={[styles.stepLine, { backgroundColor: lineBgColor }]} />
                     </View>
                     <View style={styles.stepContentCol}>
-                      <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>{leg.departure}</Text>
+                      <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>
+                        {cleanPlaceLabel(leg.departure, lIdx === 0 ? 'Your location' : 'This stop')}
+                      </Text>
                       <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
-                        {leg.instruction} ({leg.duration_mins} mins)
+                        {cleanInstruction(leg.instruction)} ({leg.duration_mins} mins)
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                         <Ionicons
@@ -1024,7 +1190,7 @@ export default function JourneyScreen() {
                         />
                         <Text style={[styles.detailsArrival, { color: palette.textSecondary }]}>
                           {isWalking ? 'Walk to ' : 'Get off at '}
-                          <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{leg.arrival}</Text>
+                          <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{cleanPlaceLabel(leg.arrival, 'your destination')}</Text>
                         </Text>
                       </View>
                     </View>
@@ -1041,7 +1207,7 @@ export default function JourneyScreen() {
                   </View>
                   <View style={styles.stepContentCol}>
                     <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>
-                      {route.legs[route.legs.length - 1].arrival}
+                      {cleanPlaceLabel(route.legs[route.legs.length - 1].arrival, 'your destination')}
                     </Text>
                     <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
                       Arrive at destination
@@ -1498,6 +1664,105 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  topRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+  },
+  topPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 19,
+    borderWidth: 2,
+    ...hardShadow(3),
+  },
+  topPillText: {
+    fontSize: 10.5,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  legendCard: {
+    position: 'absolute',
+    right: 16,
+    width: 232,
+    zIndex: 12,
+    borderWidth: 2,
+    borderRadius: 16,
+    padding: 12,
+    ...hardShadow(5),
+  },
+  legendTitle: {
+    fontSize: 11,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 8,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  legendDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+  },
+  legendWalkDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    width: 16,
+    justifyContent: 'center',
+  },
+  legendWalkDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+  legendChangeDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -3,
+  },
+  legendChangeEmoji: {
+    fontSize: 11,
+  },
+  legendLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    flex: 1,
+  },
+  legendToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 2,
+    borderRadius: 10,
+    paddingVertical: 9,
+    ...hardShadow(2),
+  },
+  legendToggleText: {
+    fontSize: 10.5,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
   circleButton: {
     width: 54,
     height: 54,
@@ -1803,34 +2068,6 @@ const styles = StyleSheet.create({
   detailsScrollContent: {
     padding: 16,
     paddingBottom: 40,
-  },
-  detailsCard: {
-    borderWidth: 2,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
-    ...hardShadow(4),
-  },
-  detailsCardHeading: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    marginBottom: 10,
-  },
-  detailsSensoryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailsSensoryDesc: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    lineHeight: 16,
-    marginTop: 6,
-    borderTopWidth: 1,
-    paddingTop: 8,
   },
   detailsTimeline: {
     gap: 12,
