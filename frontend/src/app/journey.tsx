@@ -172,11 +172,6 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
 
         setTimeout(() => {
           map.invalidateSize();
-          const bounds = ${JSON.stringify(boundsPoints)};
-          if (bounds.length > 0) {
-            isProgrammatic = true;
-            map.fitBounds(bounds, { paddingTopLeft: [60, 60], paddingBottomRight: [60, 160], maxZoom: 13 });
-          }
         }, 200);
 
         // User Location marker (Crisp, mathematically centered SVG radar cone)
@@ -208,13 +203,14 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
           }
         };
 
-        window.centerMapOnUser = function(lat, lon) {
+        window.centerMapOnUser = function(lat, lon, animate) {
           const zoomLevel = 15.5;
           isProgrammatic = true;
+          const shouldAnimate = animate !== false;
           if (userMarker) {
-            map.setView(userMarker.getLatLng(), zoomLevel, { animate: true });
+            map.setView(userMarker.getLatLng(), zoomLevel, { animate: shouldAnimate });
           } else if (lat && lon) {
-            map.setView([lat, lon], zoomLevel, { animate: true });
+            map.setView([lat, lon], zoomLevel, { animate: shouldAnimate });
           }
         };
 
@@ -251,7 +247,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
               window.updateWarnings(data.warnings);
             } else if (data.type === 'centerMapOnUser') {
               if (window.centerMapOnUser) {
-                window.centerMapOnUser(data.lat, data.lon);
+                window.centerMapOnUser(data.lat, data.lon, data.animate);
               }
             }
           } catch (e) {
@@ -273,6 +269,10 @@ export default function JourneyScreen() {
   const routesService = useRoutesService();
   const { username } = useAuth();
   const [followUser, setFollowUser] = useState(true);
+  const [simulating, setSimulating] = useState(false);
+  const [simIndex, setSimIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [simSpeed, setSimSpeed] = useState(1);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -476,20 +476,35 @@ export default function JourneyScreen() {
     useLiveLocation();
 
   const userCoords = useMemo<[number, number]>(() => {
+    if (simulating && allPathCoords.length > 0) {
+      return allPathCoords[Math.min(simIndex, allPathCoords.length - 1)];
+    }
     return liveCoords ?? allPathCoords[0] ?? [51.5074, -0.1278];
-  }, [liveCoords, allPathCoords]);
+  }, [simulating, simIndex, liveCoords, allPathCoords]);
 
   const heading = useMemo(() => {
+    if (simulating && allPathCoords.length > 0) {
+      const idx = Math.min(simIndex, allPathCoords.length - 1);
+      if (idx < allPathCoords.length - 1) {
+        return calculateHeading(allPathCoords[idx], allPathCoords[idx + 1]);
+      }
+      if (idx > 0) {
+        return calculateHeading(allPathCoords[idx - 1], allPathCoords[idx]);
+      }
+      return 0;
+    }
     if (liveHeading != null) return liveHeading;
     if (allPathCoords.length < 2) return 0;
     return calculateHeading(allPathCoords[0], allPathCoords[1]);
-  }, [liveHeading, allPathCoords]);
+  }, [simulating, simIndex, liveHeading, allPathCoords]);
 
-  // When the traveller's REAL location gets within range of a warning they
-  // haven't answered yet, surface a confirm prompt. Gated on liveCoords so the
-  // route-origin fallback never triggers it, and on no prompt already showing.
+  // When the traveller's location gets within range of a warning they
+  // haven't answered yet, surface a confirm prompt. Gated on location availability
+  // (liveCoords or simulation active) so the route-origin fallback never triggers it unless simulating,
+  // and on no prompt already showing.
   useEffect(() => {
-    if (!liveCoords || proximityWarning) return;
+    const activeLocationSource = simulating ? userCoords : liveCoords;
+    if (!activeLocationSource || proximityWarning) return;
     const nearest = warnings
       .filter(
         (w) =>
@@ -504,7 +519,32 @@ export default function JourneyScreen() {
       setProximityWarning(nearest.w);
       analytics.trackWarningInteraction();
     }
-  }, [liveCoords, userCoords, warnings, proximityWarning]);
+  }, [simulating, liveCoords, userCoords, warnings, proximityWarning]);
+
+  // Auto-play journey simulation
+  useEffect(() => {
+    if (!simulating || !isPlaying) return;
+    const interval = setInterval(() => {
+      setSimIndex((prev) => {
+        if (prev < allPathCoords.length - 1) {
+          return prev + 1;
+        } else {
+          setIsPlaying(false);
+          return prev;
+        }
+      });
+    }, 1000 / simSpeed);
+    return () => clearInterval(interval);
+  }, [simulating, isPlaying, allPathCoords, simSpeed]);
+
+  const cycleSpeed = () => {
+    setSimSpeed((prev) => {
+      if (prev === 0.5) return 1;
+      if (prev === 1) return 2;
+      if (prev === 2) return 4;
+      return 0.5;
+    });
+  };
 
   // Record an answer so we don't immediately re-prompt for the same warning.
   const respondProximity = useCallback(
@@ -546,8 +586,9 @@ export default function JourneyScreen() {
 
   // Sync user location and handle center-on-user logic.
   useEffect(() => {
-    const shouldPan = (!initialPanDone.current || followUser) && mapReadyTick > 0;
-    if (!initialPanDone.current && mapReadyTick > 0) {
+    const isInitialPan = !initialPanDone.current;
+    const shouldPan = (isInitialPan || followUser) && mapReadyTick > 0;
+    if (isInitialPan && mapReadyTick > 0) {
       initialPanDone.current = true;
     }
 
@@ -556,14 +597,14 @@ export default function JourneyScreen() {
       if (iframe?.contentWindow) {
         iframe.contentWindow.postMessage({ type: 'updateUserLocation', lat: userCoords[0], lon: userCoords[1], heading }, '*');
         if (shouldPan) {
-          iframe.contentWindow.postMessage({ type: 'centerMapOnUser', lat: userCoords[0], lon: userCoords[1] }, '*');
+          iframe.contentWindow.postMessage({ type: 'centerMapOnUser', lat: userCoords[0], lon: userCoords[1], animate: !isInitialPan }, '*');
         }
       }
     } else {
       if (webViewRef.current) {
         let js = `if (window.updateUserLocation) { window.updateUserLocation(${userCoords[0]}, ${userCoords[1]}, ${heading}); }`;
         if (shouldPan) {
-          js += `if (window.centerMapOnUser) { window.centerMapOnUser(${userCoords[0]}, ${userCoords[1]}); }`;
+          js += `if (window.centerMapOnUser) { window.centerMapOnUser(${userCoords[0]}, ${userCoords[1]}, ${!isInitialPan}); }`;
         }
         webViewRef.current.injectJavaScript(js);
       }
@@ -1115,6 +1156,122 @@ export default function JourneyScreen() {
           color={followUser ? (isDark ? accents.cyan : '#007aff') : palette.textPrimary}
         />
       </TouchableOpacity>
+
+      {/* Simulation / Journey Demo Player Panel */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: COLLAPSED_HEIGHT + 16,
+          left: 16,
+          zIndex: 10,
+        }}
+      >
+        {!simulating ? (
+          <TouchableOpacity
+            onPress={() => {
+              setSimulating(true);
+              setSimIndex(0);
+              setIsPlaying(true);
+              setFollowUser(true);
+            }}
+            style={[
+              styles.simStartBtn,
+              {
+                backgroundColor: palette.surface,
+                borderColor: palette.border,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Start demo journey simulation"
+          >
+            <Ionicons name="play" size={16} color={accents.green} style={{ marginRight: 6 }} />
+            <Text style={[styles.simStartText, { color: palette.textPrimary }]}>Simulate</Text>
+          </TouchableOpacity>
+        ) : (
+          <View
+            style={[
+              styles.simControlRow,
+              {
+                backgroundColor: palette.surface,
+                borderColor: palette.border,
+              },
+            ]}
+          >
+            {/* Stop / Close Simulation */}
+            <TouchableOpacity
+              onPress={() => {
+                setSimulating(false);
+                setIsPlaying(false);
+                setSimIndex(0);
+              }}
+              style={styles.simIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Exit simulation"
+            >
+              <Ionicons name="stop-circle-outline" size={22} color={accents.pink} />
+            </TouchableOpacity>
+
+            {/* Step Back */}
+            <TouchableOpacity
+              onPress={() => {
+                setIsPlaying(false);
+                setSimIndex((prev) => Math.max(0, prev - 1));
+              }}
+              disabled={simIndex === 0}
+              style={[styles.simIconBtn, simIndex === 0 && { opacity: 0.4 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Step simulation back"
+            >
+              <Ionicons name="chevron-back-outline" size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+
+            {/* Play / Pause Toggle */}
+            <TouchableOpacity
+              onPress={() => setIsPlaying((p) => !p)}
+              style={styles.simIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={isPlaying ? "Pause simulation" : "Play simulation"}
+            >
+              <Ionicons name={isPlaying ? "pause-outline" : "play-outline"} size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+
+            {/* Step Forward */}
+            <TouchableOpacity
+              onPress={() => {
+                setIsPlaying(false);
+                setSimIndex((prev) => Math.min(allPathCoords.length - 1, prev + 1));
+              }}
+              disabled={simIndex === allPathCoords.length - 1}
+              style={[styles.simIconBtn, simIndex === allPathCoords.length - 1 && { opacity: 0.4 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Step simulation forward"
+            >
+              <Ionicons name="chevron-forward-outline" size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+
+            {/* Speed Multiplier Button */}
+            <TouchableOpacity
+              onPress={cycleSpeed}
+              style={[
+                styles.simSpeedBtn,
+                {
+                  borderColor: palette.divider,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Change simulation speed. Current speed is ${simSpeed}x`}
+            >
+              <Text style={[styles.simSpeedText, { color: accents.orange }]}>{simSpeed}x</Text>
+            </TouchableOpacity>
+
+            {/* Progress Percentage */}
+            <Text style={[styles.simText, { color: palette.textSecondary }]}>
+              {allPathCoords.length > 0 ? Math.round(((simIndex + 1) / allPathCoords.length) * 100) : 0}%
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* Alternative Routes Selection Overlay */}
       {alternativeRoutes && (
@@ -1750,5 +1907,57 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  simControlRow: {
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    gap: 8,
+    ...hardShadow(3),
+  },
+  simIconBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  simText: {
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    minWidth: 28,
+    textAlign: 'center',
+  },
+  simSpeedBtn: {
+    minWidth: 36,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
+  simSpeedText: {
+    fontSize: 9,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+  },
+  simStartBtn: {
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    ...hardShadow(3),
+  },
+  simStartText: {
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
 });
