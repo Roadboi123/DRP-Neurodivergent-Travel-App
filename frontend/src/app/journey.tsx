@@ -172,11 +172,6 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
 
         setTimeout(() => {
           map.invalidateSize();
-          const bounds = ${JSON.stringify(boundsPoints)};
-          if (bounds.length > 0) {
-            isProgrammatic = true;
-            map.fitBounds(bounds, { paddingTopLeft: [60, 60], paddingBottomRight: [60, 160], maxZoom: 13 });
-          }
         }, 200);
 
         // User Location marker (Crisp, mathematically centered SVG radar cone)
@@ -208,13 +203,14 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
           }
         };
 
-        window.centerMapOnUser = function(lat, lon) {
+        window.centerMapOnUser = function(lat, lon, animate) {
           const zoomLevel = 15.5;
           isProgrammatic = true;
+          const shouldAnimate = animate !== false;
           if (userMarker) {
-            map.setView(userMarker.getLatLng(), zoomLevel, { animate: true });
+            map.setView(userMarker.getLatLng(), zoomLevel, { animate: shouldAnimate });
           } else if (lat && lon) {
-            map.setView([lat, lon], zoomLevel, { animate: true });
+            map.setView([lat, lon], zoomLevel, { animate: shouldAnimate });
           }
         };
 
@@ -251,7 +247,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
               window.updateWarnings(data.warnings);
             } else if (data.type === 'centerMapOnUser') {
               if (window.centerMapOnUser) {
-                window.centerMapOnUser(data.lat, data.lon);
+                window.centerMapOnUser(data.lat, data.lon, data.animate);
               }
             }
           } catch (e) {
@@ -546,8 +542,9 @@ export default function JourneyScreen() {
 
   // Sync user location and handle center-on-user logic.
   useEffect(() => {
-    const shouldPan = (!initialPanDone.current || followUser) && mapReadyTick > 0;
-    if (!initialPanDone.current && mapReadyTick > 0) {
+    const isInitialPan = !initialPanDone.current;
+    const shouldPan = (isInitialPan || followUser) && mapReadyTick > 0;
+    if (isInitialPan && mapReadyTick > 0) {
       initialPanDone.current = true;
     }
 
@@ -556,14 +553,14 @@ export default function JourneyScreen() {
       if (iframe?.contentWindow) {
         iframe.contentWindow.postMessage({ type: 'updateUserLocation', lat: userCoords[0], lon: userCoords[1], heading }, '*');
         if (shouldPan) {
-          iframe.contentWindow.postMessage({ type: 'centerMapOnUser', lat: userCoords[0], lon: userCoords[1] }, '*');
+          iframe.contentWindow.postMessage({ type: 'centerMapOnUser', lat: userCoords[0], lon: userCoords[1], animate: !isInitialPan }, '*');
         }
       }
     } else {
       if (webViewRef.current) {
         let js = `if (window.updateUserLocation) { window.updateUserLocation(${userCoords[0]}, ${userCoords[1]}, ${heading}); }`;
         if (shouldPan) {
-          js += `if (window.centerMapOnUser) { window.centerMapOnUser(${userCoords[0]}, ${userCoords[1]}); }`;
+          js += `if (window.centerMapOnUser) { window.centerMapOnUser(${userCoords[0]}, ${userCoords[1]}, ${!isInitialPan}); }`;
         }
         webViewRef.current.injectJavaScript(js);
       }
