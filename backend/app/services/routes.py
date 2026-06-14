@@ -378,17 +378,66 @@ async def _calculate_leg_sensory_live(leg: dict, temp: float) -> tuple[int, int,
     return noise, crowds, heat, light, smell
 
 
-async def _build_route_option(index: int, journey: dict, temp: float, destination_name: str) -> dict:
+async def _build_route_option(
+    index: int, journey: dict, temp: float, destination_name: str, active_warnings: Optional[List[Dict[str, Any]]] = None
+) -> dict:
     """
     Format a fetched API journey route to match the frontend RouteOption model schema.
     """
     legs = journey.get("legs", [])
     
-    # Calculate sensory levels per leg asynchronously with live API feeds, and use max-pooling for overall journey load
+    # Calculate sensory levels per leg asynchronously with live API feeds
     tasks = [_calculate_leg_sensory_live(leg, temp) for leg in legs]
     raw_profiles = await asyncio.gather(*tasks, return_exceptions=True)
-    leg_profiles: List[tuple[int, int, int, int, int]] = [p for p in raw_profiles if isinstance(p, tuple)]
+    leg_profiles: List[tuple[int, int, int, int, int]] = []
     
+    for i, profile in enumerate(raw_profiles):
+        if not isinstance(profile, tuple):
+            continue
+        l_noise, l_crowds, l_heat, l_light, l_smell = profile
+        leg = legs[i]
+        
+        # Overlay user reported warnings on this leg
+        if active_warnings:
+            leg_coords = leg.get("path_coords") or []
+            if not leg_coords:
+                dep_lat = leg.get("departure_lat")
+                dep_lon = leg.get("departure_lon")
+                arr_lat = leg.get("arrival_lat")
+                arr_lon = leg.get("arrival_lon")
+                if dep_lat is not None and dep_lon is not None:
+                    leg_coords.append([dep_lat, dep_lon])
+                if arr_lat is not None and arr_lon is not None:
+                    leg_coords.append([arr_lat, arr_lon])
+
+            for w in active_warnings:
+                w_lat = w.get("lat")
+                w_lon = w.get("lon")
+                w_type = w.get("warning_type")
+                if w_lat is None or w_lon is None or not w_type:
+                    continue
+                
+                is_near = False
+                for pt in leg_coords:
+                    if len(pt) == 2:
+                        dist = _haversine_distance(float(w_lat), float(w_lon), float(pt[0]), float(pt[1]))
+                        if dist <= 150.0:
+                            is_near = True
+                            break
+                if is_near:
+                    if "radio" in w_type or "sound" in w_type or "noise" in w_type or w_type == "volume-high":
+                        l_noise = max(l_noise, 3)
+                    elif "people" in w_type or "crowd" in w_type:
+                        l_crowds = max(l_crowds, 3)
+                    elif "thermometer" in w_type or "heat" in w_type or "temp" in w_type:
+                        l_heat = max(l_heat, 3)
+                    elif "sunny" in w_type or "light" in w_type:
+                        l_light = max(l_light, 3)
+                    elif "flower" in w_type or "smell" in w_type or "rose" in w_type:
+                        l_smell = max(l_smell, 3)
+        
+        leg_profiles.append((l_noise, l_crowds, l_heat, l_light, l_smell))
+        
     if leg_profiles:
         noise = max(p[0] for p in leg_profiles)
         crowds = max(p[1] for p in leg_profiles)
@@ -855,8 +904,30 @@ async def get_route_suggestions(
     # Fetch London current temperature
     temp = await get_current_london_temp()
 
+    # Fetch active warnings to overlay on route suggestions
+    active_warnings = []
+    try:
+        from datetime import datetime, timezone, timedelta
+        res = supabase.table("reported_warnings").select("*").execute()
+        if res.data:
+            now_dt = datetime.now(timezone.utc)
+            for row in res.data:
+                if not isinstance(row, dict):
+                    continue
+                created_at_str = row.get("created_at")
+                if created_at_str:
+                    try:
+                        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                        if now_dt - created_at > timedelta(minutes=REPORTED_WARNING_TTL_MINUTES):
+                            continue
+                    except Exception:
+                        pass
+                active_warnings.append(row)
+    except Exception as e:
+        print(f"Error fetching active warnings for route suggestion: {e}")
+
     # Map raw journeys to frontend schema asynchronously in parallel
-    tasks = [_build_route_option(i, j, temp, end) for i, j in enumerate(raw_journeys)]
+    tasks = [_build_route_option(i, j, temp, end, active_warnings) for i, j in enumerate(raw_journeys)]
     route_options = await asyncio.gather(*tasks, return_exceptions=True)
     routes = [r for r in route_options if isinstance(r, dict)]
 

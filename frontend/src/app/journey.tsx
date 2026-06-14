@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,7 +18,7 @@ import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLiveLocation } from '@/hooks/use-live-location';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
-import { getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
+import { getActiveJourneyRoute, setActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
@@ -80,6 +80,19 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
         label: leg.arrival,
         isStart: false,
         isEnd: index === processedLegs.length - 1,
+      });
+    }
+  });
+
+  const boundsPoints: [number, number][] = [];
+  processedLegs.forEach((leg) => {
+    if (leg.dep_lat != null && leg.dep_lon != null) boundsPoints.push([leg.dep_lat, leg.dep_lon]);
+    if (leg.arr_lat != null && leg.arr_lon != null) boundsPoints.push([leg.arr_lat, leg.arr_lon]);
+    if (leg.path_coords) {
+      leg.path_coords.forEach((pt) => {
+        if (pt && pt.length === 2) {
+          boundsPoints.push([pt[0], pt[1]]);
+        }
       });
     }
   });
@@ -155,26 +168,36 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
         
         ${leafletJS}
         
-        const bounds = [${nodes.map((node) => `[${node.lat}, ${node.lon}]`).join(',')}];
-        if (bounds.length > 0) map.fitBounds(bounds, { padding: [45, 45] });
+        let isProgrammatic = false;
 
-        // User Location marker (Yandex-style blue cone cursor)
+        setTimeout(() => {
+          map.invalidateSize();
+          const bounds = ${JSON.stringify(boundsPoints)};
+          if (bounds.length > 0) {
+            isProgrammatic = true;
+            map.fitBounds(bounds, { paddingTopLeft: [60, 60], paddingBottomRight: [60, 160], maxZoom: 13 });
+          }
+        }, 200);
+
+        // User Location marker (Crisp, mathematically centered SVG radar cone)
         let userMarker = null;
         window.updateUserLocation = function(lat, lon, heading) {
           const iconHtml = \`
-            <div style="position: relative; width: 30px; height: 30px; transform: rotate(\${heading}deg); transform-origin: center;">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(\${heading}deg); transform-origin: 20px 20px; display: block;">
               <!-- Heading cone -->
-              <div style="position: absolute; top: -15px; left: 0; width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-bottom: 25px solid rgba(0, 122, 255, 0.45); filter: blur(1px);"></div>
-              <!-- Center cursor -->
-              <div style="position: absolute; top: 5px; left: 5px; width: 20px; height: 20px; border-radius: 50%; background-color: #007aff; border: 3px solid #ffffff; box-shadow: 0 0 5px rgba(0,0,0,0.55);"></div>
-            </div>
+              <path d="M20 20 L8 4 A20 20 0 0 1 32 4 Z" fill="#007aff" fill-opacity="0.4" />
+              <!-- Shadow circle -->
+              <circle cx="20" cy="21" r="9.5" fill="black" fill-opacity="0.2" />
+              <!-- Inner blue circle with white outline -->
+              <circle cx="20" cy="20" r="8" fill="#007aff" stroke="white" stroke-width="3" />
+            </svg>
           \`;
 
           const userIcon = L.divIcon({
             html: iconHtml,
             className: 'user-location-icon',
-            iconSize: [30, 30],
-            iconAnchor: [15, 15]
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
           });
 
           if (!userMarker) {
@@ -183,8 +206,37 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
             userMarker.setLatLng([lat, lon]);
             userMarker.setIcon(userIcon);
           }
-          map.panTo([lat, lon]);
         };
+
+        window.centerMapOnUser = function(lat, lon) {
+          const zoomLevel = 15.5;
+          isProgrammatic = true;
+          if (userMarker) {
+            map.setView(userMarker.getLatLng(), zoomLevel, { animate: true });
+          } else if (lat && lon) {
+            map.setView([lat, lon], zoomLevel, { animate: true });
+          }
+        };
+
+        map.on('moveend', function() {
+          isProgrammatic = false;
+        });
+
+        function notifyDrag() {
+          const msg = JSON.stringify({ type: 'mapDrag' });
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(msg);
+          } else {
+            window.parent.postMessage(msg, '*');
+          }
+        }
+
+        map.on('dragstart', notifyDrag);
+        map.on('zoomstart', function() {
+          if (!isProgrammatic) {
+            notifyDrag();
+          }
+        });
 
         // Warning markers (Waze-style sensory icons) — shared with route details
         ${warningMarkerScript()}
@@ -197,6 +249,10 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
               window.updateUserLocation(data.lat, data.lon, data.heading);
             } else if (data.type === 'updateWarnings') {
               window.updateWarnings(data.warnings);
+            } else if (data.type === 'centerMapOnUser') {
+              if (window.centerMapOnUser) {
+                window.centerMapOnUser(data.lat, data.lon);
+              }
             }
           } catch (e) {
             console.error('Error parsing map message:', e);
@@ -209,9 +265,14 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
 }
 
 export default function JourneyScreen() {
-  const route = getActiveJourneyRoute();
+  const [activeRoute, setActiveRoute] = useState<RouteOption | null>(() => getActiveJourneyRoute());
+  const route = activeRoute;
+  const [alternativeRoutes, setAlternativeRoutes] = useState<RouteOption[] | null>(null);
+  const [isRerouting, setIsRerouting] = useState(false);
+  const [selectedAltRoute, setSelectedAltRoute] = useState<RouteOption | null>(null);
   const routesService = useRoutesService();
   const { username } = useAuth();
+  const [followUser, setFollowUser] = useState(true);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -253,6 +314,8 @@ export default function JourneyScreen() {
   // so we don't re-prompt for the same one this journey.
   const [proximityWarning, setProximityWarning] = useState<WarningItem | null>(null);
   const respondedWarningIds = useRef<Set<string>>(new Set());
+  const [isExpanded, setIsExpanded] = useState(false);
+  const initialPanDone = useRef(false);
 
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
@@ -297,6 +360,7 @@ export default function JourneyScreen() {
     } else {
       targetY = currentY < MAX_TRANSLATE_Y / 2 ? 0 : MAX_TRANSLATE_Y;
     }
+    setIsExpanded(targetY === 0);
     Animated.spring(panY, {
       toValue: targetY,
       useNativeDriver: Platform.OS !== 'web',
@@ -367,6 +431,8 @@ export default function JourneyScreen() {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data.type === 'warningClick' && data.id) {
           openWarningById(data.id);
+        } else if (data.type === 'mapDrag') {
+          setFollowUser(false);
         }
       } catch {
         // Ignore other/external window messages
@@ -462,25 +528,47 @@ export default function JourneyScreen() {
     [proximityWarning, username, removeOwnWarning, dismissWarning],
   );
 
-  // Sync warnings + user location to the Leaflet map.
+  // Sync warnings to the Leaflet map.
   useEffect(() => {
     const jsonString = JSON.stringify(formattedWarnings);
     if (Platform.OS === 'web') {
       const iframe = document.querySelector('iframe');
       if (iframe?.contentWindow) {
-        iframe.contentWindow.postMessage({ type: 'updateUserLocation', lat: userCoords[0], lon: userCoords[1], heading }, '*');
         iframe.contentWindow.postMessage({ type: 'updateWarnings', warnings: jsonString }, '*');
       }
     } else {
       if (webViewRef.current) {
-        const js = `
-          if (window.updateUserLocation) { window.updateUserLocation(${userCoords[0]}, ${userCoords[1]}, ${heading}); }
-          if (window.updateWarnings) { window.updateWarnings('${jsonString.replace(/'/g, "\\'")}'); }
-        `;
+        const js = `if (window.updateWarnings) { window.updateWarnings('${jsonString.replace(/'/g, "\\'")}'); }`;
         webViewRef.current.injectJavaScript(js);
       }
     }
-  }, [userCoords, heading, formattedWarnings, mapReadyTick]);
+  }, [formattedWarnings, mapReadyTick]);
+
+  // Sync user location and handle center-on-user logic.
+  useEffect(() => {
+    const shouldPan = (!initialPanDone.current || followUser) && mapReadyTick > 0;
+    if (!initialPanDone.current && mapReadyTick > 0) {
+      initialPanDone.current = true;
+    }
+
+    if (Platform.OS === 'web') {
+      const iframe = document.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'updateUserLocation', lat: userCoords[0], lon: userCoords[1], heading }, '*');
+        if (shouldPan) {
+          iframe.contentWindow.postMessage({ type: 'centerMapOnUser', lat: userCoords[0], lon: userCoords[1] }, '*');
+        }
+      }
+    } else {
+      if (webViewRef.current) {
+        let js = `if (window.updateUserLocation) { window.updateUserLocation(${userCoords[0]}, ${userCoords[1]}, ${heading}); }`;
+        if (shouldPan) {
+          js += `if (window.centerMapOnUser) { window.centerMapOnUser(${userCoords[0]}, ${userCoords[1]}); }`;
+        }
+        webViewRef.current.injectJavaScript(js);
+      }
+    }
+  }, [userCoords, heading, mapReadyTick, followUser]);
 
   const handleMapMessage = (event: any) => {
     try {
@@ -488,10 +576,62 @@ export default function JourneyScreen() {
       const data = JSON.parse(dataStr);
       if (data.type === 'warningClick' && data.id) {
         openWarningById(data.id);
+      } else if (data.type === 'mapDrag') {
+        setFollowUser(false);
       }
     } catch {
       // Ignore
     }
+  };
+
+  const relocateToUser = () => {
+    analytics.trackClick();
+    const nextFollow = !followUser;
+    setFollowUser(nextFollow);
+    if (nextFollow) {
+      if (Platform.OS === 'web') {
+        const iframe = document.querySelector('iframe');
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.postMessage({ type: 'centerMapOnUser', lat: userCoords[0], lon: userCoords[1] }, '*');
+        }
+      } else {
+        if (webViewRef.current) {
+          webViewRef.current.injectJavaScript(
+            `if (window.centerMapOnUser) { window.centerMapOnUser(${userCoords[0]}, ${userCoords[1]}); } true;`
+          );
+        }
+      }
+    }
+  };
+
+  const fetchAlternatives = async () => {
+    if (!route) return;
+    setIsRerouting(true);
+    try {
+      const start = `${userCoords[0]},${userCoords[1]}`;
+      const lastLeg = route.legs?.[route.legs.length - 1];
+      if (!lastLeg) return;
+      const end = lastLeg.arrival_lat && lastLeg.arrival_lon
+        ? `${lastLeg.arrival_lat},${lastLeg.arrival_lon}`
+        : lastLeg.arrival;
+        
+      const results = await routesService.getRoutes(start, end, username || '');
+      setAlternativeRoutes(results);
+      if (results && results.length > 0) {
+        // Pre-select the best alternative route
+        setSelectedAltRoute(results[0]);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch alternative routes:', err);
+    } finally {
+      setIsRerouting(false);
+    }
+  };
+
+
+  const handleAvoidWarningReroute = (warning: WarningItem) => {
+    analytics.trackClick();
+    fetchAlternatives();
   };
 
   // Actions — report a sensory warning at the traveller's live GPS location
@@ -534,7 +674,10 @@ export default function JourneyScreen() {
     return () => clearTimeout(timer);
   }, [reportNotice]);
 
-  const mapHtml = useMemo(() => (route ? buildJourneyMap(route, accents) : ''), [route, accents]);
+  const mapHtml = useMemo(() => {
+    const previewRoute = selectedAltRoute || route;
+    return previewRoute ? buildJourneyMap(previewRoute, accents) : '';
+  }, [route, selectedAltRoute, accents]);
 
   if (!route) {
     return (
@@ -577,7 +720,10 @@ export default function JourneyScreen() {
       </View>
 
       {/* Top Left Navigation Icons (Back and Home) */}
-      <View style={[styles.topControls, { top: insets.top + 16 }]}>
+      <View
+        pointerEvents="box-none"
+        style={[styles.topControls, { top: insets.top + 16 }]}
+      >
         <View style={styles.navButtonsRow}>
           <TouchableOpacity
             onPress={() => {
@@ -638,6 +784,8 @@ export default function JourneyScreen() {
 
       {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
       <View style={[styles.reportCapsule, { top: insets.top + 144, backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <Text style={[styles.reportCapsuleHeader, { color: palette.textSecondary }]}>Report</Text>
+        <View style={[styles.reportDivider, { backgroundColor: palette.divider }]} />
         {REPORT_OPTIONS.map((option) => (
           <TouchableOpacity
             key={option.type}
@@ -653,7 +801,7 @@ export default function JourneyScreen() {
               },
             ]}
           >
-            <Ionicons name={option.icon} size={18} color={palette.textPrimary} />
+            <Ionicons name={option.icon} size={16} color={palette.textPrimary} />
             <Text style={[styles.reportCapsuleLabel, { color: palette.textPrimary }]}>{option.label}</Text>
           </TouchableOpacity>
         ))}
@@ -661,6 +809,7 @@ export default function JourneyScreen() {
 
       {/* Swipe-up journey sheet — collapsed shows duration·cost; swipe up for details */}
       <Animated.View
+        pointerEvents="box-none"
         style={[
           styles.sheetPanel,
           {
@@ -677,13 +826,15 @@ export default function JourneyScreen() {
           </View>
           {/* Duration & cost, minimised, on the left */}
           <View style={[styles.sheetStatsRow, { borderBottomColor: palette.divider }]}>
-            <Text style={[styles.sheetDuration, { color: palette.textPrimary }]}>{route.duration} min</Text>
-            <Text style={[styles.sheetDot, { color: palette.textMuted }]}>·</Text>
-            <Text style={[styles.sheetCost, { color: palette.textSecondary }]}>£{route.price.toFixed(2)}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+              <Text style={[styles.sheetDuration, { color: palette.textPrimary }]}>{route.duration} min</Text>
+              <Text style={[styles.sheetDot, { color: palette.textMuted }]}>·</Text>
+              <Text style={[styles.sheetCost, { color: palette.textSecondary }]}>£{route.price.toFixed(2)}</Text>
+            </View>
           </View>
         </View>
 
-        <View style={{ flex: 1 }} {...sheetPanResponder.panHandlers}>
+        <View pointerEvents={isExpanded ? 'auto' : 'none'} style={{ flex: 1 }} {...sheetPanResponder.panHandlers}>
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={styles.detailsScrollContent}
@@ -854,6 +1005,22 @@ export default function JourneyScreen() {
                 </Text>
               </TouchableOpacity>
 
+              <TouchableOpacity
+                onPress={() => handleAvoidWarningReroute(selectedWarning)}
+                activeOpacity={0.85}
+                style={[
+                  styles.warningCardAction,
+                  { backgroundColor: accents.orange, borderColor: palette.border, marginTop: 8 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Reroute to avoid this warning"
+              >
+                <Ionicons name="git-branch-outline" size={15} color={palette.textPrimary} style={{ marginRight: 6 }} />
+                <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                  Reroute to Avoid
+                </Text>
+              </TouchableOpacity>
+
               <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
                 {selectedIsOwn ? 'Removes it from the map for everyone' : 'Hides it for you only'}
               </Text>
@@ -925,6 +1092,130 @@ export default function JourneyScreen() {
         </View>
       )}
 
+      {/* Relocation / Recenter GPS button */}
+      <TouchableOpacity
+        onPress={relocateToUser}
+        style={[
+          styles.circleButton,
+          {
+            position: 'absolute',
+            bottom: COLLAPSED_HEIGHT + 16,
+            right: 16,
+            zIndex: 10,
+            backgroundColor: palette.surface,
+            borderColor: palette.border,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={followUser ? "Disable snap to my location" : "Recenter map on my location"}
+      >
+        <Ionicons
+          name={followUser ? "locate" : "locate-outline"}
+          size={20}
+          color={followUser ? (isDark ? accents.cyan : '#007aff') : palette.textPrimary}
+        />
+      </TouchableOpacity>
+
+      {/* Alternative Routes Selection Overlay */}
+      {alternativeRoutes && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <View style={styles.reportBackdrop} pointerEvents="none" />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.altRoutesPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <Text style={[styles.altRoutesHeading, { color: palette.textPrimary }]}>Choose Alternative Route</Text>
+              
+              <ScrollView style={styles.altRoutesScroll} showsVerticalScrollIndicator={false}>
+                {alternativeRoutes.map((alt) => {
+                  const isSelected = selectedAltRoute?.id === alt.id;
+                  const isCalmest = alt.type === 'best';
+                  const isQuickest = alt.type === 'quickest';
+                  
+                  return (
+                    <TouchableOpacity
+                      key={alt.id}
+                      onPress={() => setSelectedAltRoute(alt)}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.altRouteCard,
+                        {
+                          borderColor: isSelected ? accents.orange : palette.border,
+                          backgroundColor: isSelected ? palette.background : palette.surface,
+                          borderWidth: isSelected ? 2.5 : 1.5,
+                        }
+                      ]}
+                    >
+                      <View style={styles.altRouteHeader}>
+                        <Text style={[styles.altRouteName, { color: palette.textPrimary }]}>{alt.name}</Text>
+                        <View style={{ flexDirection: 'row', gap: 4 }}>
+                          {isCalmest && (
+                            <View style={[styles.altBadge, { backgroundColor: accents.green, borderColor: 'transparent' }]}>
+                              <Text style={[styles.altBadgeText, { color: palette.textPrimary }]}>Calmest</Text>
+                            </View>
+                          )}
+                          {isQuickest && (
+                            <View style={[styles.altBadge, { backgroundColor: accents.cyan, borderColor: 'transparent' }]}>
+                              <Text style={[styles.altBadgeText, { color: palette.textPrimary }]}>Quickest</Text>
+                            </View>
+                          )}
+                          <View style={[styles.altBadge, { backgroundColor: palette.border, borderColor: 'transparent' }]}>
+                            <Text style={[styles.altBadgeText, { color: palette.textSecondary }]}>{alt.match_percentage}% match</Text>
+                          </View>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.altRouteStats}>
+                        <Text style={[styles.altRouteDuration, { color: palette.textPrimary }]}>{alt.duration} min</Text>
+                        <Text style={[styles.altRoutePrice, { color: palette.textSecondary }]}>£{alt.price.toFixed(2)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              
+              <View style={styles.altRoutesActions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setAlternativeRoutes(null);
+                    setSelectedAltRoute(null);
+                  }}
+                  style={[styles.altRouteCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                >
+                  <Text style={[styles.altRouteBtnText, { color: palette.textPrimary }]}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedAltRoute) {
+                      setActiveJourneyRoute(selectedAltRoute);
+                      setActiveRoute(selectedAltRoute);
+                    }
+                    setAlternativeRoutes(null);
+                    setSelectedAltRoute(null);
+                    setSelectedWarning(null);
+                  }}
+                  style={[styles.altRouteConfirmBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
+                >
+                  <Text style={[styles.altRouteBtnText, { color: palette.textPrimary }]}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Rerouting Loading Spinner Overlay */}
+      {isRerouting && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <View style={styles.reportBackdrop} pointerEvents="none" />
+          <View style={styles.reportCenterContainer} pointerEvents="none">
+            <View style={[styles.loadingPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <ActivityIndicator size="large" color={accents.orange} />
+              <Text style={[styles.loadingText, { color: palette.textPrimary, marginTop: 12 }]}>Finding alternative routes...</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
     </SafeAreaView>
   );
 }
@@ -961,9 +1252,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   circleButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -995,24 +1286,41 @@ const styles = StyleSheet.create({
     position: 'absolute',
     // `top` applied inline as insets.top + 144 (see render).
     right: 16,
+    width: 54,
     zIndex: 10,
     borderWidth: 2.5,
     borderRadius: 22,
-    padding: 6,
+    padding: 5,
     gap: 4,
+    alignItems: 'center',
     ...hardShadow(3),
   },
+  reportCapsuleHeader: {
+    fontSize: 8,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  reportDivider: {
+    height: 1.5,
+    marginHorizontal: 8,
+    marginBottom: 4,
+  },
   reportCapsuleBtn: {
-    width: 60,
-    height: 54,
-    borderRadius: 16,
+    alignSelf: 'stretch',
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    gap: 2,
+    paddingVertical: 2,
+    gap: 1,
   },
   reportCapsuleLabel: {
-    fontSize: 8,
+    fontSize: 7.5,
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -1045,11 +1353,26 @@ const styles = StyleSheet.create({
   },
   sheetStatsRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 18,
     paddingBottom: 12,
     borderBottomWidth: 1.5,
+  },
+  rerouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    ...hardShadow(2),
+  },
+  rerouteBtnText: {
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   sheetDuration: {
     fontSize: 17,
@@ -1321,5 +1644,111 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
+  },
+  altRoutesPanel: {
+    width: '90%',
+    maxWidth: 420,
+    maxHeight: '75%',
+    borderRadius: 22,
+    borderWidth: 2.5,
+    padding: 16,
+    ...hardShadow(5),
+  },
+  altRoutesHeading: {
+    fontSize: 15,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  altRoutesScroll: {
+    marginVertical: 8,
+  },
+  altRouteCard: {
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    ...hardShadow(2),
+  },
+  altRouteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  altRouteName: {
+    fontSize: 13,
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 8,
+  },
+  altRouteStats: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'baseline',
+  },
+  altRouteDuration: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  altRoutePrice: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  altBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  altBadgeText: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  altRoutesActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    gap: 12,
+  },
+  altRouteCancelBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...hardShadow(2),
+  },
+  altRouteConfirmBtn: {
+    flex: 1.5,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...hardShadow(2),
+  },
+  altRouteBtnText: {
+    fontSize: 12,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  loadingPanel: {
+    borderRadius: 18,
+    borderWidth: 2,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 220,
+    ...hardShadow(4),
+  },
+  loadingText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });
