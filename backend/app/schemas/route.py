@@ -50,6 +50,12 @@ class RouteOption(BaseModel):
     name: str
     subName: Optional[str] = None
     duration: int
+    # ISO-8601 timestamps for when this journey departs / arrives, populated from
+    # the live timetable when a `time`/`timeIs` is supplied (or "now"). Empty for
+    # offline-synthesised options (e.g. walking routes) — the client falls back to
+    # computing the leave time from the requested time and the duration.
+    departs_at: Optional[str] = None
+    arrives_at: Optional[str] = None
     price: float
     noise: SensoryLevel
     crowds: SensoryLevel

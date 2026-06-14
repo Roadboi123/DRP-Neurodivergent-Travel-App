@@ -16,9 +16,16 @@ async def get_routes(
     end: str,
     username: Optional[str] = None,
     walking_speed: Optional[str] = "slow",
+    time: Optional[str] = None,
+    time_is: Optional[str] = None,
     token: Optional[str] = Depends(oauth2_scheme),
 ):
-    """Return route suggestions, optionally personalized to a user's sensitivities."""
+    """Return route suggestions, optionally personalized to a user's sensitivities.
+
+    ``time`` is an optional ISO-8601 local timestamp and ``time_is`` is
+    ``"departing"`` or ``"arriving"``; together they plan the journey for a
+    specific leave/arrive time. Omitted, routes are planned for "now".
+    """
     resolved_username = username
     if token:
         try:
@@ -28,8 +35,10 @@ async def get_routes(
                 resolved_username = token_username
         except Exception:
             pass
-            
-    return await get_route_suggestions(start, end, resolved_username, walking_speed)
+
+    return await get_route_suggestions(
+        start, end, resolved_username, walking_speed, time=time, time_is=time_is
+    )
 
 
 @router.get("/warnings", response_model=List[WarningItemSchema])

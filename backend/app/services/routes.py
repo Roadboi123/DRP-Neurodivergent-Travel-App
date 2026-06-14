@@ -644,6 +644,8 @@ async def _build_route_option(
         "name": route_name,
         "subName": subName,
         "duration": duration,
+        "departs_at": journey.get("departs_at") or None,
+        "arrives_at": journey.get("arrives_at") or None,
         "price": price,
         "noise": noise,
         "crowds": crowds,
@@ -658,11 +660,21 @@ async def _build_route_option(
 
 
 async def get_route_suggestions(
-    start: str, end: str, username: Optional[str] = None, walking_speed: Optional[str] = "slow"
+    start: str,
+    end: str,
+    username: Optional[str] = None,
+    walking_speed: Optional[str] = "slow",
+    time: Optional[str] = None,
+    time_is: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get route suggestions based on start/end destinations,
     optionally applying personalized user sensitivities from Supabase.
+
+    ``time`` is an optional ISO-8601 local timestamp (e.g. ``2026-06-14T10:35``);
+    ``time_is`` is ``"departing"`` or ``"arriving"`` and selects whether ``time``
+    is the desired departure or arrival. Both are forwarded to the live TfL
+    timetable; when omitted the journeys are planned for "now".
     """
     if not start or not start.strip() or not end or not end.strip():
         return []
@@ -707,8 +719,30 @@ async def get_route_suggestions(
     tfl_start = f"{start_coords[0]},{start_coords[1]}" if (start_coords and is_in_commuter_belt(start_coords[0], start_coords[1])) else start
     tfl_end = f"{end_coords[0]},{end_coords[1]}" if (end_coords and is_in_commuter_belt(end_coords[0], end_coords[1])) else end
 
+    # Translate the optional ISO timestamp into TfL's date (yyyyMMdd) / time (HHmm)
+    # / timeIs (Departing|Arriving). A bad/empty value just falls back to "now".
+    tfl_date: Optional[str] = None
+    tfl_time: Optional[str] = None
+    tfl_time_is: Optional[str] = None
+    if time:
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(time)
+            tfl_date = dt.strftime("%Y%m%d")
+            tfl_time = dt.strftime("%H%M")
+            tfl_time_is = "Arriving" if (time_is or "").lower() == "arriving" else "Departing"
+        except ValueError:
+            print(f"Ignoring unparseable time '{time}'")
+
     if strategy in ("tfl", "both"):
-        tfl_task = tlf_client.get_routes(tfl_start, tfl_end, walking_speed=walking_speed)
+        tfl_task = tlf_client.get_routes(
+            tfl_start,
+            tfl_end,
+            walking_speed=walking_speed,
+            date=tfl_date,
+            time=tfl_time,
+            time_is=tfl_time_is,
+        )
     if strategy in ("google", "both"):
         # Pass coordinate strings to walking routes too so OSM doesn't re-geocode an
         # ambiguous name.

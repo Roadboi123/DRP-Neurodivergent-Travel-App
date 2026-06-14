@@ -1,14 +1,30 @@
 import type { HttpClient } from '@/services/http-client';
 import type { LocationSuggestion, RouteOption, WarningItem } from '@/types/route';
 
+/** Optional departure/arrival timing for a route search. */
+export interface RouteTimeQuery {
+  /** ISO-8601 local timestamp, e.g. "2026-06-14T10:35". Omit to plan for "now". */
+  time?: string;
+  /** Whether `time` is the desired departure or arrival instant. */
+  timeIs?: 'departing' | 'arriving';
+}
+
 /** Build the `/routes/` query string, applying a username only when provided. */
-function buildRoutesQuery(start: string, end: string, username: string): string {
+function buildRoutesQuery(
+  start: string,
+  end: string,
+  username: string,
+  timing?: RouteTimeQuery,
+): string {
   const startParam = encodeURIComponent(start.trim());
   const endParam = encodeURIComponent(end.trim());
   const userParam = username.trim()
     ? `&username=${encodeURIComponent(username.trim())}`
     : '';
-  return `routes/?start=${startParam}&end=${endParam}${userParam}`;
+  const timeParam = timing?.time
+    ? `&time=${encodeURIComponent(timing.time)}&time_is=${timing.timeIs ?? 'departing'}`
+    : '';
+  return `routes/?start=${startParam}&end=${endParam}${userParam}${timeParam}`;
 }
 
 function buildWarningsQuery(
@@ -43,7 +59,12 @@ export interface RoutesService {
    * Fetch route suggestions. Throws if the (possibly failover-wrapped) client
    * cannot reach a backend; callers decide how to surface that.
    */
-  getRoutes(start: string, end: string, username: string): Promise<RouteOption[]>;
+  getRoutes(
+    start: string,
+    end: string,
+    username: string,
+    timing?: RouteTimeQuery,
+  ): Promise<RouteOption[]>;
   
   /**
    * Fetch live warnings tailored to the user's sensory sensitivities.
@@ -92,8 +113,8 @@ export interface RoutesService {
    */
 export function createRoutesService(client: HttpClient): RoutesService {
   return {
-    getRoutes(start, end, username) {
-      const query = buildRoutesQuery(start, end, username);
+    getRoutes(start, end, username, timing) {
+      const query = buildRoutesQuery(start, end, username, timing);
       // Trailing slash is already part of the query to avoid an HTTP redirect.
       return client.get<RouteOption[]>(`/${query}`);
     },
