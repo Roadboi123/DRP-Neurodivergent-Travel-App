@@ -272,6 +272,7 @@ export default function JourneyScreen() {
   const [simulating, setSimulating] = useState(false);
   const [simIndex, setSimIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [simSpeed, setSimSpeed] = useState(1);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -532,9 +533,18 @@ export default function JourneyScreen() {
           return prev;
         }
       });
-    }, 1000);
+    }, 1000 / simSpeed);
     return () => clearInterval(interval);
-  }, [simulating, isPlaying, allPathCoords]);
+  }, [simulating, isPlaying, allPathCoords, simSpeed]);
+
+  const cycleSpeed = () => {
+    setSimSpeed((prev) => {
+      if (prev === 0.5) return 1;
+      if (prev === 1) return 2;
+      if (prev === 2) return 4;
+      return 0.5;
+    });
+  };
 
   // Record an answer so we don't immediately re-prompt for the same warning.
   const respondProximity = useCallback(
@@ -1238,9 +1248,25 @@ export default function JourneyScreen() {
               <Ionicons name="chevron-forward-outline" size={20} color={palette.textPrimary} />
             </TouchableOpacity>
 
-            {/* Progress Text */}
+            {/* Speed Multiplier Button */}
+            <TouchableOpacity
+              onPress={cycleSpeed}
+              style={[
+                styles.simSpeedBtn,
+                {
+                  borderColor: palette.divider,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Change simulation speed. Current speed is ${simSpeed}x`}
+            >
+              <Text style={[styles.simSpeedText, { color: accents.orange }]}>{simSpeed}x</Text>
+            </TouchableOpacity>
+
+            {/* Progress Percentage */}
             <Text style={[styles.simText, { color: palette.textSecondary }]}>
-              {simIndex + 1}/{allPathCoords.length}
+              {allPathCoords.length > 0 ? Math.round(((simIndex + 1) / allPathCoords.length) * 100) : 0}%
             </Text>
           </View>
         )}
@@ -1887,8 +1913,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 12,
+    paddingHorizontal: 8,
+    gap: 8,
     ...hardShadow(3),
   },
   simIconBtn: {
@@ -1901,7 +1927,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    minWidth: 40,
+    minWidth: 28,
     textAlign: 'center',
+  },
+  simSpeedBtn: {
+    minWidth: 36,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
+  simSpeedText: {
+    fontSize: 9,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
   },
 });
