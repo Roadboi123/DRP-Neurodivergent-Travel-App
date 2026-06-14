@@ -1,6 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Animated,
+  Modal,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { formatClock, type JourneyTime, type JourneyTimeMode } from '@/components/routes/journey-time';
@@ -13,8 +23,18 @@ const MODE_OPTIONS: SegmentOption<JourneyTimeMode>[] = [
   { value: 'arrive', label: 'Arrive by', icon: 'flag-outline' },
 ];
 
-const MINUTE_STEP = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Wheel geometry: an odd number of visible rows centres the selected value.
+const ITEM_H = 44;
+const VISIBLE = 5;
+const CENTER = (VISIBLE - 1) / 2;
+const BAND_TOP = CENTER * ITEM_H;
+// react-native-web has no native animation driver — JS-drive transforms there.
+const USE_NATIVE = Platform.OS !== 'web';
+
+/** translateY that centres item `index` in the viewport. */
+const baseTranslate = (index: number) => ITEM_H * (CENTER - index);
 
 /** Day suffix relative to now: "Today", "Tomorrow", else a short date. */
 function dayLabel(at: number): string {
@@ -50,44 +70,109 @@ function instantFor(hours: number, minutes: number): number {
   return candidate.getTime();
 }
 
-function Stepper({
-  label,
-  value,
-  onDec,
-  onInc,
-  palette,
+/**
+ * A single draggable number column (Google-Maps-style). Drag (mouse or touch)
+ * or tap a value to select; the column snaps the choice to the centre row and
+ * reports it via `onSettle`. Built on PanResponder + Animated (transform only)
+ * so it responds to drag on web too, where a ScrollView only takes wheel/touch.
+ * Uncontrolled after mount — the parent remounts it (via `key`) to re-seed.
+ */
+function WheelColumn({
+  values,
+  initialIndex,
+  onSettle,
   accent,
+  palette,
 }: {
-  label: string;
-  value: string;
-  onDec: () => void;
-  onInc: () => void;
-  palette: ReturnType<typeof getPalette>;
+  values: string[];
+  initialIndex: number;
+  onSettle: (index: number) => void;
   accent: string;
+  palette: ReturnType<typeof getPalette>;
 }) {
+  const translate = useRef(new Animated.Value(baseTranslate(initialIndex))).current;
+  // Resting translate at drag start (set from the live value so mid-fling grabs work).
+  const startValue = useRef(baseTranslate(initialIndex));
+  const activeRef = useRef(initialIndex);
+  const [active, setActive] = useState(initialIndex);
+  // Keep the latest onSettle so the once-created PanResponder never calls a stale one.
+  const onSettleRef = useRef(onSettle);
+  onSettleRef.current = onSettle;
+
+  const clamp = (i: number) => Math.max(0, Math.min(values.length - 1, i));
+  const indexFor = (t: number) => clamp(Math.round(CENTER - t / ITEM_H));
+
+  const setActiveIndex = (i: number) => {
+    if (i !== activeRef.current) {
+      activeRef.current = i;
+      setActive(i);
+    }
+  };
+
+  const snapTo = (rawIndex: number, notify = true) => {
+    const i = clamp(rawIndex);
+    startValue.current = baseTranslate(i);
+    setActiveIndex(i);
+    Animated.spring(translate, {
+      toValue: baseTranslate(i),
+      useNativeDriver: USE_NATIVE,
+      bounciness: 3,
+      speed: 18,
+    }).start();
+    if (notify) onSettleRef.current(i);
+  };
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        translate.stopAnimation((v: number) => {
+          startValue.current = v;
+        });
+      },
+      onPanResponderMove: (_e, g) => {
+        const t = startValue.current + g.dy;
+        translate.setValue(t);
+        setActiveIndex(indexFor(t));
+      },
+      onPanResponderRelease: (_e, g) => snapTo(indexFor(startValue.current + g.dy)),
+      onPanResponderTerminate: (_e, g) => snapTo(indexFor(startValue.current + g.dy)),
+    }),
+  ).current;
+
   return (
-    <View style={styles.stepperCol}>
-      <Text style={[styles.stepperLabel, { color: palette.textSecondary }]}>{label}</Text>
-      <View style={styles.stepperRow}>
-        <TouchableOpacity
-          onPress={onDec}
-          activeOpacity={0.8}
-          accessibilityLabel={`Decrease ${label}`}
-          style={[styles.stepBtn, { backgroundColor: accent, borderColor: palette.border }]}>
-          <Ionicons name="remove" size={20} color={BRAND.ink} />
-        </TouchableOpacity>
-        <Text style={[styles.stepperValue, { color: palette.textPrimary }]}>{value}</Text>
-        <TouchableOpacity
-          onPress={onInc}
-          activeOpacity={0.8}
-          accessibilityLabel={`Increase ${label}`}
-          style={[styles.stepBtn, { backgroundColor: accent, borderColor: palette.border }]}>
-          <Ionicons name="add" size={20} color={BRAND.ink} />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.wheelColumn} {...pan.panHandlers}>
+      <Animated.View style={{ transform: [{ translateY: translate }] }}>
+        {values.map((v, i) => {
+          const isActive = i === active;
+          return (
+            <TouchableOpacity
+              key={v}
+              activeOpacity={0.7}
+              style={styles.wheelItem}
+              onPress={() => snapTo(i)}>
+              <Text
+                style={[
+                  styles.wheelText,
+                  {
+                    color: isActive ? accent : palette.textSecondary,
+                    opacity: isActive ? 1 : 0.35,
+                    fontSize: isActive ? 30 : 22,
+                  },
+                ]}>
+                {v}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </Animated.View>
     </View>
   );
 }
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
 export function RouteTimeSheet({
   visible,
@@ -106,8 +191,14 @@ export function RouteTimeSheet({
 
   // Working copy so edits only commit on "Done".
   const [draft, setDraft] = useState<JourneyTime>(value);
+  // Bumped whenever the sheet (re-)opens or the mode flips, to remount the
+  // wheels at a fresh starting position.
+  const [seed, setSeed] = useState(0);
   useEffect(() => {
-    if (visible) setDraft(value);
+    if (visible) {
+      setDraft(value);
+      setSeed((s) => s + 1);
+    }
   }, [visible, value]);
 
   const picked = new Date(draft.at);
@@ -119,21 +210,13 @@ export function RouteTimeSheet({
       setDraft({ mode, at: Date.now() });
       return;
     }
-    // Seed a sensible default time the first time a specific mode is chosen:
-    // 30 minutes from now, rounded to the minute step.
+    // Seed a sensible default the first time a specific mode is chosen: 30
+    // minutes from now, rounded to the minute.
     const base = draft.mode === 'now' ? Date.now() + 30 * 60_000 : draft.at;
     const d = new Date(base);
-    d.setMinutes(Math.round(d.getMinutes() / MINUTE_STEP) * MINUTE_STEP, 0, 0);
+    d.setSeconds(0, 0);
     setDraft({ mode, at: d.getTime() });
-  };
-
-  const bumpHour = (delta: number) => {
-    setDraft((d) => ({ ...d, at: instantFor((hours + delta + 24) % 24, minutes) }));
-  };
-  const bumpMinute = (delta: number) => {
-    const total = hours * 60 + minutes + delta * MINUTE_STEP;
-    const wrapped = (total + 24 * 60) % (24 * 60);
-    setDraft((d) => ({ ...d, at: instantFor(Math.floor(wrapped / 60), wrapped % 60) }));
+    setSeed((s) => s + 1);
   };
 
   return (
@@ -156,23 +239,28 @@ export function RouteTimeSheet({
 
           {draft.mode !== 'now' && (
             <>
-              <View style={styles.steppers}>
-                <Stepper
-                  label="Hour"
-                  value={String(hours).padStart(2, '0')}
-                  onDec={() => bumpHour(-1)}
-                  onInc={() => bumpHour(1)}
+              <View style={styles.wheels}>
+                {/* Centre selection band */}
+                <View
+                  pointerEvents="none"
+                  style={[styles.selectionBand, { borderColor: palette.border, top: BAND_TOP }]}
+                />
+                <WheelColumn
+                  key={`h-${seed}`}
+                  values={HOURS}
+                  initialIndex={hours}
+                  onSettle={(i) => setDraft((d) => ({ ...d, at: instantFor(i, minutes) }))}
+                  accent={palette.textPrimary}
                   palette={palette}
-                  accent={accents.cyan}
                 />
                 <Text style={[styles.colon, { color: palette.textPrimary }]}>:</Text>
-                <Stepper
-                  label="Min"
-                  value={String(minutes).padStart(2, '0')}
-                  onDec={() => bumpMinute(-1)}
-                  onInc={() => bumpMinute(1)}
+                <WheelColumn
+                  key={`m-${seed}`}
+                  values={MINUTES}
+                  initialIndex={minutes}
+                  onSettle={(i) => setDraft((d) => ({ ...d, at: instantFor(hours, i) }))}
+                  accent={palette.textPrimary}
                   palette={palette}
-                  accent={accents.cyan}
                 />
               </View>
               <Text style={[styles.dayNote, { color: palette.textSecondary }]}>
@@ -231,51 +319,44 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: -0.3,
   },
-  steppers: {
+  wheels: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
-    marginTop: 24,
+    gap: 8,
+    marginTop: 18,
+    height: ITEM_H * VISIBLE,
+  },
+  selectionBand: {
+    position: 'absolute',
+    left: 40,
+    right: 40,
+    height: ITEM_H,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderRadius: 2,
+    opacity: 0.5,
+  },
+  wheelColumn: {
+    width: 78,
+    height: ITEM_H * VISIBLE,
+    overflow: 'hidden',
+  },
+  wheelItem: {
+    height: ITEM_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wheelText: {
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   colon: {
-    fontSize: 34,
+    fontSize: 30,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    marginBottom: 10,
-  },
-  stepperCol: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepperLabel: {
-    fontSize: 11,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...hardShadow(3),
-  },
-  stepperValue: {
-    fontSize: 40,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    minWidth: 62,
-    textAlign: 'center',
-    letterSpacing: -1,
+    marginBottom: 2,
   },
   dayNote: {
     fontSize: 13,
@@ -284,7 +365,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   doneButton: {
-    marginTop: 28,
+    marginTop: 24,
     paddingVertical: 15,
     borderRadius: 30,
     alignItems: 'center',
