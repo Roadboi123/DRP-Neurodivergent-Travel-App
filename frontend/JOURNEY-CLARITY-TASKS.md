@@ -15,7 +15,7 @@ Status: ⬜ todo · 🟧 in progress · ✅ done · ⏭️ deferred
 | 3 | Report widget label — keep "Report" | ✅ (kept as-is) |
 | 4 | Map markers: blue walking dots + white change markers w/ transport emoji | ✅ |
 | 5 | Per-stop white dots along a ride | ⏭️ deferred (no stop coords in data) |
-| 6 | Legend at top, inline between home + warnings toggle | ✅ |
+| 6 | Legend (round 1 top pill → **round 2** left-docked swipeable panel) | ✅ |
 | 7 | Fix swipe-down sheet glitch (both sheets — overshootClamping) | ✅ |
 | 8 | Fix swap corrupting Current Location | ✅ |
 | 9 | Rename "Go" → "Start journey" | ✅ |
@@ -23,6 +23,20 @@ Status: ⬜ todo · 🟧 in progress · ✅ done · ⏭️ deferred
 | 11 | Remove "Sensory alignment" widget (both screens) | ✅ |
 | 12 | This tracking markdown | ✅ |
 | 13 | General signposting pass (icon-only controls get labels) | ✅ |
+
+## Round 2 follow-ups (post-review)
+
+| # | Task | Status |
+|---|------|--------|
+| R1 | "your destination" → actual entered destination (label fallback via active-journey) | ✅ |
+| R2 | Legend → left-docked, swipeable off/on with chevron tab; clean Hide-changes button | ✅ |
+| R3 | SW11→Westfield end-of-route: confirm walk icon at bus→walk change | ✅ (🚌+🚶 markers; ported change markers + blue walking to the pre-Go map too) |
+| R4 | Heat warning emoji 🔥 → 🌡️ (thermometer) | ✅ |
+| R5 | Remove the reroute feature entirely | ✅ |
+
+`WALK_BLUE` + `modeEmoji` now live in `warning-markers.ts` and are shared by both
+maps. Journey labels (`setActiveJourneyLabels`/`getActiveJourneyLabels`) live in
+`services/active-journey.ts`.
 
 ## Key files
 

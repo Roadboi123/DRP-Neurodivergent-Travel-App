@@ -19,13 +19,30 @@ export const REPORT_OPTIONS: {
   accent: keyof Accents;
 }[] = [
   { type: 'sound', label: 'Sound', icon: 'radio-outline', emoji: '🔊', accent: 'cyan' },
-  { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🔥', accent: 'pink' },
+  { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🌡️', accent: 'pink' },
   { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '🌸', accent: 'green' },
   { type: 'crowds', label: 'Crowds', icon: 'people-outline', emoji: '👥', accent: 'orange' },
   { type: 'other', label: 'Other', icon: 'add-circle-outline', emoji: '⚠️', accent: 'yellow' },
 ];
 
 export type SensoryReportType = (typeof REPORT_OPTIONS)[number]['type'];
+
+// Walking is drawn as a dotted line in this blue so the map legend can say
+// plainly "blue = walking" (distinct from the transit liveries). Shared by the
+// journey map and the pre-Go route-details map.
+export const WALK_BLUE = '#2e6bff';
+
+/** A transport-mode emoji for the white "change here" markers + the map legend. */
+export function modeEmoji(mode: string | null | undefined): string {
+  const m = (mode || '').toLowerCase();
+  if (m === 'walking' || m === 'walk') return '🚶';
+  if (m.includes('bus') || m === 'coach') return '🚌';
+  if (m === 'tube' || m === 'subway' || m === 'underground' || m.includes('elizabeth')) return '🚇';
+  if (m === 'dlr') return '🚈';
+  if (m === 'tram') return '🚊';
+  if (m === 'overground' || m === 'train' || m === 'national-rail') return '🚆';
+  return '🚉';
+}
 
 /**
  * Map a warning's stored `icon` (an Ionicon name) to the marker emoji and an

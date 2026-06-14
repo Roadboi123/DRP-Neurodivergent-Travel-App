@@ -517,6 +517,8 @@ export default function RoutesScreen() {
       <RouteDetailsModal
         visible={!!selectedRoute}
         route={selectedRoute}
+        originLabel={activeStart}
+        destinationLabel={activeEnd}
         onClose={() => setSelectedRoute(null)}
       />
     </SafeAreaView>

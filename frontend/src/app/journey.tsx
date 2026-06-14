@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView, ActivityIndicator } from 'react-native';
+import { Animated, AppState, Dimensions, PanResponder, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,8 @@ import { getLegUIProps } from '@/components/routes/route-card';
 import { WarningConfidence } from '@/components/routes/warning-confidence';
 import {
   REPORT_OPTIONS,
+  WALK_BLUE,
+  modeEmoji,
   warningMarkerScript,
   warningVisual,
   type SensoryReportType,
@@ -17,7 +19,7 @@ import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLiveLocation } from '@/hooks/use-live-location';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
-import { getActiveJourneyRoute, setActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
+import { getActiveJourneyLabels, getActiveJourneyRoute, requestReopenJourneyDetails } from '@/services/active-journey';
 import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
@@ -52,22 +54,6 @@ function calculateHeading(from: [number, number], to: [number, number]): number 
   const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
   const brng = (Math.atan2(y, x) * 180) / Math.PI;
   return (brng + 360) % 360;
-}
-
-// Walking is drawn as a dotted line in this blue so the map legend can say
-// plainly "blue = walking" (distinct from the transit liveries).
-const WALK_BLUE = '#2e6bff';
-
-/** A transport-mode emoji for the white "change here" markers + the map legend. */
-function modeEmoji(mode: string | null | undefined): string {
-  const m = (mode || '').toLowerCase();
-  if (m === 'walking' || m === 'walk') return '🚶';
-  if (m.includes('bus') || m === 'coach') return '🚌';
-  if (m === 'tube' || m === 'subway' || m === 'underground' || m.includes('elizabeth')) return '🚇';
-  if (m === 'dlr') return '🚈';
-  if (m === 'tram') return '🚊';
-  if (m === 'overground' || m === 'train' || m === 'national-rail') return '🚆';
-  return '🚉';
 }
 
 function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccents>) {
@@ -349,11 +335,13 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
 }
 
 export default function JourneyScreen() {
-  const [activeRoute, setActiveRoute] = useState<RouteOption | null>(() => getActiveJourneyRoute());
+  const [activeRoute] = useState<RouteOption | null>(() => getActiveJourneyRoute());
   const route = activeRoute;
-  const [alternativeRoutes, setAlternativeRoutes] = useState<RouteOption[] | null>(null);
-  const [isRerouting, setIsRerouting] = useState(false);
-  const [selectedAltRoute, setSelectedAltRoute] = useState<RouteOption | null>(null);
+  // Friendly fallbacks for coordinate-only leg endpoints: prefer the labels the
+  // traveller typed (e.g. "Westfield London") over a generic phrase.
+  const journeyLabels = getActiveJourneyLabels();
+  const originFallback = cleanPlaceLabel(journeyLabels.origin, 'Your location');
+  const destinationFallback = cleanPlaceLabel(journeyLabels.destination, 'your destination');
   const routesService = useRoutesService();
   const { username } = useAuth();
   const [followUser, setFollowUser] = useState(true);
@@ -405,10 +393,64 @@ export default function JourneyScreen() {
   const [isExpanded, setIsExpanded] = useState(false);
   const initialPanDone = useRef(false);
 
-  // Map legend (key) open state, and whether the white "change here" markers are
-  // hidden on the map.
-  const [legendOpen, setLegendOpen] = useState(false);
+  // Map key (legend): a left-docked panel that starts on-screen and can be
+  // swiped off to the left (leaving a pull-tab) and back. `hideChanges` toggles
+  // the white "change here" markers on the map.
+  const [legendHidden, setLegendHidden] = useState(false);
   const [hideChanges, setHideChanges] = useState(false);
+  const LEGEND_WIDTH = 210;
+  const LEGEND_TAB = 28;
+  const LEGEND_HIDDEN_X = -(LEGEND_WIDTH - LEGEND_TAB);
+  const legendX = useRef(new Animated.Value(0)).current; // 0 = fully shown
+  const legendCurX = useRef(0);
+  const legendStartX = useRef(0);
+
+  useEffect(() => {
+    const id = legendX.addListener(({ value }) => {
+      legendCurX.current = value;
+    });
+    return () => legendX.removeListener(id);
+  }, [legendX]);
+
+  const animateLegend = useCallback(
+    (hidden: boolean) => {
+      setLegendHidden(hidden);
+      Animated.spring(legendX, {
+        toValue: hidden ? LEGEND_HIDDEN_X : 0,
+        useNativeDriver: Platform.OS !== 'web',
+        overshootClamping: true,
+        tension: 60,
+        friction: 9,
+      }).start();
+    },
+    [legendX, LEGEND_HIDDEN_X],
+  );
+
+  const legendPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => {
+        legendStartX.current = legendCurX.current;
+        legendX.setOffset(legendStartX.current);
+        legendX.setValue(0);
+      },
+      onPanResponderMove: (_, g) => {
+        const min = LEGEND_HIDDEN_X - legendStartX.current;
+        const max = 0 - legendStartX.current;
+        legendX.setValue(Math.max(min, Math.min(max, g.dx)));
+      },
+      onPanResponderRelease: (_, g) => {
+        legendX.flattenOffset();
+        const current = legendCurX.current;
+        const hide = g.vx < -0.25 ? true : g.vx > 0.25 ? false : current < LEGEND_HIDDEN_X / 2;
+        animateLegend(hide);
+      },
+      onPanResponderTerminate: () => {
+        legendX.flattenOffset();
+      },
+    }),
+  ).current;
 
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
@@ -843,36 +885,6 @@ export default function JourneyScreen() {
     }
   };
 
-  const fetchAlternatives = async () => {
-    if (!route) return;
-    setIsRerouting(true);
-    try {
-      const start = `${userCoords[0]},${userCoords[1]}`;
-      const lastLeg = route.legs?.[route.legs.length - 1];
-      if (!lastLeg) return;
-      const end = lastLeg.arrival_lat && lastLeg.arrival_lon
-        ? `${lastLeg.arrival_lat},${lastLeg.arrival_lon}`
-        : lastLeg.arrival;
-        
-      const results = await routesService.getRoutes(start, end, username || '', undefined, true);
-      setAlternativeRoutes(results);
-      if (results && results.length > 0) {
-        // Pre-select the best alternative route
-        setSelectedAltRoute(results[0]);
-      }
-    } catch (err) {
-      console.warn('Failed to fetch alternative routes:', err);
-    } finally {
-      setIsRerouting(false);
-    }
-  };
-
-
-  const handleAvoidWarningReroute = (warning: WarningItem) => {
-    analytics.trackClick();
-    fetchAlternatives();
-  };
-
   // Actions — report a sensory warning at the traveller's live GPS location
   // (falls back to the route origin when location is unavailable).
   const submitReport = async () => {
@@ -915,9 +927,8 @@ export default function JourneyScreen() {
   }, [reportNotice]);
 
   const mapHtml = useMemo(() => {
-    const previewRoute = selectedAltRoute || route;
-    return previewRoute ? buildJourneyMap(previewRoute, accents) : '';
-  }, [route, selectedAltRoute, accents]);
+    return route ? buildJourneyMap(route, accents) : '';
+  }, [route, accents]);
 
   if (!route) {
     return (
@@ -987,49 +998,42 @@ export default function JourneyScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Right group: map key (legend), then show/hide warnings */}
-        <View style={styles.topRightGroup}>
-          {/* Map key / legend — tap to expand the meaning of every map symbol */}
-          <TouchableOpacity
-            onPress={() => {
-              analytics.trackClick();
-              setLegendOpen((v) => !v);
-            }}
-            style={[
-              styles.topPill,
-              { backgroundColor: legendOpen ? accents.cyan : palette.surface, borderColor: palette.border },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={legendOpen ? 'Hide map key' : 'Show map key'}
-          >
-            <Ionicons name="map-outline" size={16} color={palette.textPrimary} />
-            <Text style={[styles.topPillText, { color: palette.textPrimary }]}>Key</Text>
-          </TouchableOpacity>
-
-          {/* Hide / show all warning markers */}
-          <TouchableOpacity
-            onPress={() => {
-              analytics.trackClick();
-              setHideAll(!hideAll);
-            }}
-            style={[
-              styles.topPill,
-              { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
-          >
-            <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
-            <Text style={[styles.topPillText, { color: palette.textPrimary }]}>
-              {hideAll ? 'Show warnings' : 'Hide warnings'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Hide / show all warning markers */}
+        <TouchableOpacity
+          onPress={() => {
+            analytics.trackClick();
+            setHideAll(!hideAll);
+          }}
+          style={[
+            styles.topPill,
+            { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+        >
+          <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
+          <Text style={[styles.topPillText, { color: palette.textPrimary }]}>
+            {hideAll ? 'Show warnings' : 'Hide warnings'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Map key / legend card — explains every symbol + toggles change icons */}
-      {legendOpen && (
-        <View style={[styles.legendCard, { top: insets.top + 78, backgroundColor: palette.surface, borderColor: palette.border }]}>
+      {/* Map key / legend — a left-docked panel you can swipe off and back.
+          Starts on-screen; the chevron tab shows it can slide away. */}
+      <Animated.View
+        style={[
+          styles.legendPanel,
+          {
+            top: insets.top + 80,
+            width: LEGEND_WIDTH,
+            backgroundColor: palette.surface,
+            borderColor: palette.border,
+            transform: [{ translateX: legendX }],
+          },
+        ]}
+        {...legendPan.panHandlers}
+      >
+        <View style={[styles.legendBody, { width: LEGEND_WIDTH - LEGEND_TAB }]}>
           <Text style={[styles.legendTitle, { color: palette.textPrimary }]}>Map key</Text>
 
           <View style={styles.legendRow}>
@@ -1052,10 +1056,10 @@ export default function JourneyScreen() {
             <View style={[styles.legendChangeDot, { borderColor: palette.border }]}>
               <Text style={styles.legendChangeEmoji}>🚌</Text>
             </View>
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Change here (bus/train/tube)</Text>
+            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Change (bus/train/tube)</Text>
           </View>
 
-          <View style={[styles.reportDivider, { backgroundColor: palette.divider, marginVertical: 8, marginHorizontal: 0 }]} />
+          <View style={[styles.legendDivider, { backgroundColor: palette.divider }]} />
 
           {/* Hide / show the white change markers */}
           <TouchableOpacity
@@ -1063,17 +1067,30 @@ export default function JourneyScreen() {
               analytics.trackClick();
               setHideChanges((v) => !v);
             }}
-            style={[styles.legendToggleBtn, { backgroundColor: hideChanges ? accents.yellow : palette.background, borderColor: palette.border }]}
+            style={[styles.legendToggleBtn, { backgroundColor: hideChanges ? accents.yellow : palette.surface, borderColor: palette.border }]}
             accessibilityRole="button"
             accessibilityLabel={hideChanges ? 'Show change icons on map' : 'Hide change icons from map'}
           >
-            <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={16} color={palette.textPrimary} />
+            <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={15} color={palette.textPrimary} />
             <Text style={[styles.legendToggleText, { color: palette.textPrimary }]}>
-              {hideChanges ? 'Show change icons' : 'Hide change icons'}
+              {hideChanges ? 'Show changes' : 'Hide changes'}
             </Text>
           </TouchableOpacity>
         </View>
-      )}
+
+        {/* Pull-tab on the right edge — tap or swipe to slide the key off/on */}
+        <TouchableOpacity
+          onPress={() => {
+            analytics.trackClick();
+            animateLegend(!legendHidden);
+          }}
+          style={[styles.legendTab, { width: LEGEND_TAB, borderColor: palette.border }]}
+          accessibilityRole="button"
+          accessibilityLabel={legendHidden ? 'Show map key' : 'Hide map key'}
+        >
+          <Ionicons name={legendHidden ? 'chevron-forward' : 'chevron-back'} size={16} color={palette.textPrimary} />
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
@@ -1176,7 +1193,7 @@ export default function JourneyScreen() {
                     </View>
                     <View style={styles.stepContentCol}>
                       <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>
-                        {cleanPlaceLabel(leg.departure, lIdx === 0 ? 'Your location' : 'This stop')}
+                        {cleanPlaceLabel(leg.departure, lIdx === 0 ? originFallback : 'This stop')}
                       </Text>
                       <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
                         {cleanInstruction(leg.instruction)} ({leg.duration_mins} mins)
@@ -1190,7 +1207,7 @@ export default function JourneyScreen() {
                         />
                         <Text style={[styles.detailsArrival, { color: palette.textSecondary }]}>
                           {isWalking ? 'Walk to ' : 'Get off at '}
-                          <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{cleanPlaceLabel(leg.arrival, 'your destination')}</Text>
+                          <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{cleanPlaceLabel(leg.arrival, lIdx === (route.legs?.length ?? 0) - 1 ? destinationFallback : 'the next stop')}</Text>
                         </Text>
                       </View>
                     </View>
@@ -1207,7 +1224,7 @@ export default function JourneyScreen() {
                   </View>
                   <View style={styles.stepContentCol}>
                     <Text style={[styles.detailsStation, { color: palette.textPrimary }]}>
-                      {cleanPlaceLabel(route.legs[route.legs.length - 1].arrival, 'your destination')}
+                      {cleanPlaceLabel(route.legs[route.legs.length - 1].arrival, destinationFallback)}
                     </Text>
                     <Text style={[styles.detailsInstruction, { color: palette.textSecondary }]}>
                       Arrive at destination
@@ -1299,22 +1316,6 @@ export default function JourneyScreen() {
                 <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
                 <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
                   {selectedIsOwn ? 'Remove' : 'Close'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleAvoidWarningReroute(selectedWarning)}
-                activeOpacity={0.85}
-                style={[
-                  styles.warningCardAction,
-                  { backgroundColor: accents.orange, borderColor: palette.border, marginTop: 8 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Reroute to avoid this warning"
-              >
-                <Ionicons name="git-branch-outline" size={15} color={palette.textPrimary} style={{ marginRight: 6 }} />
-                <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
-                  Reroute to Avoid
                 </Text>
               </TouchableOpacity>
 
@@ -1529,106 +1530,6 @@ export default function JourneyScreen() {
         )}
       </View>
 
-      {/* Alternative Routes Selection Overlay */}
-      {alternativeRoutes && (
-        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
-          <View style={styles.reportBackdrop} pointerEvents="none" />
-          <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.altRoutesPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <Text style={[styles.altRoutesHeading, { color: palette.textPrimary }]}>Choose Alternative Route</Text>
-              
-              <ScrollView style={styles.altRoutesScroll} showsVerticalScrollIndicator={false}>
-                {alternativeRoutes.map((alt) => {
-                  const isSelected = selectedAltRoute?.id === alt.id;
-                  const isCalmest = alt.type === 'best';
-                  const isQuickest = alt.type === 'quickest';
-                  
-                  return (
-                    <TouchableOpacity
-                      key={alt.id}
-                      onPress={() => setSelectedAltRoute(alt)}
-                      activeOpacity={0.85}
-                      style={[
-                        styles.altRouteCard,
-                        {
-                          borderColor: isSelected ? accents.orange : palette.border,
-                          backgroundColor: isSelected ? palette.background : palette.surface,
-                          borderWidth: isSelected ? 2.5 : 1.5,
-                        }
-                      ]}
-                    >
-                      <View style={styles.altRouteHeader}>
-                        <Text style={[styles.altRouteName, { color: palette.textPrimary }]}>{alt.name}</Text>
-                        <View style={{ flexDirection: 'row', gap: 4 }}>
-                          {isCalmest && (
-                            <View style={[styles.altBadge, { backgroundColor: accents.green, borderColor: 'transparent' }]}>
-                              <Text style={[styles.altBadgeText, { color: palette.textPrimary }]}>Calmest</Text>
-                            </View>
-                          )}
-                          {isQuickest && (
-                            <View style={[styles.altBadge, { backgroundColor: accents.cyan, borderColor: 'transparent' }]}>
-                              <Text style={[styles.altBadgeText, { color: palette.textPrimary }]}>Quickest</Text>
-                            </View>
-                          )}
-                          <View style={[styles.altBadge, { backgroundColor: palette.border, borderColor: 'transparent' }]}>
-                            <Text style={[styles.altBadgeText, { color: palette.textSecondary }]}>{alt.match_percentage}% match</Text>
-                          </View>
-                        </View>
-                      </View>
-                      
-                      <View style={styles.altRouteStats}>
-                        <Text style={[styles.altRouteDuration, { color: palette.textPrimary }]}>{alt.duration} min</Text>
-                        <Text style={[styles.altRoutePrice, { color: palette.textSecondary }]}>£{alt.price.toFixed(2)}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-              
-              <View style={styles.altRoutesActions}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setAlternativeRoutes(null);
-                    setSelectedAltRoute(null);
-                  }}
-                  style={[styles.altRouteCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
-                >
-                  <Text style={[styles.altRouteBtnText, { color: palette.textPrimary }]}>Cancel</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  onPress={() => {
-                    if (selectedAltRoute) {
-                      setActiveJourneyRoute(selectedAltRoute);
-                      setActiveRoute(selectedAltRoute);
-                    }
-                    setAlternativeRoutes(null);
-                    setSelectedAltRoute(null);
-                    setSelectedWarning(null);
-                  }}
-                  style={[styles.altRouteConfirmBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
-                >
-                  <Text style={[styles.altRouteBtnText, { color: palette.textPrimary }]}>Confirm</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Rerouting Loading Spinner Overlay */}
-      {isRerouting && (
-        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
-          <View style={styles.reportBackdrop} pointerEvents="none" />
-          <View style={styles.reportCenterContainer} pointerEvents="none">
-            <View style={[styles.loadingPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <ActivityIndicator size="large" color={accents.orange} />
-              <Text style={[styles.loadingText, { color: palette.textPrimary, marginTop: 12 }]}>Finding alternative routes...</Text>
-            </View>
-          </View>
-        </View>
-      )}
-
     </SafeAreaView>
   );
 }
@@ -1664,12 +1565,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  topRightGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 1,
-  },
   topPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1687,15 +1582,32 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.2,
   },
-  legendCard: {
+  legendPanel: {
     position: 'absolute',
-    right: 16,
-    width: 232,
+    left: 0,
     zIndex: 12,
-    borderWidth: 2,
-    borderRadius: 16,
-    padding: 12,
-    ...hardShadow(5),
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+    ...hardShadow(4),
+  },
+  legendBody: {
+    paddingVertical: 12,
+    paddingLeft: 14,
+    paddingRight: 8,
+  },
+  legendTab: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 2,
+  },
+  legendDivider: {
+    height: 1.5,
+    marginVertical: 8,
   },
   legendTitle: {
     fontSize: 11,
@@ -1755,7 +1667,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 10,
     paddingVertical: 9,
-    ...hardShadow(2),
+    marginTop: 2,
   },
   legendToggleText: {
     fontSize: 10.5,
@@ -1870,21 +1782,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 12,
     borderBottomWidth: 1.5,
-  },
-  rerouteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    ...hardShadow(2),
-  },
-  rerouteBtnText: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
   },
   sheetDuration: {
     fontSize: 17,
@@ -2128,112 +2025,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.display,
     fontWeight: '900',
     textTransform: 'uppercase',
-  },
-  altRoutesPanel: {
-    width: '90%',
-    maxWidth: 420,
-    maxHeight: '75%',
-    borderRadius: 22,
-    borderWidth: 2.5,
-    padding: 16,
-    ...hardShadow(5),
-  },
-  altRoutesHeading: {
-    fontSize: 15,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  altRoutesScroll: {
-    marginVertical: 8,
-  },
-  altRouteCard: {
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    ...hardShadow(2),
-  },
-  altRouteHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  altRouteName: {
-    fontSize: 13,
-    fontWeight: '800',
-    flex: 1,
-    marginRight: 8,
-  },
-  altRouteStats: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'baseline',
-  },
-  altRouteDuration: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  altRoutePrice: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  altBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  altBadgeText: {
-    fontSize: 8.5,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  altRoutesActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    gap: 12,
-  },
-  altRouteCancelBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...hardShadow(2),
-  },
-  altRouteConfirmBtn: {
-    flex: 1.5,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...hardShadow(2),
-  },
-  altRouteBtnText: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  loadingPanel: {
-    borderRadius: 18,
-    borderWidth: 2,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 220,
-    ...hardShadow(4),
-  },
-  loadingText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    textAlign: 'center',
   },
   simControlRow: {
     height: 54,
