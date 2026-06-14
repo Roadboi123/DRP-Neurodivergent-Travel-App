@@ -12,7 +12,7 @@ const SHORT_LEVEL: Record<SensitivityLevel, string> = {
   little: 'Little',
   medium: 'Some',
   high: 'A lot',
-  veryhigh: 'Lots',
+  veryhigh: 'Too much',
 };
 
 /**
