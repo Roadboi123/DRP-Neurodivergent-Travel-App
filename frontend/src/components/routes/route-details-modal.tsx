@@ -5,19 +5,23 @@ import { Animated, Dimensions, Modal, PanResponder, Platform, SafeAreaView, Scro
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
-import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { WarningConfidence } from '@/components/routes/warning-confidence';
-import { warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
+import { WALK_BLUE, modeEmoji, warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
 import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
-import { setActiveJourneyRoute } from '@/services/active-journey';
+import { setActiveJourneyLabels, setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
 import { analytics } from '@/services/analytics';
+import { cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 
 interface RouteDetailsModalProps {
   visible: boolean;
   route: RouteOption | null;
+  /** Human labels the traveller typed, used as friendly fallbacks when a leg
+   *  endpoint is only a raw coordinate. */
+  originLabel?: string;
+  destinationLabel?: string;
   onClose: () => void;
 }
 
@@ -71,7 +75,7 @@ function WebSafeModal({ visible, onRequestClose, children }: WebSafeModalProps) 
   );
 }
 
-export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteDetailsModalProps) {
+export function RouteDetailsModal({ visible, route: propRoute, originLabel, destinationLabel, onClose }: RouteDetailsModalProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
@@ -90,6 +94,11 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
   }, [propRoute]);
 
   const route = propRoute || cachedRoute;
+
+  // Friendly fallbacks for when a leg endpoint is only a coordinate: prefer the
+  // labels the traveller actually typed, then a generic phrase.
+  const originFallback = cleanPlaceLabel(originLabel, 'Your location');
+  const destinationFallback = cleanPlaceLabel(destinationLabel, 'your destination');
 
   // Web Scroll Restoration / Layout Fix:
   // React Native Web's Modal component locks body scrolling by applying styles to
@@ -253,6 +262,9 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
       useNativeDriver: Platform.OS !== 'web',
       tension: 50,
       friction: 8,
+      // Clamp overshoot so collapsing doesn't dip past the resting position and
+      // bounce back — that bounce read as a downward "glitch" on swipe-down.
+      overshootClamping: true,
     }).start();
   };
 
@@ -322,7 +334,8 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
     if (!route) return;
     analytics.startJourney(route.id);
     setActiveJourneyRoute(route);
-    
+    setActiveJourneyLabels(originLabel ?? '', destinationLabel ?? '');
+
     requestAnimationFrame(() => {
       router.push('/journey');
       setTimeout(() => {
@@ -366,6 +379,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
       isStart: boolean;
       isEnd: boolean;
       isTransfer: boolean;
+      boardMode: string;
     };
     const pointsList: MapNode[] = [];
 
@@ -373,7 +387,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
       lat: number | null | undefined,
       lon: number | null | undefined,
       label: string,
-      flags: { isStart?: boolean; isEnd?: boolean; isTransfer?: boolean }
+      flags: { isStart?: boolean; isEnd?: boolean; isTransfer?: boolean; boardMode?: string }
     ) => {
       if (lat == null || lon == null) return;
       const last = pointsList[pointsList.length - 1];
@@ -385,6 +399,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
           last.isStart = last.isStart || !!flags.isStart;
           last.isEnd = last.isEnd || !!flags.isEnd;
           last.isTransfer = last.isTransfer || !!flags.isTransfer;
+          if (flags.boardMode) last.boardMode = flags.boardMode;
           return;
         }
       }
@@ -395,13 +410,14 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
         isStart: !!flags.isStart,
         isEnd: !!flags.isEnd,
         isTransfer: !!flags.isTransfer,
+        boardMode: flags.boardMode || '',
       });
     };
 
     processedLegs.forEach((leg, lIdx) => {
       const isFirst = lIdx === 0;
       const isLast = lIdx === processedLegs.length - 1;
-      addNode(leg.dep_lat, leg.dep_lon, leg.departure, { isStart: isFirst, isTransfer: !isFirst });
+      addNode(leg.dep_lat, leg.dep_lon, leg.departure, { isStart: isFirst, isTransfer: !isFirst, boardMode: leg.mode });
       addNode(leg.arr_lat, leg.arr_lon, leg.arrival, { isEnd: isLast, isTransfer: !isLast });
     });
     const latitudes = pointsList.map((p) => p.lat);
@@ -476,7 +492,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
               }).addTo(map);
 
               L.polyline(${polylinePointsStr}, {
-                color: '${bgColor}',
+                color: '${WALK_BLUE}',
                 weight: 6,
                 dashArray: '1, 15',
                 lineCap: 'round',
@@ -503,34 +519,36 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
         }
       });
 
-      // B. Draw station nodes — one circle per physical point (see addNode).
+      // B. Draw nodes: start (green) and end (pink) are plain dots; every
+      // interchange is a white "change here" marker with the boarding mode's
+      // emoji, matching the live journey map.
       pointsList.forEach((p) => {
-        let fillColor = '#ffffff';
-        let radius = 6;
-        if (p.isStart) {
-          fillColor = '#83f582'; // Wero Green
-          radius = 9;
-        } else if (p.isEnd) {
-          fillColor = '#ff158a'; // Wero Pink
-          radius = 9;
-        } else if (p.isTransfer) {
-          fillColor = '#fdad70'; // Wero Orange
-          radius = 7;
+        if (p.isStart || p.isEnd) {
+          const fillColor = p.isStart ? '#83f582' : '#ff158a';
+          leafletJS += `
+            L.circleMarker([${p.lat}, ${p.lon}], {
+              radius: 9,
+              fillColor: '${fillColor}',
+              color: '#1d1c1c',
+              weight: 2.5,
+              opacity: 1,
+              fillOpacity: 1
+            }).addTo(map).bindPopup("<b>${cleanPlaceLabel(p.label, 'Stop').replace(/"/g, '\\"')}</b>");
+          `;
         } else {
-          fillColor = '#7af7f7'; // Wero Cyan
-          radius = 6;
+          const emoji = modeEmoji(p.boardMode);
+          const label = cleanPlaceLabel(p.label, 'Change here').replace(/"/g, '&quot;');
+          leafletJS += `
+            L.marker([${p.lat}, ${p.lon}], {
+              icon: L.divIcon({
+                html: '<div style="background:#ffffff;width:30px;height:30px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:15px;line-height:1;">${emoji}</span></div>',
+                className: 'change-marker-icon',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+              })
+            }).addTo(map).bindPopup("<b>${label}</b>");
+          `;
         }
-
-        leafletJS += `
-          L.circleMarker([${p.lat}, ${p.lon}], {
-            radius: ${radius},
-            fillColor: '${fillColor}',
-            color: '#1d1c1c',
-            weight: 2.5,
-            opacity: 1,
-            fillOpacity: 1
-          }).addTo(map).bindPopup("<b>${p.label.replace(/"/g, '\\"')}</b>");
-        `;
       });
     }
 
@@ -564,7 +582,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
           .leaflet-tile-container img {
             box-shadow: 0 0 1px rgba(0,0,0,0.05);
           }
-          .warning-marker-icon { background: none; border: none; }
+          .warning-marker-icon, .change-marker-icon { background: none; border: none; }
         </style>
       </head>
       <body>
@@ -712,7 +730,10 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                 accessibilityRole="button"
                 accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
               >
-                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={20} color={palette.textPrimary} />
+                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
+                <Text style={[styles.hideWarningsText, { color: palette.textPrimary }]}>
+                  {hideAll ? 'Show warnings' : 'Hide warnings'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -763,7 +784,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                   accessibilityLabel="Start journey mode"
                 >
                   <Ionicons name="play" size={18} color={palette.textPrimary} />
-                  <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Go</Text>
+                  <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Start journey</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -777,23 +798,6 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                 onScroll={(e) => {
                   scrollOffsetY.current = e.nativeEvent.contentOffset.y;
                 }}>
-                {/* Sensory meters dashboard */}
-                <View style={[styles.modalSensoryContainer, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                  <Text style={[styles.sensoryHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
-                  <View style={styles.sensoryDashboard}>
-                    <SensoryMeter level={route.noise} label="Sound" />
-                    <SensoryMeter level={route.crowds} label="Crowds" />
-                    <SensoryMeter level={route.heat} label="Heat" />
-                    <SensoryMeter level={route.light} label="Light" />
-                    <SensoryMeter level={route.smell} label="Smell" />
-                  </View>
-                  {route.sensory_description ? (
-                    <Text style={[styles.sensoryDescText, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
-                      {route.sensory_description}
-                    </Text>
-                  ) : null}
-                </View>
-
                 {/* Step timeline list */}
                 <View style={styles.timelineList}>
                   {route.legs && route.legs.map((leg, lIdx) => {
@@ -814,10 +818,10 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                         </View>
                         <View style={styles.stepContentCol}>
                           <Text style={[styles.stationText, { color: palette.textPrimary }]}>
-                            {leg.departure}
+                            {cleanPlaceLabel(leg.departure, lIdx === 0 ? originFallback : 'This stop')}
                           </Text>
                           <Text style={[styles.instructionText, { color: palette.textSecondary }]}>
-                            {leg.instruction} ({leg.duration_mins} mins)
+                            {cleanInstruction(leg.instruction)} ({leg.duration_mins} mins)
                           </Text>
 
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
@@ -832,7 +836,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                                 ? 'Walk to '
                                 : 'Get off at '}
                               <Text style={{ fontWeight: '800', color: palette.textPrimary }}>
-                                {leg.arrival}
+                                {cleanPlaceLabel(leg.arrival, lIdx === (route.legs?.length ?? 0) - 1 ? destinationFallback : 'the next stop')}
                               </Text>
                             </Text>
                           </View>
@@ -892,7 +896,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                       </View>
                       <View style={styles.stepContentCol}>
                         <Text style={[styles.stationText, { color: palette.textPrimary }]}>
-                          {route.legs[route.legs.length - 1].arrival}
+                          {cleanPlaceLabel(route.legs[route.legs.length - 1].arrival, destinationFallback)}
                         </Text>
                         <Text style={[styles.instructionText, { color: palette.textSecondary }]}>
                           Arrive at destination
@@ -1087,34 +1091,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  modalSensoryContainer: {
-    borderWidth: 2,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
-    ...hardShadow(4),
-  },
-  sensoryHeading: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    marginBottom: 10,
-  },
-  sensoryDashboard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  sensoryDescText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    lineHeight: 16,
-    marginTop: 6,
-    borderTopWidth: 1,
-    paddingTop: 8,
-  },
   timelineList: {
     gap: 12,
     marginTop: 4,
@@ -1212,14 +1188,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 2,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 19,
+    borderWidth: 2,
     justifyContent: 'center',
     zIndex: 10,
     ...hardShadow(3),
+  },
+  hideWarningsText: {
+    fontSize: 10.5,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   warningOverlayRoot: {
     ...StyleSheet.absoluteFillObject,
