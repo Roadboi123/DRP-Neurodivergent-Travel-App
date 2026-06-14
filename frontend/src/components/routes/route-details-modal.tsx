@@ -5,7 +5,6 @@ import { Animated, Dimensions, Modal, PanResponder, Platform, SafeAreaView, Scro
 import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
-import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { WarningConfidence } from '@/components/routes/warning-confidence';
 import { warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
 import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
@@ -14,6 +13,7 @@ import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
 import { analytics } from '@/services/analytics';
+import { cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 
 interface RouteDetailsModalProps {
   visible: boolean;
@@ -253,6 +253,9 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
       useNativeDriver: Platform.OS !== 'web',
       tension: 50,
       friction: 8,
+      // Clamp overshoot so collapsing doesn't dip past the resting position and
+      // bounce back — that bounce read as a downward "glitch" on swipe-down.
+      overshootClamping: true,
     }).start();
   };
 
@@ -529,7 +532,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
             weight: 2.5,
             opacity: 1,
             fillOpacity: 1
-          }).addTo(map).bindPopup("<b>${p.label.replace(/"/g, '\\"')}</b>");
+          }).addTo(map).bindPopup("<b>${cleanPlaceLabel(p.label, 'Stop').replace(/"/g, '\\"')}</b>");
         `;
       });
     }
@@ -712,7 +715,10 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                 accessibilityRole="button"
                 accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
               >
-                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={20} color={palette.textPrimary} />
+                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
+                <Text style={[styles.hideWarningsText, { color: palette.textPrimary }]}>
+                  {hideAll ? 'Show warnings' : 'Hide warnings'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -763,7 +769,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                   accessibilityLabel="Start journey mode"
                 >
                   <Ionicons name="play" size={18} color={palette.textPrimary} />
-                  <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Go</Text>
+                  <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Start journey</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -777,23 +783,6 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                 onScroll={(e) => {
                   scrollOffsetY.current = e.nativeEvent.contentOffset.y;
                 }}>
-                {/* Sensory meters dashboard */}
-                <View style={[styles.modalSensoryContainer, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                  <Text style={[styles.sensoryHeading, { color: palette.textPrimary }]}>Sensory alignment</Text>
-                  <View style={styles.sensoryDashboard}>
-                    <SensoryMeter level={route.noise} label="Sound" />
-                    <SensoryMeter level={route.crowds} label="Crowds" />
-                    <SensoryMeter level={route.heat} label="Heat" />
-                    <SensoryMeter level={route.light} label="Light" />
-                    <SensoryMeter level={route.smell} label="Smell" />
-                  </View>
-                  {route.sensory_description ? (
-                    <Text style={[styles.sensoryDescText, { color: palette.textSecondary, borderTopColor: palette.divider }]}>
-                      {route.sensory_description}
-                    </Text>
-                  ) : null}
-                </View>
-
                 {/* Step timeline list */}
                 <View style={styles.timelineList}>
                   {route.legs && route.legs.map((leg, lIdx) => {
@@ -814,10 +803,10 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                         </View>
                         <View style={styles.stepContentCol}>
                           <Text style={[styles.stationText, { color: palette.textPrimary }]}>
-                            {leg.departure}
+                            {cleanPlaceLabel(leg.departure, lIdx === 0 ? 'Your location' : 'This stop')}
                           </Text>
                           <Text style={[styles.instructionText, { color: palette.textSecondary }]}>
-                            {leg.instruction} ({leg.duration_mins} mins)
+                            {cleanInstruction(leg.instruction)} ({leg.duration_mins} mins)
                           </Text>
 
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
@@ -832,7 +821,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                                 ? 'Walk to '
                                 : 'Get off at '}
                               <Text style={{ fontWeight: '800', color: palette.textPrimary }}>
-                                {leg.arrival}
+                                {cleanPlaceLabel(leg.arrival, 'your destination')}
                               </Text>
                             </Text>
                           </View>
@@ -892,7 +881,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
                       </View>
                       <View style={styles.stepContentCol}>
                         <Text style={[styles.stationText, { color: palette.textPrimary }]}>
-                          {route.legs[route.legs.length - 1].arrival}
+                          {cleanPlaceLabel(route.legs[route.legs.length - 1].arrival, 'your destination')}
                         </Text>
                         <Text style={[styles.instructionText, { color: palette.textSecondary }]}>
                           Arrive at destination
@@ -1087,34 +1076,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  modalSensoryContainer: {
-    borderWidth: 2,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
-    ...hardShadow(4),
-  },
-  sensoryHeading: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    marginBottom: 10,
-  },
-  sensoryDashboard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  sensoryDescText: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    lineHeight: 16,
-    marginTop: 6,
-    borderTopWidth: 1,
-    paddingTop: 8,
-  },
   timelineList: {
     gap: 12,
     marginTop: 4,
@@ -1212,14 +1173,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 2,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 19,
+    borderWidth: 2,
     justifyContent: 'center',
     zIndex: 10,
     ...hardShadow(3),
+  },
+  hideWarningsText: {
+    fontSize: 10.5,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   warningOverlayRoot: {
     ...StyleSheet.absoluteFillObject,
