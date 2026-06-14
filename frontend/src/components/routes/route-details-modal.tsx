@@ -150,6 +150,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
   const [mapReadyTick, setMapReadyTick] = React.useState(0);
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
+  const [isExpanded, setIsExpanded] = React.useState(false);
 
   // Push the latest markers to the map, and listen for marker taps coming back.
   React.useEffect(() => {
@@ -209,6 +210,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
     if (visible) {
       panY.setValue(MAX_TRANSLATE_Y);
       lastTranslateY.current = MAX_TRANSLATE_Y;
+      setIsExpanded(false);
     }
   }, [visible, route, panY, MAX_TRANSLATE_Y]);
 
@@ -245,6 +247,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
       }
     }
     
+    setIsExpanded(targetY === 0);
     Animated.spring(panY, {
       toValue: targetY,
       useNativeDriver: Platform.OS !== 'web',
@@ -319,8 +322,13 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
     if (!route) return;
     analytics.startJourney(route.id);
     setActiveJourneyRoute(route);
-    onClose();
-    router.push('/journey');
+    
+    requestAnimationFrame(() => {
+      router.push('/journey');
+      setTimeout(() => {
+        onClose();
+      }, 150);
+    });
   };
 
   const toggleStops = (idx: number) => {
@@ -399,7 +407,19 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
     const latitudes = pointsList.map((p) => p.lat);
     const longitudes = pointsList.map((p) => p.lon);
 
-    const hasMapCoords = pointsList.length > 0;
+    const boundsPoints: [number, number][] = [];
+    pointsList.forEach((p) => boundsPoints.push([p.lat, p.lon]));
+    processedLegs.forEach((leg) => {
+      if (leg.path_coords) {
+        leg.path_coords.forEach((pt) => {
+          if (pt && pt.length === 2) {
+            boundsPoints.push([pt[0], pt[1]]);
+          }
+        });
+      }
+    });
+
+    const hasMapCoords = boundsPoints.length > 0;
     const centerLat = latitudes.length > 0 ? latitudes.reduce((a, b) => a + b, 0) / latitudes.length : 51.5074;
     const centerLon = longitudes.length > 0 ? longitudes.reduce((a, b) => a + b, 0) / longitudes.length : -0.1278;
 
@@ -561,12 +581,13 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
 
           ${leafletJS}
 
-          const bounds = [
-            ${pointsList.map(p => `[${p.lat}, ${p.lon}]`).join(',')}
-          ];
-          if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [35, 35] });
-          }
+          setTimeout(() => {
+            map.invalidateSize();
+            const bounds = ${JSON.stringify(boundsPoints)};
+            if (bounds.length > 0) {
+              map.fitBounds(bounds, { paddingTopLeft: [60, 60], paddingBottomRight: [60, 160], maxZoom: 13 });
+            }
+          }, 200);
 
           // Warning markers (Waze-style sensory icons) — shared with the journey map.
           ${warningMarkerScript()}
@@ -698,6 +719,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
 
           {/* Timeline sheet panel overlapping the bottom of the map */}
           <Animated.View
+            pointerEvents="box-none"
             style={[
             styles.sheetPanel,
             {
@@ -746,7 +768,7 @@ export function RouteDetailsModal({ visible, route: propRoute, onClose }: RouteD
               </View>
             </View>
 
-            <View style={{ flex: 1 }} {...sheetPanResponder.panHandlers}>
+            <View pointerEvents={isExpanded ? 'auto' : 'none'} style={{ flex: 1 }} {...sheetPanResponder.panHandlers}>
               <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.scrollContent}
@@ -964,9 +986,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   circleButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1190,9 +1212,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',

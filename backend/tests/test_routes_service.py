@@ -307,3 +307,89 @@ def test_gwml_path_override():
     assert parsed["arrival_lat"] == 51.516995
 
 
+def test_route_suggestions_with_active_warnings_escalates_metrics():
+    # 1. Mock reported warnings in supabase
+    from unittest.mock import MagicMock
+    from datetime import datetime, timezone
+    
+    mock_supabase = MagicMock()
+    # Mock reported warnings returning smell (flower-outline), noise (radio-outline), and crowds (people-outline)
+    # warnings close to Point A (51.5074, -0.1278)
+    fresh = datetime.now(timezone.utc).isoformat()
+    mock_supabase.table.return_value.select.return_value.execute.return_value.data = [
+        {
+            "id": "w_test_smell",
+            "warning_type": "flower-outline",
+            "title": "Smell reported",
+            "description": "Strong smell here",
+            "lat": 51.5075,
+            "lon": -0.1279,
+            "created_at": fresh,
+            "username": "alice",
+        },
+        {
+            "id": "w_test_noise",
+            "warning_type": "radio-outline",
+            "title": "Loud noise reported",
+            "description": "Deafening sound here",
+            "lat": 51.5073,
+            "lon": -0.1277,
+            "created_at": fresh,
+            "username": "bob",
+        },
+        {
+            "id": "w_test_crowd",
+            "warning_type": "people-outline",
+            "title": "Crowds reported",
+            "description": "Heavy crowding here",
+            "lat": 51.5074,
+            "lon": -0.1278,
+            "created_at": fresh,
+            "username": "charlie",
+        }
+    ]
+    
+    # Customize the mock journey to have coordinates close to the warnings
+    custom_journey = [
+        {
+            "source": "tfl",
+            "duration_mins": 30,
+            "legs": [
+                {
+                    "mode": "bus",
+                    "line": "345",
+                    "duration_mins": 30,
+                    "departure": "Point A",
+                    "arrival": "Point B",
+                    "departure_lat": 51.5074,
+                    "departure_lon": -0.1278,
+                    "arrival_lat": 51.5080,
+                    "arrival_lon": -0.1280,
+                    "path_coords": [[51.5074, -0.1278], [51.5080, -0.1280]],
+                    "departure_naptan": "",
+                    "arrival_naptan": "",
+                    "instruction": "Take Bus 345",
+                    "stops": [],
+                    "connection_waiting_mins": 0,
+                }
+            ]
+        }
+    ]
+    
+    with patch("app.services.routes.supabase", mock_supabase), \
+         patch("app.services.routes.tlf_client.get_routes", new_callable=AsyncMock) as mock_tfl, \
+         patch("app.services.routes.osm_client.get_walking_routes", new_callable=AsyncMock) as mock_osm:
+        
+        mock_tfl.return_value = custom_journey
+        mock_osm.return_value = []
+        
+        routes = asyncio.run(get_route_suggestions("Point A", "Point B"))
+        assert len(routes) > 0
+        route = routes[0]
+        # Noise, crowds, and smell should be escalated to at least 3
+        assert route["noise"] >= 3
+        assert route["crowds"] >= 3
+        assert route["smell"] >= 3
+
+
+

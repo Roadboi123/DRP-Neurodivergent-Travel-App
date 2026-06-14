@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -90,6 +91,24 @@ export default function RoutesScreen() {
 
   // Real-time coordinates state
   const [coords, setCoords] = useState<string | null>(null);
+
+  const params = useLocalSearchParams<{ start?: string; end?: string; reroute?: string }>();
+
+  useEffect(() => {
+    if (params.start && params.end) {
+      setStartLoc(params.start.includes(',') ? 'Current Location' : params.start);
+      setEndLoc(params.end);
+      setActiveStart(params.start.includes(',') ? 'Current Location' : params.start);
+      setActiveEnd(params.end);
+      if (params.start.includes(',')) {
+        setActiveStartCoords(params.start);
+      } else {
+        setActiveStartCoords(undefined);
+      }
+      setActiveEndCoords(undefined);
+      analytics.startSearch(params.start, params.end);
+    }
+  }, [params.start, params.end]);
 
   const fetchCurrentLocation = async () => {
     try {
