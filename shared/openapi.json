@@ -670,6 +670,17 @@
       "RouteOption": {
         "description": "A single route suggestion returned by ``GET /routes/``.\n\nField names mirror the contract the React Native client consumes exactly,\nincluding the camelCase ``subName`` alongside the snake_case sensory fields.\nThis model is the single source of truth for the route contract: the\nfrontend's TS types are generated from it (see ``shared/`` and\n``scripts/export_openapi.py``). Annotations are kept precise so the generated\ntypes are precise, but JSON serialization is unchanged (``SensoryLevel`` still\nserializes as the integers 1/2/3).",
         "properties": {
+          "arrives_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrives At"
+          },
           "crowds": {
             "enum": [
               1,
@@ -679,6 +690,17 @@
             ],
             "title": "Crowds",
             "type": "integer"
+          },
+          "departs_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Departs At"
           },
           "description": {
             "title": "Description",
@@ -1550,7 +1572,7 @@
     },
     "/routes/": {
       "get": {
-        "description": "Return route suggestions, optionally personalized to a user's sensitivities.",
+        "description": "Return route suggestions, optionally personalized to a user's sensitivities.\n\n``time`` is an optional ISO-8601 local timestamp and ``time_is`` is\n``\"departing\"`` or ``\"arriving\"``; together they plan the journey for a\nspecific leave/arrive time. Omitted, routes are planned for \"now\".",
         "operationId": "get_routes_routes__get",
         "parameters": [
           {
@@ -1602,6 +1624,38 @@
               ],
               "default": "slow",
               "title": "Walking Speed"
+            }
+          },
+          {
+            "in": "query",
+            "name": "time",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "time_is",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Time Is"
             }
           }
         ],

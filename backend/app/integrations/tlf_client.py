@@ -372,6 +372,8 @@ async def get_routes(
     time:         str | None = None,
     walking_only: bool = False,
     walking_speed: str | None = None,
+    date:         str | None = None,
+    time_is:      str | None = None,
 ) -> list[dict]:
     params: dict = {
         "alternativeWalking": "true",
@@ -380,15 +382,21 @@ async def get_routes(
     }
     if APP_KEY:
         params["app_key"] = APP_KEY
-        
+
     if walking_speed:
         params["walkingSpeed"] = walking_speed.capitalize()
-        
+
     if walking_only:
         params["mode"]               = "walking"
         params["walkingOptimization"] = "true"
+    # TfL plans for "now" unless given a date (yyyyMMdd) + time (HHmm); timeIs
+    # selects whether that instant is the departure or the arrival deadline.
     if time:
         params["time"] = time
+    if date:
+        params["date"] = date
+    if time_is:
+        params["timeIs"] = time_is
 
     async def fetch_preference(preference: str, extra_params: dict | None = None) -> list[dict]:
         local_params = params.copy()
