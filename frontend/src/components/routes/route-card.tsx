@@ -141,15 +141,6 @@ function RouteCardBase({
         </Text>
       )}
 
-      {leave && (
-        <View style={styles.leaveIndicator}>
-          <Ionicons name="walk-outline" size={11} color={palette.textMuted} />
-          <Text style={[styles.leaveIndicatorText, { color: palette.textMuted }]}>
-            {leave.label} {leave.time}
-          </Text>
-        </View>
-      )}
-
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={onPress}
@@ -157,9 +148,19 @@ function RouteCardBase({
           styles.routeCard,
           { backgroundColor: palette.surface, borderColor: palette.border },
         ]}>
-        
-        {/* Left column: journey timeline + sensory dashboard */}
+
+        {/* Left column: leave-time indicator + journey timeline + sensory dashboard */}
         <View style={styles.leftContent}>
+          {leave && (
+            <View style={styles.leaveIndicator}>
+              <Ionicons name="time-outline" size={11} color={palette.textMuted} />
+              <Text
+                style={[styles.leaveIndicatorText, { color: palette.textMuted }]}
+                numberOfLines={1}>
+                {leave.label} {leave.time}
+              </Text>
+            </View>
+          )}
           <View style={styles.timelineWrapper}>
             {route.legs && route.legs.length > 0 && (
               <View style={styles.timelineRow}>
@@ -256,8 +257,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 5,
-    marginLeft: 4,
+    // Sits inside the card, top-right of the left column — i.e. next to the
+    // green stats box. leftContent's marginRight is the trailing gap that keeps
+    // the text clear of the box while staying within the card.
+    alignSelf: 'flex-end',
   },
   leaveIndicatorText: {
     fontSize: 11,

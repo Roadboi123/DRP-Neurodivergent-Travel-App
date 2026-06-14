@@ -1,6 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { formatClock, type JourneyTime, type JourneyTimeMode } from '@/components/routes/journey-time';
@@ -13,8 +23,12 @@ const MODE_OPTIONS: SegmentOption<JourneyTimeMode>[] = [
   { value: 'arrive', label: 'Arrive by', icon: 'flag-outline' },
 ];
 
-const MINUTE_STEP = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Wheel geometry: an odd number of visible rows centres the selected value.
+const ITEM_H = 44;
+const VISIBLE = 5;
+const PAD = ITEM_H * Math.floor(VISIBLE / 2);
 
 /** Day suffix relative to now: "Today", "Tomorrow", else a short date. */
 function dayLabel(at: number): string {
@@ -50,44 +64,79 @@ function instantFor(hours: number, minutes: number): number {
   return candidate.getTime();
 }
 
-function Stepper({
-  label,
-  value,
-  onDec,
-  onInc,
-  palette,
+/**
+ * A single scrollable number column (Google-Maps-style). Snaps each value to
+ * the centre row; reports the settled value via `onSettle`. Uncontrolled after
+ * mount — the parent remounts it (via `key`) to seed a new starting value.
+ */
+function WheelColumn({
+  values,
+  initialIndex,
+  onSettle,
   accent,
+  palette,
 }: {
-  label: string;
-  value: string;
-  onDec: () => void;
-  onInc: () => void;
-  palette: ReturnType<typeof getPalette>;
+  values: string[];
+  initialIndex: number;
+  onSettle: (index: number) => void;
   accent: string;
+  palette: ReturnType<typeof getPalette>;
 }) {
+  const ref = useRef<ScrollView>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [active, setActive] = useState(initialIndex);
+
+  // Seed the starting scroll position once the list has laid out.
+  const onContentReady = () => {
+    ref.current?.scrollTo({ y: initialIndex * ITEM_H, animated: false });
+  };
+
+  const clampIndex = (y: number) =>
+    Math.max(0, Math.min(values.length - 1, Math.round(y / ITEM_H)));
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const i = clampIndex(e.nativeEvent.contentOffset.y);
+    if (i !== active) setActive(i);
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    settleTimer.current = setTimeout(() => onSettle(i), 90);
+  };
+
   return (
-    <View style={styles.stepperCol}>
-      <Text style={[styles.stepperLabel, { color: palette.textSecondary }]}>{label}</Text>
-      <View style={styles.stepperRow}>
-        <TouchableOpacity
-          onPress={onDec}
-          activeOpacity={0.8}
-          accessibilityLabel={`Decrease ${label}`}
-          style={[styles.stepBtn, { backgroundColor: accent, borderColor: palette.border }]}>
-          <Ionicons name="remove" size={20} color={BRAND.ink} />
-        </TouchableOpacity>
-        <Text style={[styles.stepperValue, { color: palette.textPrimary }]}>{value}</Text>
-        <TouchableOpacity
-          onPress={onInc}
-          activeOpacity={0.8}
-          accessibilityLabel={`Increase ${label}`}
-          style={[styles.stepBtn, { backgroundColor: accent, borderColor: palette.border }]}>
-          <Ionicons name="add" size={20} color={BRAND.ink} />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.wheelColumn}>
+      <ScrollView
+        ref={ref}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={ITEM_H}
+        decelerationRate="fast"
+        scrollEventThrottle={16}
+        onScroll={onScroll}
+        onContentSizeChange={onContentReady}
+        contentContainerStyle={{ paddingVertical: PAD }}>
+        {values.map((v, i) => {
+          const isActive = i === active;
+          return (
+            <View key={v} style={styles.wheelItem}>
+              <Text
+                style={[
+                  styles.wheelText,
+                  {
+                    color: isActive ? accent : palette.textSecondary,
+                    opacity: isActive ? 1 : 0.4,
+                    fontSize: isActive ? 30 : 22,
+                  },
+                ]}>
+                {v}
+              </Text>
+            </View>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
 export function RouteTimeSheet({
   visible,
@@ -106,8 +155,14 @@ export function RouteTimeSheet({
 
   // Working copy so edits only commit on "Done".
   const [draft, setDraft] = useState<JourneyTime>(value);
+  // Bumped whenever the sheet (re-)opens or the mode flips, to remount the
+  // wheels at a fresh starting position.
+  const [seed, setSeed] = useState(0);
   useEffect(() => {
-    if (visible) setDraft(value);
+    if (visible) {
+      setDraft(value);
+      setSeed((s) => s + 1);
+    }
   }, [visible, value]);
 
   const picked = new Date(draft.at);
@@ -119,21 +174,13 @@ export function RouteTimeSheet({
       setDraft({ mode, at: Date.now() });
       return;
     }
-    // Seed a sensible default time the first time a specific mode is chosen:
-    // 30 minutes from now, rounded to the minute step.
+    // Seed a sensible default the first time a specific mode is chosen: 30
+    // minutes from now, rounded to the minute.
     const base = draft.mode === 'now' ? Date.now() + 30 * 60_000 : draft.at;
     const d = new Date(base);
-    d.setMinutes(Math.round(d.getMinutes() / MINUTE_STEP) * MINUTE_STEP, 0, 0);
+    d.setSeconds(0, 0);
     setDraft({ mode, at: d.getTime() });
-  };
-
-  const bumpHour = (delta: number) => {
-    setDraft((d) => ({ ...d, at: instantFor((hours + delta + 24) % 24, minutes) }));
-  };
-  const bumpMinute = (delta: number) => {
-    const total = hours * 60 + minutes + delta * MINUTE_STEP;
-    const wrapped = (total + 24 * 60) % (24 * 60);
-    setDraft((d) => ({ ...d, at: instantFor(Math.floor(wrapped / 60), wrapped % 60) }));
+    setSeed((s) => s + 1);
   };
 
   return (
@@ -156,23 +203,28 @@ export function RouteTimeSheet({
 
           {draft.mode !== 'now' && (
             <>
-              <View style={styles.steppers}>
-                <Stepper
-                  label="Hour"
-                  value={String(hours).padStart(2, '0')}
-                  onDec={() => bumpHour(-1)}
-                  onInc={() => bumpHour(1)}
+              <View style={styles.wheels}>
+                {/* Centre selection band */}
+                <View
+                  pointerEvents="none"
+                  style={[styles.selectionBand, { borderColor: palette.border, top: PAD }]}
+                />
+                <WheelColumn
+                  key={`h-${seed}`}
+                  values={HOURS}
+                  initialIndex={hours}
+                  onSettle={(i) => setDraft((d) => ({ ...d, at: instantFor(i, minutes) }))}
+                  accent={palette.textPrimary}
                   palette={palette}
-                  accent={accents.cyan}
                 />
                 <Text style={[styles.colon, { color: palette.textPrimary }]}>:</Text>
-                <Stepper
-                  label="Min"
-                  value={String(minutes).padStart(2, '0')}
-                  onDec={() => bumpMinute(-1)}
-                  onInc={() => bumpMinute(1)}
+                <WheelColumn
+                  key={`m-${seed}`}
+                  values={MINUTES}
+                  initialIndex={minutes}
+                  onSettle={(i) => setDraft((d) => ({ ...d, at: instantFor(hours, i) }))}
+                  accent={palette.textPrimary}
                   palette={palette}
-                  accent={accents.cyan}
                 />
               </View>
               <Text style={[styles.dayNote, { color: palette.textSecondary }]}>
@@ -231,51 +283,44 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: -0.3,
   },
-  steppers: {
+  wheels: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
-    marginTop: 24,
+    gap: 8,
+    marginTop: 18,
+    height: ITEM_H * VISIBLE,
+  },
+  selectionBand: {
+    position: 'absolute',
+    left: 40,
+    right: 40,
+    height: ITEM_H,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderRadius: 2,
+    opacity: 0.5,
+  },
+  wheelColumn: {
+    width: 78,
+    height: ITEM_H * VISIBLE,
+    overflow: 'hidden',
+  },
+  wheelItem: {
+    height: ITEM_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wheelText: {
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   colon: {
-    fontSize: 34,
+    fontSize: 30,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    marginBottom: 10,
-  },
-  stepperCol: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepperLabel: {
-    fontSize: 11,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...hardShadow(3),
-  },
-  stepperValue: {
-    fontSize: 40,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    minWidth: 62,
-    textAlign: 'center',
-    letterSpacing: -1,
+    marginBottom: 2,
   },
   dayNote: {
     fontSize: 13,
@@ -284,7 +329,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   doneButton: {
-    marginTop: 28,
+    marginTop: 24,
     paddingVertical: 15,
     borderRadius: 30,
     alignItems: 'center',
