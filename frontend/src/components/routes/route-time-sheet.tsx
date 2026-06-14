@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
+  Animated,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
+  PanResponder,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -28,7 +28,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Wheel geometry: an odd number of visible rows centres the selected value.
 const ITEM_H = 44;
 const VISIBLE = 5;
-const PAD = ITEM_H * Math.floor(VISIBLE / 2);
+const CENTER = (VISIBLE - 1) / 2;
+const BAND_TOP = CENTER * ITEM_H;
+// react-native-web has no native animation driver — JS-drive transforms there.
+const USE_NATIVE = Platform.OS !== 'web';
+
+/** translateY that centres item `index` in the viewport. */
+const baseTranslate = (index: number) => ITEM_H * (CENTER - index);
 
 /** Day suffix relative to now: "Today", "Tomorrow", else a short date. */
 function dayLabel(at: number): string {
@@ -65,9 +71,11 @@ function instantFor(hours: number, minutes: number): number {
 }
 
 /**
- * A single scrollable number column (Google-Maps-style). Snaps each value to
- * the centre row; reports the settled value via `onSettle`. Uncontrolled after
- * mount — the parent remounts it (via `key`) to seed a new starting value.
+ * A single draggable number column (Google-Maps-style). Drag (mouse or touch)
+ * or tap a value to select; the column snaps the choice to the centre row and
+ * reports it via `onSettle`. Built on PanResponder + Animated (transform only)
+ * so it responds to drag on web too, where a ScrollView only takes wheel/touch.
+ * Uncontrolled after mount — the parent remounts it (via `key`) to re-seed.
  */
 function WheelColumn({
   values,
@@ -82,55 +90,83 @@ function WheelColumn({
   accent: string;
   palette: ReturnType<typeof getPalette>;
 }) {
-  const ref = useRef<ScrollView>(null);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const translate = useRef(new Animated.Value(baseTranslate(initialIndex))).current;
+  // Resting translate at drag start (set from the live value so mid-fling grabs work).
+  const startValue = useRef(baseTranslate(initialIndex));
+  const activeRef = useRef(initialIndex);
   const [active, setActive] = useState(initialIndex);
+  // Keep the latest onSettle so the once-created PanResponder never calls a stale one.
+  const onSettleRef = useRef(onSettle);
+  onSettleRef.current = onSettle;
 
-  // Seed the starting scroll position once the list has laid out.
-  const onContentReady = () => {
-    ref.current?.scrollTo({ y: initialIndex * ITEM_H, animated: false });
+  const clamp = (i: number) => Math.max(0, Math.min(values.length - 1, i));
+  const indexFor = (t: number) => clamp(Math.round(CENTER - t / ITEM_H));
+
+  const setActiveIndex = (i: number) => {
+    if (i !== activeRef.current) {
+      activeRef.current = i;
+      setActive(i);
+    }
   };
 
-  const clampIndex = (y: number) =>
-    Math.max(0, Math.min(values.length - 1, Math.round(y / ITEM_H)));
-
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const i = clampIndex(e.nativeEvent.contentOffset.y);
-    if (i !== active) setActive(i);
-    if (settleTimer.current) clearTimeout(settleTimer.current);
-    settleTimer.current = setTimeout(() => onSettle(i), 90);
+  const snapTo = (rawIndex: number, notify = true) => {
+    const i = clamp(rawIndex);
+    startValue.current = baseTranslate(i);
+    setActiveIndex(i);
+    Animated.spring(translate, {
+      toValue: baseTranslate(i),
+      useNativeDriver: USE_NATIVE,
+      bounciness: 3,
+      speed: 18,
+    }).start();
+    if (notify) onSettleRef.current(i);
   };
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        translate.stopAnimation((v: number) => {
+          startValue.current = v;
+        });
+      },
+      onPanResponderMove: (_e, g) => {
+        const t = startValue.current + g.dy;
+        translate.setValue(t);
+        setActiveIndex(indexFor(t));
+      },
+      onPanResponderRelease: (_e, g) => snapTo(indexFor(startValue.current + g.dy)),
+      onPanResponderTerminate: (_e, g) => snapTo(indexFor(startValue.current + g.dy)),
+    }),
+  ).current;
 
   return (
-    <View style={styles.wheelColumn}>
-      <ScrollView
-        ref={ref}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM_H}
-        decelerationRate="fast"
-        scrollEventThrottle={16}
-        onScroll={onScroll}
-        onContentSizeChange={onContentReady}
-        contentContainerStyle={{ paddingVertical: PAD }}>
+    <View style={styles.wheelColumn} {...pan.panHandlers}>
+      <Animated.View style={{ transform: [{ translateY: translate }] }}>
         {values.map((v, i) => {
           const isActive = i === active;
           return (
-            <View key={v} style={styles.wheelItem}>
+            <TouchableOpacity
+              key={v}
+              activeOpacity={0.7}
+              style={styles.wheelItem}
+              onPress={() => snapTo(i)}>
               <Text
                 style={[
                   styles.wheelText,
                   {
                     color: isActive ? accent : palette.textSecondary,
-                    opacity: isActive ? 1 : 0.4,
+                    opacity: isActive ? 1 : 0.35,
                     fontSize: isActive ? 30 : 22,
                   },
                 ]}>
                 {v}
               </Text>
-            </View>
+            </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -207,7 +243,7 @@ export function RouteTimeSheet({
                 {/* Centre selection band */}
                 <View
                   pointerEvents="none"
-                  style={[styles.selectionBand, { borderColor: palette.border, top: PAD }]}
+                  style={[styles.selectionBand, { borderColor: palette.border, top: BAND_TOP }]}
                 />
                 <WheelColumn
                   key={`h-${seed}`}
