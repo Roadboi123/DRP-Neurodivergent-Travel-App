@@ -28,6 +28,8 @@ import {
 } from '@/components/routes/route-filtering';
 import { PresetIndicator } from '@/components/routes/preset-indicator';
 import { RouteSearchInputs } from '@/components/routes/route-search-inputs';
+import { RouteTimeSheet, journeyTimeLabel } from '@/components/routes/route-time-sheet';
+import { toRouteTimeQuery, type JourneyTime } from '@/components/routes/journey-time';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
 import { Fonts, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
@@ -81,6 +83,10 @@ export default function RoutesScreen() {
   const [startLoc, setStartLoc] = useState('Current Location');
   const [endLoc, setEndLoc] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // When to travel: leave now (default), leave at, or arrive by a chosen time.
+  const [journeyTime, setJourneyTime] = useState<JourneyTime>({ mode: 'now', at: Date.now() });
+  const [timeSheetVisible, setTimeSheetVisible] = useState(false);
 
   // Active search query states (used for fetching routes only after user commits search)
   const [activeStart, setActiveStart] = useState('Current Location');
@@ -220,7 +226,12 @@ export default function RoutesScreen() {
         }
         // Use pinned end coords if available, otherwise let the backend geocode the name.
         const endQuery = activeEndCoords ?? activeEnd;
-        const routeData = await routesService.getRoutes(originQuery, endQuery, username);
+        const routeData = await routesService.getRoutes(
+          originQuery,
+          endQuery,
+          username,
+          toRouteTimeQuery(journeyTime),
+        );
 
         // Extract every line name and station name from all legs of all routes
         // so the warnings endpoint can filter to only journey-relevant disruptions.
@@ -266,7 +277,7 @@ export default function RoutesScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [activeStart, activeEnd, activeStartCoords, activeEndCoords, username, routesService, prefKey, isFocused, coords]);
+  }, [activeStart, activeEnd, activeStartCoords, activeEndCoords, username, routesService, prefKey, isFocused, coords, journeyTime]);
 
   // A/C filter applies to the whole pool before ranking or grouping.
   const pool = useMemo(() => applyAcFilter(routes, filters.ac), [routes, filters.ac]);
@@ -313,6 +324,24 @@ export default function RoutesScreen() {
         }}
         userCoords={coords}
       />
+
+      {/* Departure / arrival time picker trigger */}
+      <View style={styles.timeRow}>
+        <TouchableOpacity
+          onPress={() => {
+            analytics.trackClick();
+            setTimeSheetVisible(true);
+          }}
+          activeOpacity={0.85}
+          accessibilityLabel="Set leave or arrival time"
+          style={[styles.timeButton, { borderColor: palette.borderStrong, backgroundColor: palette.surface }]}>
+          <Ionicons name="time-outline" size={16} color={palette.textPrimary} />
+          <Text style={[styles.timeButtonText, { color: palette.textPrimary }]} numberOfLines={1}>
+            {journeyTimeLabel(journeyTime)}
+          </Text>
+          <Ionicons name="chevron-down" size={15} color={palette.textMuted} />
+        </TouchableOpacity>
+      </View>
 
       {/* Personalization warning bar */}
       {!isLoggedIn && (
@@ -423,6 +452,7 @@ export default function RoutesScreen() {
                     key={`g${group.changes}-${route.id}`}
                     route={route}
                     hideTitle
+                    journeyTime={journeyTime}
                     onPress={() => {
                       analytics.trackClick();
                       analytics.trackRouteView(route.id, warnings.length > 0);
@@ -440,6 +470,7 @@ export default function RoutesScreen() {
                 key={route.id}
                 route={route}
                 hideTitle
+                journeyTime={journeyTime}
                 onPress={() => {
                   analytics.trackClick();
                   analytics.trackRouteView(route.id, warnings.length > 0);
@@ -456,6 +487,13 @@ export default function RoutesScreen() {
         filters={filters}
         onChange={setFilters}
         onClose={() => setFiltersVisible(false)}
+      />
+
+      <RouteTimeSheet
+        visible={timeSheetVisible}
+        value={journeyTime}
+        onChange={setJourneyTime}
+        onClose={() => setTimeSheetVisible(false)}
       />
 
 
@@ -494,6 +532,28 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 100,
+  },
+  timeRow: {
+    paddingHorizontal: 16,
+    marginBottom: 6,
+  },
+  timeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 30,
+    borderWidth: 2,
+    ...hardShadow(3),
+  },
+  timeButtonText: {
+    fontSize: 13,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   controlsRow: {
     flexDirection: 'row',

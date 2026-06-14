@@ -3,6 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { SensoryMeter } from '@/components/routes/sensory-meter';
+import { leaveIndicator, type JourneyTime } from '@/components/routes/journey-time';
 import {
   BRAND,
   Fonts,
@@ -111,17 +112,20 @@ function RouteCardBase({
   route,
   customTitle,
   hideTitle,
+  journeyTime,
   onPress,
 }: {
   route: RouteOption;
   customTitle?: string;
   hideTitle?: boolean;
+  journeyTime?: JourneyTime;
   onPress?: () => void;
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
   const groupTitle = getGroupTitle(route.type);
+  const leave = journeyTime ? leaveIndicator(route, journeyTime) : null;
 
   return (
     <View style={styles.routeGroupWrapper}>
@@ -135,6 +139,15 @@ function RouteCardBase({
             </Text>
           )}
         </Text>
+      )}
+
+      {leave && (
+        <View style={styles.leaveIndicator}>
+          <Ionicons name="walk-outline" size={11} color={palette.textMuted} />
+          <Text style={[styles.leaveIndicatorText, { color: palette.textMuted }]}>
+            {leave.label} {leave.time}
+          </Text>
+        </View>
       )}
 
       <TouchableOpacity
@@ -238,6 +251,20 @@ const styles = StyleSheet.create({
     marginLeft: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  leaveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 5,
+    marginLeft: 4,
+  },
+  leaveIndicatorText: {
+    fontSize: 11,
+    fontFamily: Fonts?.display,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   routeCard: {
     flexDirection: 'row',
