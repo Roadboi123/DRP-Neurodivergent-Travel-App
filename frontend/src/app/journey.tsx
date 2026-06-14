@@ -1175,7 +1175,7 @@ export default function JourneyScreen() {
               setFollowUser(true);
             }}
             style={[
-              styles.circleButton,
+              styles.simStartBtn,
               {
                 backgroundColor: palette.surface,
                 borderColor: palette.border,
@@ -1184,7 +1184,8 @@ export default function JourneyScreen() {
             accessibilityRole="button"
             accessibilityLabel="Start demo journey simulation"
           >
-            <Ionicons name="play" size={20} color={accents.green} />
+            <Ionicons name="play" size={16} color={accents.green} style={{ marginRight: 6 }} />
+            <Text style={[styles.simStartText, { color: palette.textPrimary }]}>Simulate</Text>
           </TouchableOpacity>
         ) : (
           <View
@@ -1942,5 +1943,21 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: Fonts?.display,
     fontWeight: '900',
+  },
+  simStartBtn: {
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    ...hardShadow(3),
+  },
+  simStartText: {
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
 });
