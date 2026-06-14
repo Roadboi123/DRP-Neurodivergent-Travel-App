@@ -226,6 +226,17 @@ export function RouteSearchInputs({
     return () => clearTimeout(delayDebounce);
   }, [startLoc, endLoc, focusedInput, routesService, userCoords, userLat, userLon, recents]);
 
+  // Swap the pinned coordinates alongside the labels. The parent swaps its own
+  // active coords, but these child refs are the source of truth on the next blur
+  // — if they aren't swapped too, a later blur pushes stale coords up and e.g.
+  // pins "Current Location" to the other place's coordinates.
+  const handleSwap = () => {
+    const tmp = startCoordsRef.current;
+    startCoordsRef.current = endCoordsRef.current;
+    endCoordsRef.current = tmp;
+    onSwap();
+  };
+
   const handleBlur = () => {
     // Delay closing suggestions dropdown so taps can register.
     // Skip the submit if a suggestion tap already called onSubmit with the correct values.
@@ -351,7 +362,7 @@ export function RouteSearchInputs({
 
         {/* Swap start/end (Google-Maps style), vertically centred over the divider */}
         <TouchableOpacity
-          onPress={onSwap}
+          onPress={handleSwap}
           accessibilityRole="button"
           accessibilityLabel="Swap start and destination"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
