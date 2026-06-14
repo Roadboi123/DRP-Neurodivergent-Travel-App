@@ -1657,6 +1657,23 @@
               ],
               "title": "Time Is"
             }
+          },
+          {
+            "in": "query",
+            "name": "reroute",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": false,
+              "title": "Reroute"
+            }
           }
         ],
         "responses": {

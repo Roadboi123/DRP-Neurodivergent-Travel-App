@@ -152,6 +152,11 @@ export function useRouteWarnings(
       analytics.trackWarningInteraction();
       setSelectedWarning(null);
       removeReportedWarning(warning.id);
+      setDismissedIds((prev) => {
+        const next = new Set(prev);
+        next.add(warning.id);
+        return next;
+      });
       try {
         await routesService.deleteWarning(warning.id, username || 'anonymous');
       } catch (err) {
@@ -176,7 +181,7 @@ export function useRouteWarnings(
     addReportedWarning(warning);
   }, []);
 
-  const selectedIsOwn = !!selectedWarning && !!username && selectedWarning.username === username;
+  const selectedIsOwn = !!selectedWarning && selectedWarning.username === (username || 'anonymous');
 
   return {
     warnings,

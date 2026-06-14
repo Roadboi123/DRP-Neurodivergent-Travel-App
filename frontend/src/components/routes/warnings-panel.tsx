@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { confidenceColor, WarningConfidence } from '@/components/routes/warning-confidence';
+import { confidenceColor, isAggregatedReport, WarningConfidence } from '@/components/routes/warning-confidence';
 import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
@@ -17,7 +17,14 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
   // Expanded by default; the header chevron lets the user minimise the list.
   const [expanded, setExpanded] = useState(true);
 
-  if (!warnings || warnings.length === 0) {
+  const filteredWarnings = warnings.filter((w) => {
+    if (isAggregatedReport(w)) {
+      return w.severity === 'high';
+    }
+    return true;
+  });
+
+  if (!filteredWarnings || filteredWarnings.length === 0) {
     return null;
   }
 
@@ -38,7 +45,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
       >
         <Ionicons name="warning" size={22} color={palette.textPrimary} />
         <Text style={[styles.headerText, { color: palette.textPrimary }]}>
-          Sensory Warnings [{warnings.length}]
+          Sensory Warnings [{filteredWarnings.length}]
         </Text>
         <Ionicons
           name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -55,7 +62,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
 
       {/* Warning items */}
       <View style={[styles.itemsBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        {warnings.map((w, index) => (
+        {filteredWarnings.map((w, index) => (
           <View key={w.id}>
             <View style={styles.itemRow}>
               <View
@@ -76,7 +83,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
                 <WarningConfidence warning={w} compact />
               </View>
             </View>
-            {index < warnings.length - 1 && (
+            {index < filteredWarnings.length - 1 && (
               <View style={[styles.separator, { backgroundColor: palette.divider }]} />
             )}
           </View>

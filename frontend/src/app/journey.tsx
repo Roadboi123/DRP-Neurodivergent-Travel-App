@@ -24,6 +24,7 @@ import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
 import { haversineMeters } from '@/utils/geo';
+import { sendLocalNotification } from '@/services/notifications';
 
 // How close (metres) the traveller must get to a warning before we ask them to
 // confirm it's still there.
@@ -469,6 +470,27 @@ export default function JourneyScreen() {
     return coords;
   }, [route]);
 
+  // Estimate cumulative elapsed time (in minutes) for each coordinate point
+  const pathTimes = useMemo(() => {
+    if (!route || !route.legs) return [];
+    const times: number[] = [];
+    let cumulativeTime = 0;
+    route.legs.forEach((leg) => {
+      const legDuration = leg.duration_mins + (leg.connection_waiting_mins ?? 0);
+      const pointsCount = leg.path_coords?.length || 2;
+      const timePerPoint = legDuration / pointsCount;
+      const points = leg.path_coords && leg.path_coords.length > 0
+        ? leg.path_coords
+        : [[leg.departure_lat, leg.departure_lon], [leg.arrival_lat, leg.arrival_lon]];
+      
+      points.forEach(() => {
+        times.push(cumulativeTime);
+        cumulativeTime += timePerPoint;
+      });
+    });
+    return times;
+  }, [route]);
+
   // Live device GPS drives the "you are here" marker and the report location.
   // Until there's a fix (or if permission is denied) we fall back to the journey
   // origin so the screen still works.
@@ -521,6 +543,73 @@ export default function JourneyScreen() {
     }
   }, [simulating, liveCoords, userCoords, warnings, proximityWarning]);
 
+  // Set to track warning IDs that we have already sent an "upcoming" notification for
+  const notifiedUpcomingWarningIds = useRef<Set<string>>(new Set());
+  const prevRouteIdForUpcomingRef = useRef<string | null>(null);
+
+  // Reset notified list if the route changes
+  useEffect(() => {
+    const currentRouteId = route?.id || null;
+    if (currentRouteId !== prevRouteIdForUpcomingRef.current) {
+      notifiedUpcomingWarningIds.current = new Set();
+      prevRouteIdForUpcomingRef.current = currentRouteId;
+    }
+  }, [route]);
+
+  useEffect(() => {
+    const activeLocationSource = simulating ? userCoords : liveCoords;
+    if (!activeLocationSource || !route || allPathCoords.length === 0 || pathTimes.length === 0) return;
+
+    // Find the traveler's current index in allPathCoords
+    let userIdx = 0;
+    let minUserDist = Infinity;
+    for (let i = 0; i < allPathCoords.length; i++) {
+      const dist = haversineMeters(activeLocationSource, allPathCoords[i]);
+      if (dist < minUserDist) {
+        minUserDist = dist;
+        userIdx = i;
+      }
+    }
+
+    const userTime = pathTimes[userIdx] ?? 0;
+
+    // Check all warnings
+    warnings.forEach((w) => {
+      if (w.lat == null || w.lon == null) return;
+      
+      // Check if it is a medium or higher confidence warning
+      if (w.severity !== 'medium' && w.severity !== 'high') return;
+
+      // Find the warning's index in allPathCoords
+      let wIdx = 0;
+      let minWDist = Infinity;
+      for (let i = 0; i < allPathCoords.length; i++) {
+        const dist = haversineMeters([w.lat as number, w.lon as number], allPathCoords[i]);
+        if (dist < minWDist) {
+          minWDist = dist;
+          wIdx = i;
+        }
+      }
+
+      // If the warning is ahead of the traveler
+      if (wIdx > userIdx) {
+        const warningTime = pathTimes[wIdx] ?? 0;
+        const timeToReach = warningTime - userTime;
+
+        // If traveler is within 10 minutes of the warning
+        if (timeToReach <= 10.0 && timeToReach > 0 && !notifiedUpcomingWarningIds.current.has(w.id)) {
+          notifiedUpcomingWarningIds.current.add(w.id);
+          
+          // Send push notification
+          sendLocalNotification(
+            'Upcoming Warning on Journey!',
+            `${w.title} is coming up ahead in about ${Math.round(timeToReach)} minutes.`
+          ).catch((err) => console.warn('Failed to send upcoming warning notification:', err));
+        }
+      }
+    });
+  }, [simulating, liveCoords, userCoords, route, allPathCoords, pathTimes, warnings]);
+
   // Auto-play journey simulation
   useEffect(() => {
     if (!simulating || !isPlaying) return;
@@ -557,7 +646,7 @@ export default function JourneyScreen() {
       if (action === 'no') {
         // No longer there: delete it for everyone if it's the user's own report,
         // otherwise just hide it locally (same rules as the action card).
-        const isOwn = !!username && w.username === username;
+        const isOwn = w.username === (username || 'anonymous');
         if (isOwn) {
           removeOwnWarning(w);
         } else {
@@ -656,7 +745,7 @@ export default function JourneyScreen() {
         ? `${lastLeg.arrival_lat},${lastLeg.arrival_lon}`
         : lastLeg.arrival;
         
-      const results = await routesService.getRoutes(start, end, username || '');
+      const results = await routesService.getRoutes(start, end, username || '', undefined, true);
       setAlternativeRoutes(results);
       if (results && results.length > 0) {
         // Pre-select the best alternative route
@@ -701,6 +790,7 @@ export default function JourneyScreen() {
       if (result.duplicate) {
         setReportNotice('Already reported nearby');
       } else {
+        respondedWarningIds.current.add(result.warning.id);
         addWarning(result.warning);
       }
     } catch (err) {
