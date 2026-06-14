@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import {
   ActivityIndicator,
@@ -38,7 +38,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNavBar } from '@/contexts/navbar-context';
 import { useRoutesService } from '@/services/services-context';
 import { consumeReopenJourneyDetails, getActiveJourneyRoute } from '@/services/active-journey';
-import { loadWarningStore } from '@/services/warning-store';
+import { getWarningsSnapshot, loadWarningStore, subscribeWarnings } from '@/services/warning-store';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { useAuth } from '@/context/auth-context';
 import { usePresets } from '@/context/presets-context';
@@ -171,6 +171,22 @@ export default function RoutesScreen() {
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
+
+  const allWarnings = useSyncExternalStore(
+    subscribeWarnings,
+    getWarningsSnapshot,
+    getWarningsSnapshot,
+  );
+
+  const visibleWarnings = useMemo(() => {
+    return warnings.filter((w) => {
+      const isUserReported = w.username != null && w.report_count != null;
+      if (isUserReported) {
+        return allWarnings.some((aw) => aw.id === w.id);
+      }
+      return true;
+    });
+  }, [warnings, allWarnings]);
 
   // The route-details modal is full-screen; hide the floating tab bar while it's
   // open so the pill doesn't bleed over it (and restore it on close/unmount).
@@ -370,7 +386,7 @@ export default function RoutesScreen() {
         {isLoggedIn && pool.length > 0 && <PresetIndicator />}
 
         {/* Warnings Banner — only shown once routes are loaded for a specific journey */}
-        {pool.length > 0 && <WarningsPanel warnings={warnings} />}
+        {pool.length > 0 && <WarningsPanel warnings={visibleWarnings} />}
 
         {/* Sort tab (Preference | Speed) + Filters button */}
         <View style={styles.controlsRow}>
@@ -455,7 +471,7 @@ export default function RoutesScreen() {
                     journeyTime={journeyTime}
                     onPress={() => {
                       analytics.trackClick();
-                      analytics.trackRouteView(route.id, warnings.length > 0);
+                      analytics.trackRouteView(route.id, visibleWarnings.length > 0);
                       setSelectedRoute(route);
                     }}
                   />
@@ -473,7 +489,7 @@ export default function RoutesScreen() {
                 journeyTime={journeyTime}
                 onPress={() => {
                   analytics.trackClick();
-                  analytics.trackRouteView(route.id, warnings.length > 0);
+                  analytics.trackRouteView(route.id, visibleWarnings.length > 0);
                   setSelectedRoute(route);
                 }}
               />

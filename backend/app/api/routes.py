@@ -18,6 +18,7 @@ async def get_routes(
     walking_speed: Optional[str] = "slow",
     time: Optional[str] = None,
     time_is: Optional[str] = None,
+    reroute: Optional[bool] = False,
     token: Optional[str] = Depends(oauth2_scheme),
 ):
     """Return route suggestions, optionally personalized to a user's sensitivities.
@@ -37,7 +38,7 @@ async def get_routes(
             pass
 
     return await get_route_suggestions(
-        start, end, resolved_username, walking_speed, time=time, time_is=time_is
+        start, end, resolved_username, walking_speed, time=time, time_is=time_is, reroute=bool(reroute)
     )
 
 

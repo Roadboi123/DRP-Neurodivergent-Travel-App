@@ -15,6 +15,7 @@ function buildRoutesQuery(
   end: string,
   username: string,
   timing?: RouteTimeQuery,
+  reroute?: boolean,
 ): string {
   const startParam = encodeURIComponent(start.trim());
   const endParam = encodeURIComponent(end.trim());
@@ -24,7 +25,8 @@ function buildRoutesQuery(
   const timeParam = timing?.time
     ? `&time=${encodeURIComponent(timing.time)}&time_is=${timing.timeIs ?? 'departing'}`
     : '';
-  return `routes/?start=${startParam}&end=${endParam}${userParam}${timeParam}`;
+  const rerouteParam = reroute ? `&reroute=true` : '';
+  return `routes/?start=${startParam}&end=${endParam}${userParam}${timeParam}${rerouteParam}`;
 }
 
 function buildWarningsQuery(
@@ -64,6 +66,7 @@ export interface RoutesService {
     end: string,
     username: string,
     timing?: RouteTimeQuery,
+    reroute?: boolean,
   ): Promise<RouteOption[]>;
   
   /**
@@ -113,8 +116,8 @@ export interface RoutesService {
    */
 export function createRoutesService(client: HttpClient): RoutesService {
   return {
-    getRoutes(start, end, username, timing) {
-      const query = buildRoutesQuery(start, end, username, timing);
+    getRoutes(start, end, username, timing, reroute) {
+      const query = buildRoutesQuery(start, end, username, timing, reroute);
       // Trailing slash is already part of the query to avoid an HTTP redirect.
       return client.get<RouteOption[]>(`/${query}`);
     },

@@ -125,6 +125,163 @@ def is_duplicate_report(warning_type: str, lat: float, lon: float, username: str
             return True
     return False
 
+
+async def _get_clustered_warnings(username: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch all active reported warnings from the database, cluster them within 150m,
+    compute their aggregated severity level, and handle owner-identities.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    try:
+        res = supabase.table("reported_warnings").select("*").execute()
+        if not res.data:
+            return []
+
+        now_dt = datetime.now(timezone.utc)
+        relevant_rows = []
+        for row in res.data:
+            if not isinstance(row, dict):
+                continue
+            created_at_str = row.get("created_at")
+            if created_at_str:
+                try:
+                    created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    if now_dt - created_at > timedelta(minutes=REPORTED_WARNING_TTL_MINUTES):
+                        continue
+                except Exception:
+                    pass
+
+            w_lat = row.get("lat")
+            w_lon = row.get("lon")
+            if w_lat is not None and w_lon is not None:
+                relevant_rows.append(row)
+
+        if not relevant_rows:
+            return []
+
+        # Batch fetch reporter sensitivities
+        user_sens_map: dict[str, dict[str, Any]] = {}
+        usernames = list({r.get("username") for r in relevant_rows if r.get("username")})
+        if usernames:
+            try:
+                sens_res = supabase.table("user_sensitivities").select("*").in_("username", usernames).execute()
+                if sens_res.data:
+                    for s_row in sens_res.data:
+                        if isinstance(s_row, dict):
+                            username_val = s_row.get("username")
+                            if username_val:
+                                user_sens_map[str(username_val)] = s_row
+            except Exception as e:
+                print(f"Error fetching user sensitivities batch: {e}")
+
+        # Calculate weights for each report
+        valid_reports: list[dict[str, Any]] = []
+        for row in relevant_rows:
+            r_user = row.get("username")
+            warning_type = str(row.get("warning_type") or "")
+
+            sens_key = None
+            if "radio" in warning_type or "sound" in warning_type or "noise" in warning_type or warning_type == "volume-high":
+                sens_key = "noise_sensitivity"
+            elif "people" in warning_type or "crowd" in warning_type:
+                sens_key = "crowd_sensitivity"
+            elif "thermometer" in warning_type or "heat" in warning_type or "temp" in warning_type:
+                sens_key = "heat_sensitivity"
+            elif "flower" in warning_type or "smell" in warning_type or warning_type == "rose":
+                sens_key = "smell_sensitivity"
+
+            weight = DEFAULT_REPORTER_TRUST
+            if r_user and r_user in user_sens_map and sens_key:
+                sens_val = user_sens_map[r_user].get(sens_key)
+                if sens_val is not None:
+                    try:
+                        weight = REPORTER_TRUST_WEIGHTS.get(int(sens_val), DEFAULT_REPORTER_TRUST)
+                    except (ValueError, TypeError):
+                        pass
+
+            lat_val = row.get("lat")
+            lon_val = row.get("lon")
+            lat_float = float(lat_val) if lat_val is not None else 0.0
+            lon_float = float(lon_val) if lon_val is not None else 0.0
+
+            valid_reports.append({
+                "id": str(row.get("id") or ""),
+                "title": str(row.get("title") or ""),
+                "desc": str(row.get("description") or ""),
+                "warning_type": warning_type,
+                "lat": lat_float,
+                "lon": lon_float,
+                "username": r_user,
+                "created_at_str": str(row.get("created_at") or ""),
+                "weight": weight
+            })
+
+        # Group/cluster warnings of same type within 150 meters
+        clusters: list[list[dict[str, Any]]] = []
+        for report in valid_reports:
+            matched_cluster = None
+            for cluster in clusters:
+                rep = cluster[0]
+                if rep["warning_type"] == report["warning_type"]:
+                    dist = _haversine_distance(report["lat"], report["lon"], rep["lat"], rep["lon"])
+                    if dist <= 150:
+                        matched_cluster = cluster
+                        break
+            if matched_cluster is not None:
+                matched_cluster.append(report)
+            else:
+                clusters.append([report])
+
+        # Format and aggregate each cluster
+        clustered_warnings = []
+        for cluster in clusters:
+            cluster.sort(key=lambda x: str(x.get("created_at_str") or ""), reverse=True)
+            representative = cluster[0]
+
+            unique_reports: list[dict[str, Any]] = []
+            seen_users: set[str] = set()
+            for r in cluster:
+                r_name = r.get("username")
+                if r_name:
+                    if r_name in seen_users:
+                        continue
+                    seen_users.add(str(r_name))
+                unique_reports.append(r)
+
+            total_weight = sum(float(r["weight"]) for r in unique_reports)
+            report_count = len(unique_reports)
+
+            if total_weight >= 3.0:
+                severity = "high"
+            elif total_weight >= 1.5:
+                severity = "medium"
+            else:
+                severity = "info"
+
+            # Check if the current user requesting warnings was one of the reporters
+            own_report = next((r for r in cluster if username and r["username"] == username), None)
+            final_username = username if own_report else representative["username"]
+            marker_id = str(own_report["id"]) if own_report else str(representative["id"])
+
+            clustered_warnings.append({
+                "id": marker_id,
+                "title": str(representative["title"]),
+                "desc": str(representative["desc"]),
+                "severity": severity,
+                "warning_type": str(representative["warning_type"]),
+                "lat": float(representative["lat"]),
+                "lon": float(representative["lon"]),
+                "username": final_username or None,
+                "confidence_score": float(total_weight),
+                "report_count": int(report_count),
+                "last_reported": str(representative.get("created_at_str") or "") or None,
+            })
+        return clustered_warnings
+    except Exception as e:
+        print(f"Error in _get_clustered_warnings: {e}")
+        return []
+
+
 # Mapping Supabase integer sensitivities (1 = little, 2 = medium, 3 = high,
 # 4 = very high) to discomfort multiplier weights. Higher sensitivity = more
 # strongly affected = larger weight.
@@ -379,7 +536,7 @@ async def _calculate_leg_sensory_live(leg: dict, temp: float) -> tuple[int, int,
 
 
 async def _build_route_option(
-    index: int, journey: dict, temp: float, destination_name: str, active_warnings: Optional[List[Dict[str, Any]]] = None
+    index: int, journey: dict, temp: float, destination_name: str, active_warnings: Optional[List[Dict[str, Any]]] = None, reroute: bool = False
 ) -> dict:
     """
     Format a fetched API journey route to match the frontend RouteOption model schema.
@@ -411,6 +568,8 @@ async def _build_route_option(
                     leg_coords.append([arr_lat, arr_lon])
 
             for w in active_warnings:
+                if not reroute and w.get("severity") != "high":
+                    continue
                 w_lat = w.get("lat")
                 w_lon = w.get("lon")
                 w_type = w.get("warning_type")
@@ -666,6 +825,7 @@ async def get_route_suggestions(
     walking_speed: Optional[str] = "slow",
     time: Optional[str] = None,
     time_is: Optional[str] = None,
+    reroute: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Get route suggestions based on start/end destinations,
@@ -939,29 +1099,10 @@ async def get_route_suggestions(
     temp = await get_current_london_temp()
 
     # Fetch active warnings to overlay on route suggestions
-    active_warnings = []
-    try:
-        from datetime import datetime, timezone, timedelta
-        res = supabase.table("reported_warnings").select("*").execute()
-        if res.data:
-            now_dt = datetime.now(timezone.utc)
-            for row in res.data:
-                if not isinstance(row, dict):
-                    continue
-                created_at_str = row.get("created_at")
-                if created_at_str:
-                    try:
-                        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-                        if now_dt - created_at > timedelta(minutes=REPORTED_WARNING_TTL_MINUTES):
-                            continue
-                    except Exception:
-                        pass
-                active_warnings.append(row)
-    except Exception as e:
-        print(f"Error fetching active warnings for route suggestion: {e}")
+    active_warnings = await _get_clustered_warnings(username)
 
     # Map raw journeys to frontend schema asynchronously in parallel
-    tasks = [_build_route_option(i, j, temp, end, active_warnings) for i, j in enumerate(raw_journeys)]
+    tasks = [_build_route_option(i, j, temp, end, active_warnings, reroute) for i, j in enumerate(raw_journeys)]
     route_options = await asyncio.gather(*tasks, return_exceptions=True)
     routes = [r for r in route_options if isinstance(r, dict)]
 
@@ -1368,173 +1509,33 @@ async def get_user_warnings(
                 if coords:
                     route_coords.append(coords)
 
-        res = supabase.table("reported_warnings").select("*").execute()
-        if res.data:
-            from datetime import datetime, timezone, timedelta
-            now_dt = datetime.now(timezone.utc)
-            
-            # Step A: Filter by TTL and relevance
-            relevant_rows = []
-            for row in res.data:
-                if not isinstance(row, dict):
-                    continue
-                created_at_str = row.get("created_at")
-                if created_at_str:
-                    try:
-                        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-                        if now_dt - created_at > timedelta(minutes=REPORTED_WARNING_TTL_MINUTES):
-                            continue
-                    except Exception:
-                        pass
-
-                w_lat = row.get("lat")
-                w_lon = row.get("lon")
-                if w_lat is not None and w_lon is not None:
-                    is_relevant = False
-                    if generic or not route_stations:
-                        is_relevant = True
-                    else:
-                        for s_coords in route_coords:
-                            dist = _haversine_distance(w_lat, w_lon, s_coords[0], s_coords[1])
-                            if dist <= 1500:
-                                is_relevant = True
-                                break
-                    if is_relevant:
-                        relevant_rows.append(row)
-
-            if relevant_rows:
-                # Step B: Batch fetch reporter sensitivities
-                user_sens_map: dict[str, dict[str, Any]] = {}
-                usernames = list({r.get("username") for r in relevant_rows if r.get("username")})
-                if usernames:
-                    try:
-                        sens_res = supabase.table("user_sensitivities").select("*").in_("username", usernames).execute()
-                        if sens_res.data:
-                            for s_row in sens_res.data:
-                                if isinstance(s_row, dict):
-                                    username_val = s_row.get("username")
-                                    if username_val:
-                                        user_sens_map[str(username_val)] = s_row
-                    except Exception as e:
-                        print(f"Error fetching user sensitivities batch: {e}")
-
-                # Step C: Calculate weights for each report
-                valid_reports: list[dict[str, Any]] = []
-                for row in relevant_rows:
-                    r_user = row.get("username")
-                    warning_type = str(row.get("warning_type") or "")
-                    
-                    # Determine sensitivity setting for this warning type
-                    sens_key = None
-                    if "radio" in warning_type or "sound" in warning_type or "noise" in warning_type:
-                        sens_key = "noise_sensitivity"
-                    elif "people" in warning_type or "crowd" in warning_type:
-                        sens_key = "crowd_sensitivity"
-                    elif "thermometer" in warning_type or "heat" in warning_type or "temp" in warning_type:
-                        sens_key = "heat_sensitivity"
-                    elif "flower" in warning_type or "smell" in warning_type:
-                        sens_key = "smell_sensitivity"
-
-                    # Trust the report less the more sensitive the reporter is to
-                    # this stimulus (full 1-4 scale; default when unset/unknown).
-                    weight = DEFAULT_REPORTER_TRUST
-                    if r_user and r_user in user_sens_map and sens_key:
-                        sens_val = user_sens_map[r_user].get(sens_key)
-                        if sens_val is not None:
-                            try:
-                                weight = REPORTER_TRUST_WEIGHTS.get(int(sens_val), DEFAULT_REPORTER_TRUST)
-                            except (ValueError, TypeError):
-                                pass
-
-                    lat_val = row.get("lat")
-                    lon_val = row.get("lon")
-                    lat_float = float(lat_val) if lat_val is not None else 0.0
-                    lon_float = float(lon_val) if lon_val is not None else 0.0
-
-                    valid_reports.append({
-                        "id": str(row.get("id") or ""),
-                        "title": str(row.get("title") or ""),
-                        "desc": str(row.get("description") or ""),
-                        "warning_type": warning_type,
-                        "lat": lat_float,
-                        "lon": lon_float,
-                        "username": r_user,
-                        "created_at_str": str(row.get("created_at") or ""),
-                        "weight": weight
-                    })
-
-                # Step D: Group/cluster warnings of same type within 150 meters
-                clusters: list[list[dict[str, Any]]] = []
-                for report in valid_reports:
-                    matched_cluster = None
-                    for cluster in clusters:
-                        rep = cluster[0]
-                        if rep["warning_type"] == report["warning_type"]:
-                            dist = _haversine_distance(report["lat"], report["lon"], rep["lat"], rep["lon"])
-                            if dist <= 150: # _haversine_distance returns meters
-                                matched_cluster = cluster
-                                break
-                    if matched_cluster is not None:
-                        matched_cluster.append(report)
-                    else:
-                        clusters.append([report])
-
-                # Step E: Format and aggregate each cluster
-                for cluster in clusters:
-                    # Newest first, so the representative is the latest report and
-                    # per-user dedup keeps each user's most recent contribution.
-                    cluster.sort(key=lambda x: str(x.get("created_at_str") or ""), reverse=True)
-                    representative = cluster[0]
-
-                    # Aggregate by UNIQUE user: one user re-reporting the same spot
-                    # mustn't inflate confidence. Anonymous reports (no username)
-                    # each count once.
-                    unique_reports: list[dict[str, Any]] = []
-                    seen_users: set[str] = set()
-                    for r in cluster:
-                        r_name = r.get("username")
-                        if r_name:
-                            if r_name in seen_users:
-                                continue
-                            seen_users.add(str(r_name))
-                        unique_reports.append(r)
-
-                    total_weight = sum(float(r["weight"]) for r in unique_reports)
-                    report_count = len(unique_reports)
-
-                    if total_weight >= 3.0:
-                        severity = "high"
-                    elif total_weight >= 1.5:
-                        severity = "medium"
-                    else:
-                        severity = "info"
-
-                    # Confidence travels via severity / report_count / confidence_score
-                    # (rendered as UI on the client) — keep the description clean.
-                    desc = str(representative["desc"])
-
-                    # Check if the current user requesting warnings was one of the reporters
-                    own_report = next((r for r in cluster if username and r["username"] == username), None)
-                    final_username = username if own_report else representative["username"]
-                    # Expose the requester's OWN report id when they have one, so an
-                    # owner-delete removes the row that actually belongs to them. Using
-                    # the representative's id here would silently match no row (and so
-                    # delete nothing) whenever someone else reported the same spot more
-                    # recently and became the cluster representative.
-                    marker_id = str(own_report["id"]) if own_report else str(representative["id"])
-
+        clustered = await _get_clustered_warnings(username)
+        for w in clustered:
+            w_lat = w.get("lat")
+            w_lon = w.get("lon")
+            if w_lat is not None and w_lon is not None:
+                is_relevant = False
+                if generic or not route_stations:
+                    is_relevant = True
+                else:
+                    for s_coords in route_coords:
+                        dist = _haversine_distance(w_lat, w_lon, s_coords[0], s_coords[1])
+                        if dist <= 1500:
+                            is_relevant = True
+                            break
+                if is_relevant:
                     warnings.append({
-                        "id": marker_id,
-                        "title": str(representative["title"]),
-                        "desc": desc,
-                        "severity": severity,
-                        "icon": str(representative["warning_type"]),
-                        "lat": float(representative["lat"]) if representative["lat"] is not None else None,
-                        "lon": float(representative["lon"]) if representative["lon"] is not None else None,
-                        "username": final_username or None,
-                        "confidence_score": float(total_weight),
-                        "report_count": int(report_count),
-                        "last_reported": str(representative.get("created_at_str") or "") or None,
+                        "id": w["id"],
+                        "title": w["title"],
+                        "desc": w["desc"],
+                        "severity": w["severity"],
+                        "icon": w["warning_type"],
+                        "lat": w["lat"],
+                        "lon": w["lon"],
+                        "username": w["username"],
+                        "confidence_score": w["confidence_score"],
+                        "report_count": w["report_count"],
+                        "last_reported": w["last_reported"],
                     })
     except Exception as e:
         print(f"Error fetching user reported warnings: {e}")
