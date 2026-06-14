@@ -269,6 +269,9 @@ export default function JourneyScreen() {
   const routesService = useRoutesService();
   const { username } = useAuth();
   const [followUser, setFollowUser] = useState(true);
+  const [simulating, setSimulating] = useState(false);
+  const [simIndex, setSimIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -472,20 +475,35 @@ export default function JourneyScreen() {
     useLiveLocation();
 
   const userCoords = useMemo<[number, number]>(() => {
+    if (simulating && allPathCoords.length > 0) {
+      return allPathCoords[Math.min(simIndex, allPathCoords.length - 1)];
+    }
     return liveCoords ?? allPathCoords[0] ?? [51.5074, -0.1278];
-  }, [liveCoords, allPathCoords]);
+  }, [simulating, simIndex, liveCoords, allPathCoords]);
 
   const heading = useMemo(() => {
+    if (simulating && allPathCoords.length > 0) {
+      const idx = Math.min(simIndex, allPathCoords.length - 1);
+      if (idx < allPathCoords.length - 1) {
+        return calculateHeading(allPathCoords[idx], allPathCoords[idx + 1]);
+      }
+      if (idx > 0) {
+        return calculateHeading(allPathCoords[idx - 1], allPathCoords[idx]);
+      }
+      return 0;
+    }
     if (liveHeading != null) return liveHeading;
     if (allPathCoords.length < 2) return 0;
     return calculateHeading(allPathCoords[0], allPathCoords[1]);
-  }, [liveHeading, allPathCoords]);
+  }, [simulating, simIndex, liveHeading, allPathCoords]);
 
-  // When the traveller's REAL location gets within range of a warning they
-  // haven't answered yet, surface a confirm prompt. Gated on liveCoords so the
-  // route-origin fallback never triggers it, and on no prompt already showing.
+  // When the traveller's location gets within range of a warning they
+  // haven't answered yet, surface a confirm prompt. Gated on location availability
+  // (liveCoords or simulation active) so the route-origin fallback never triggers it unless simulating,
+  // and on no prompt already showing.
   useEffect(() => {
-    if (!liveCoords || proximityWarning) return;
+    const activeLocationSource = simulating ? userCoords : liveCoords;
+    if (!activeLocationSource || proximityWarning) return;
     const nearest = warnings
       .filter(
         (w) =>
@@ -500,7 +518,23 @@ export default function JourneyScreen() {
       setProximityWarning(nearest.w);
       analytics.trackWarningInteraction();
     }
-  }, [liveCoords, userCoords, warnings, proximityWarning]);
+  }, [simulating, liveCoords, userCoords, warnings, proximityWarning]);
+
+  // Auto-play journey simulation
+  useEffect(() => {
+    if (!simulating || !isPlaying) return;
+    const interval = setInterval(() => {
+      setSimIndex((prev) => {
+        if (prev < allPathCoords.length - 1) {
+          return prev + 1;
+        } else {
+          setIsPlaying(false);
+          return prev;
+        }
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [simulating, isPlaying, allPathCoords]);
 
   // Record an answer so we don't immediately re-prompt for the same warning.
   const respondProximity = useCallback(
@@ -1112,6 +1146,105 @@ export default function JourneyScreen() {
           color={followUser ? (isDark ? accents.cyan : '#007aff') : palette.textPrimary}
         />
       </TouchableOpacity>
+
+      {/* Simulation / Journey Demo Player Panel */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: COLLAPSED_HEIGHT + 16,
+          left: 16,
+          zIndex: 10,
+        }}
+      >
+        {!simulating ? (
+          <TouchableOpacity
+            onPress={() => {
+              setSimulating(true);
+              setSimIndex(0);
+              setIsPlaying(true);
+              setFollowUser(true);
+            }}
+            style={[
+              styles.circleButton,
+              {
+                backgroundColor: palette.surface,
+                borderColor: palette.border,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Start demo journey simulation"
+          >
+            <Ionicons name="play" size={20} color={accents.green} />
+          </TouchableOpacity>
+        ) : (
+          <View
+            style={[
+              styles.simControlRow,
+              {
+                backgroundColor: palette.surface,
+                borderColor: palette.border,
+              },
+            ]}
+          >
+            {/* Stop / Close Simulation */}
+            <TouchableOpacity
+              onPress={() => {
+                setSimulating(false);
+                setIsPlaying(false);
+                setSimIndex(0);
+              }}
+              style={styles.simIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Exit simulation"
+            >
+              <Ionicons name="stop-circle-outline" size={22} color={accents.pink} />
+            </TouchableOpacity>
+
+            {/* Step Back */}
+            <TouchableOpacity
+              onPress={() => {
+                setIsPlaying(false);
+                setSimIndex((prev) => Math.max(0, prev - 1));
+              }}
+              disabled={simIndex === 0}
+              style={[styles.simIconBtn, simIndex === 0 && { opacity: 0.4 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Step simulation back"
+            >
+              <Ionicons name="chevron-back-outline" size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+
+            {/* Play / Pause Toggle */}
+            <TouchableOpacity
+              onPress={() => setIsPlaying((p) => !p)}
+              style={styles.simIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={isPlaying ? "Pause simulation" : "Play simulation"}
+            >
+              <Ionicons name={isPlaying ? "pause-outline" : "play-outline"} size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+
+            {/* Step Forward */}
+            <TouchableOpacity
+              onPress={() => {
+                setIsPlaying(false);
+                setSimIndex((prev) => Math.min(allPathCoords.length - 1, prev + 1));
+              }}
+              disabled={simIndex === allPathCoords.length - 1}
+              style={[styles.simIconBtn, simIndex === allPathCoords.length - 1 && { opacity: 0.4 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Step simulation forward"
+            >
+              <Ionicons name="chevron-forward-outline" size={20} color={palette.textPrimary} />
+            </TouchableOpacity>
+
+            {/* Progress Text */}
+            <Text style={[styles.simText, { color: palette.textSecondary }]}>
+              {simIndex + 1}/{allPathCoords.length}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* Alternative Routes Selection Overlay */}
       {alternativeRoutes && (
@@ -1746,6 +1879,29 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 12.5,
     fontWeight: '700',
+    textAlign: 'center',
+  },
+  simControlRow: {
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 12,
+    ...hardShadow(3),
+  },
+  simIconBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  simText: {
+    fontSize: 10,
+    fontFamily: Fonts?.display,
+    fontWeight: '900',
+    minWidth: 40,
     textAlign: 'center',
   },
 });
