@@ -1106,7 +1106,9 @@ export default function JourneyScreen() {
         ]}
       >
         <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={styles.sheetHeaderTouch} {...headerPanResponder.panHandlers}>
+        <View
+          style={[styles.sheetHeaderTouch, Platform.OS === 'web' ? ({ touchAction: 'none' } as any) : null]}
+          {...headerPanResponder.panHandlers}>
           <View style={styles.sheetHandleContainer}>
             <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
           </View>
@@ -1616,8 +1618,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   topPillRow: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 8,
   },

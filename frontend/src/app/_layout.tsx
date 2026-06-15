@@ -8,7 +8,7 @@ import {
   HankenGrotesk_900Black,
   useFonts,
 } from '@expo-google-fonts/hanken-grotesk';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -24,6 +24,7 @@ import { AuthProvider, useAuth } from '@/context/auth-context';
 import { PresetsProvider } from '@/context/presets-context';
 import { ProfileModal } from '@/components/profile/profile-modal';
 import { requestNotificationPermissions } from '@/services/notifications';
+import { recordPath } from '@/services/nav-history';
 import { analytics } from '@/services/analytics';
 
 export const unstable_settings = {
@@ -43,6 +44,12 @@ const navTheme = {
 // Inner tree (kept so it can mount the profile modal over the nav stack).
 function ThemedApp() {
   const { isProfileModalVisible, setProfileModalVisible } = useAuth();
+  // Track the active route so the in-app Back button can return to the previous
+  // screen instead of falling through to the Home anchor.
+  const pathname = usePathname();
+  useEffect(() => {
+    recordPath(pathname);
+  }, [pathname]);
 
   return (
     <NavThemeProvider value={navTheme}>

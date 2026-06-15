@@ -322,7 +322,7 @@ export default function RoutesScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Navigation Icons */}
-      <HeaderNav onProfilePress={() => setProfileModalVisible(true)} />
+      <HeaderNav onProfilePress={() => setProfileModalVisible(true)} showHome={false} />
 
       <RouteSearchInputs
         startLoc={startLoc}

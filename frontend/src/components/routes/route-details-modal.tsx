@@ -819,9 +819,11 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
             }
           ]}>
             <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
-            {/* Drag handle header wrapper */}
+            {/* Drag handle header wrapper. `touchAction: none` on web stops the
+                browser from claiming the vertical drag as a scroll/overscroll
+                gesture (which cancelled the pan and made the sheet snap). */}
             <View
-              style={styles.sheetHeaderTouch}
+              style={[styles.sheetHeaderTouch, Platform.OS === 'web' ? ({ touchAction: 'none' } as any) : null]}
               {...headerPanResponder.panHandlers}
             >
               {/* Sheet drag indicator bar */}
