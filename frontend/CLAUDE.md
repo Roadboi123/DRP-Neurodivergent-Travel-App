@@ -15,7 +15,10 @@ All source under `src/`, with `@/*` → `./src/*`:
 - `src/services/` — injectable HTTP client + per-domain services (see below).
 - `src/types/` — shared TS types. `route.ts`/`preference.ts` re-export the
   **generated** contract and add frontend-only types (`WarningItem`, UI `Preference`).
-- `src/constants/` — `config.ts` (`API_BASE_URL`), `theme.ts` (`getPalette`).
+- `src/constants/` — `config.ts` (`API_BASE_URL`), `theme.ts` (the **Clearway** design
+  tokens: `CLEARWAY`, `GLASS`, `Radii`, `softShadow`, `ClearwayFonts`; legacy `getPalette` etc.
+  are calm-value shims). Reusable glass primitives (`Glass`, `GlassCard`, `GlassButton`, `Chip`,
+  `GradientDot`, `GradientBackground`) live in `src/components/ui/`. **Read `DESIGN.md`.**
 - `assets/` + config (`app.json`, `vercel.json`) live at the `frontend/` root.
 
 ## Services — dependency injection (read before adding a service or endpoint)

@@ -11,7 +11,9 @@ Sensory comfort and a low-friction, predictable UI are the product, not aftertho
 ## Tech stack
 
 - **Frontend:** Expo / React Native (`react-native-web` for web), expo-router, `StyleSheet` +
-  a `getPalette()` theme. Deployed on Vercel. **No Tailwind, no HTML/CSS.**
+  the **Clearway** glassmorphism design tokens in `frontend/src/constants/theme.ts` (single calm
+  theme — no light/dark toggle). Deployed on Vercel. **No Tailwind, no HTML/CSS.** See
+  `frontend/DESIGN.md`.
 - **Backend:** FastAPI (Python 3.12), Supabase storage. Deployed on Railway.
 - **Contract:** OpenAPI (`shared/openapi.json`), generated from the backend Pydantic schemas.
 - **Do not introduce:** Tailwind or a second styling system; raw `fetch` in the app (use the
