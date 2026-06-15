@@ -6,10 +6,12 @@ import { SensoryMeter } from '@/components/routes/sensory-meter';
 import { leaveIndicator, type JourneyTime } from '@/components/routes/journey-time';
 import {
   BRAND,
+  CLEARWAY,
   Fonts,
   getAccents,
   getPalette,
-  hardShadow,
+  Radii,
+  softShadow,
   resolveLineColor,
   TFL_LINE_FALLBACK,
   type Accents,
@@ -220,11 +222,11 @@ function RouteCardBase({
         <View
           style={[
             styles.statsWidget,
-            { backgroundColor: accents.green, borderColor: palette.border },
+            { backgroundColor: CLEARWAY.bluePillFrom, borderColor: CLEARWAY.bluePillTo },
           ]}>
-          <Text style={[styles.statsTime, { color: palette.textPrimary }]}>{route.duration}</Text>
-          <Text style={[styles.statsUnit, { color: palette.textPrimary }]}>min</Text>
-          <Text style={[styles.statsCost, { color: palette.textPrimary }]}>
+          <Text style={[styles.statsTime, { color: CLEARWAY.heading }]}>{route.duration}</Text>
+          <Text style={[styles.statsUnit, { color: CLEARWAY.ink }]}>min</Text>
+          <Text style={[styles.statsCost, { color: CLEARWAY.ink }]}>
             £{route.price.toFixed(2)}
           </Text>
         </View>
@@ -245,13 +247,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   groupHeaderLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: Fonts?.display,
     fontWeight: '800',
     marginBottom: 8,
     marginLeft: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: -0.2,
   },
   leaveIndicator: {
     flexDirection: 'row',
@@ -264,18 +265,17 @@ const styles = StyleSheet.create({
   },
   leaveIndicatorText: {
     fontSize: 11,
-    fontFamily: Fonts?.display,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.1,
   },
   routeCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    borderRadius: 14,
-    borderWidth: 2,
-    padding: 11,
-    ...hardShadow(6),
+    borderRadius: Radii.card,
+    borderWidth: 1,
+    padding: 12,
+    ...softShadow(2),
   },
   leftContent: {
     flex: 1,
@@ -310,26 +310,28 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 68,
+    minWidth: 70,
     paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 2,
+    borderRadius: 18,
+    borderWidth: 1,
   },
   statsTime: {
-    fontSize: 24,
+    fontSize: 25,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    lineHeight: 26,
+    letterSpacing: -0.8,
+    lineHeight: 27,
   },
   statsUnit: {
     fontSize: 10,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
     marginTop: -1,
   },
   statsCost: {
-    fontSize: 11,
+    fontSize: 11.5,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
     marginTop: 6,
   },
@@ -380,24 +382,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 5,
     paddingHorizontal: 9,
-    borderRadius: 8,
+    borderRadius: 999,
     gap: 6,
-    borderWidth: 1.5,
-    ...hardShadow(2),
+    ...softShadow(1),
   },
   timelineBadgeText: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 10.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   timelineDurText: {
-    fontSize: 8,
-    fontFamily: Fonts?.display,
+    fontSize: 8.5,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
     marginTop: 1,
   },
   toggleDetailsButton: {

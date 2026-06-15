@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { confidenceColor, isAggregatedReport, WarningConfidence } from '@/components/routes/warning-confidence';
-import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, Fonts, getAccents, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
 
@@ -71,7 +71,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
                   { backgroundColor: confidenceColor(w.severity, accents), borderColor: palette.border },
                 ]}
               >
-                <Ionicons name={w.icon as IoniconName} size={14} color={BRAND.ink} />
+                <Ionicons name={w.icon as IoniconName} size={14} color={CLEARWAY.white} />
               </View>
               <View style={styles.itemText}>
                 <Text style={[styles.itemTitle, { color: palette.textPrimary }]}>
@@ -98,10 +98,10 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
 const styles = StyleSheet.create({
   container: {
     marginVertical: 10,
-    borderRadius: 14,
-    borderWidth: 2,
+    borderRadius: Radii.card,
+    borderWidth: 1,
     overflow: 'hidden',
-    ...hardShadow(4),
+    ...softShadow(2),
   },
   header: {
     flexDirection: 'row',
@@ -111,17 +111,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   headerText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: -0.2,
   },
   headerChevron: {
     marginLeft: 'auto',
   },
   headerDivider: {
-    height: 2,
+    height: 1,
   },
   itemsBox: {
     padding: 14,
@@ -135,7 +134,6 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -143,13 +141,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemTitle: {
-    fontSize: 13,
+    fontSize: 13.5,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
     marginBottom: 2,
   },
   itemDesc: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 12.5,
+    fontFamily: Fonts?.body,
+    lineHeight: 17,
   },
   separator: {
     height: 1,
