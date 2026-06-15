@@ -15,7 +15,9 @@ import {
   warningVisual,
   type SensoryReportType,
 } from '@/components/routes/warning-markers';
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { BlurView } from 'expo-blur';
+
+import { CLEARWAY, Fonts, GLASS, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLiveLocation } from '@/hooks/use-live-location';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
@@ -172,7 +174,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
   const changeNodes: { lat: number; lon: number; label: string; emoji: string }[] = [];
   nodes.forEach((node) => {
     if (node.isStart || node.isEnd) {
-      const fillColor = node.isStart ? '#83f582' : '#ff158a';
+      const fillColor = node.isStart ? '#5b9d6b' : '#5b8fd6';
       leafletJS += `
       L.circleMarker([${node.lat}, ${node.lon}], {
         radius: 9,
@@ -936,9 +938,9 @@ export default function JourneyScreen() {
         <Text style={[styles.emptyText, { color: palette.textPrimary }]}>No active journey.</Text>
         <TouchableOpacity
           onPress={() => router.replace('/(tabs)/routes')}
-          style={[styles.backBtnAction, { backgroundColor: accents.green, borderColor: palette.border }]}
+          style={[styles.backBtnAction, { backgroundColor: CLEARWAY.blue }]}
         >
-          <Text style={[styles.backBtnActionText, { color: palette.textPrimary }]}>Routes</Text>
+          <Text style={[styles.backBtnActionText, { color: CLEARWAY.white }]}>Routes</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -1037,11 +1039,11 @@ export default function JourneyScreen() {
           <Text style={[styles.legendTitle, { color: palette.textPrimary }]}>Map key</Text>
 
           <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#83f582', borderColor: palette.border }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#5b9d6b', borderColor: palette.border }]} />
             <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Start</Text>
           </View>
           <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#ff158a', borderColor: palette.border }]} />
+            <View style={[styles.legendDot, { backgroundColor: '#5b8fd6', borderColor: palette.border }]} />
             <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Destination</Text>
           </View>
           <View style={styles.legendRow}>
@@ -1141,13 +1143,14 @@ export default function JourneyScreen() {
         style={[
           styles.sheetPanel,
           {
-            backgroundColor: palette.surface,
-            borderColor: palette.border,
+            backgroundColor: GLASS.light.fill,
+            borderColor: GLASS.light.border,
             height: SHEET_HEIGHT,
             transform: [{ translateY: panY }],
           },
         ]}
       >
+        <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={styles.sheetHeaderTouch} {...headerPanResponder.panHandlers}>
           <View style={styles.sheetHandleContainer}>
             <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
@@ -1242,14 +1245,14 @@ export default function JourneyScreen() {
         <View style={styles.reportOverlayRoot} pointerEvents="box-none">
           <View style={styles.reportBackdrop} pointerEvents="none" />
           <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.reportInputPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.reportInputPanel, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
               <TouchableOpacity
                 onPress={() => {
                   analytics.trackClick();
                   setReportingType(null);
                   analytics.endDisruptionReport(null);
                 }}
-                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                style={[styles.reportCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel report"
               >
@@ -1264,9 +1267,9 @@ export default function JourneyScreen() {
               <TouchableOpacity
                 onPress={() => submitReport()}
                 activeOpacity={0.85}
-                style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
+                style={[styles.reportSubmitBtn, { backgroundColor: CLEARWAY.blue }]}
               >
-                <Text style={[styles.reportSubmitBtnText, { color: palette.textPrimary }]}>Submit</Text>
+                <Text style={[styles.reportSubmitBtnText, { color: CLEARWAY.white }]}>Submit</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1282,10 +1285,10 @@ export default function JourneyScreen() {
             onPress={() => setSelectedWarning(null)}
           />
           <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
               <TouchableOpacity
                 onPress={() => setSelectedWarning(null)}
-                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                style={[styles.reportCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss"
               >
@@ -1310,11 +1313,11 @@ export default function JourneyScreen() {
                 activeOpacity={0.85}
                 style={[
                   styles.warningCardAction,
-                  { backgroundColor: selectedIsOwn ? accents.pink : accents.green, borderColor: palette.border },
+                  { backgroundColor: selectedIsOwn ? CLEARWAY.bad : CLEARWAY.blue },
                 ]}
               >
-                <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
-                <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={CLEARWAY.white} />
+                <Text style={[styles.warningCardActionText, { color: CLEARWAY.white }]}>
                   {selectedIsOwn ? 'Remove' : 'Close'}
                 </Text>
               </TouchableOpacity>
@@ -1332,7 +1335,7 @@ export default function JourneyScreen() {
         <View style={styles.reportOverlayRoot} pointerEvents="box-none">
           <View style={styles.reportBackdrop} pointerEvents="none" />
           <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
               <View
                 style={[
                   styles.warningCardIcon,
@@ -1354,22 +1357,22 @@ export default function JourneyScreen() {
                 <TouchableOpacity
                   onPress={() => respondProximity('yes')}
                   activeOpacity={0.85}
-                  style={[styles.proximityActionBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
+                  style={[styles.proximityActionBtn, { backgroundColor: CLEARWAY.good }]}
                   accessibilityRole="button"
                   accessibilityLabel="Yes, still here"
                 >
-                  <Ionicons name="checkmark" size={16} color={palette.textPrimary} />
-                  <Text style={[styles.proximityActionText, { color: palette.textPrimary }]}>Yes</Text>
+                  <Ionicons name="checkmark" size={16} color={CLEARWAY.white} />
+                  <Text style={[styles.proximityActionText, { color: CLEARWAY.white }]}>Yes</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => respondProximity('no')}
                   activeOpacity={0.85}
-                  style={[styles.proximityActionBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                  style={[styles.proximityActionBtn, { backgroundColor: CLEARWAY.bad }]}
                   accessibilityRole="button"
                   accessibilityLabel="No, it's gone"
                 >
-                  <Ionicons name="close" size={16} color={palette.textPrimary} />
-                  <Text style={[styles.proximityActionText, { color: palette.textPrimary }]}>No</Text>
+                  <Ionicons name="close" size={16} color={CLEARWAY.white} />
+                  <Text style={[styles.proximityActionText, { color: CLEARWAY.white }]}>No</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => respondProximity('skip')}
@@ -1465,7 +1468,7 @@ export default function JourneyScreen() {
               accessibilityRole="button"
               accessibilityLabel="Exit simulation"
             >
-              <Ionicons name="stop-circle-outline" size={22} color={accents.pink} />
+              <Ionicons name="stop-circle-outline" size={22} color={CLEARWAY.bad} />
             </TouchableOpacity>
 
             {/* Step Back */}
@@ -1547,7 +1550,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   topControls: {
     position: 'absolute',
@@ -1572,14 +1574,13 @@ const styles = StyleSheet.create({
     height: 38,
     paddingHorizontal: 12,
     borderRadius: 19,
-    borderWidth: 2,
+    borderWidth: 1,
     ...hardShadow(3),
   },
   topPillText: {
     fontSize: 10.5,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     letterSpacing: 0.2,
   },
   legendPanel: {
@@ -1613,7 +1614,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     letterSpacing: 0.3,
     marginBottom: 8,
   },
@@ -1627,7 +1627,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    borderWidth: 2,
+    borderWidth: 1,
   },
   legendWalkDots: {
     flexDirection: 'row',
@@ -1645,7 +1645,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    borderWidth: 2,
+    borderWidth: 1,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1664,7 +1664,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderWidth: 2,
+    borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 9,
     marginTop: 2,
@@ -1673,13 +1673,12 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   circleButton: {
     width: 54,
     height: 54,
     borderRadius: 27,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     ...hardShadow(3),
@@ -1697,14 +1696,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     ...hardShadow(3),
   },
   noticeBannerText: {
     fontSize: 11,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   reportCapsule: {
     position: 'absolute',
@@ -1712,7 +1710,7 @@ const styles = StyleSheet.create({
     right: 16,
     width: 54,
     zIndex: 10,
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 22,
     padding: 5,
     gap: 4,
@@ -1723,7 +1721,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 4,
@@ -1747,7 +1744,6 @@ const styles = StyleSheet.create({
     fontSize: 7.5,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   sheetPanel: {
     position: 'absolute',
@@ -1812,7 +1808,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   reportInputPanel: {
-    borderWidth: 3,
+    borderWidth: 1,
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
@@ -1830,7 +1826,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     ...hardShadow(2),
@@ -1839,7 +1835,7 @@ const styles = StyleSheet.create({
     width: 66,
     height: 66,
     borderRadius: 33,
-    borderWidth: 2.5,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 4,
@@ -1848,11 +1844,10 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     marginTop: 1,
   },
   reportSubmitBtn: {
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 18,
@@ -1865,13 +1860,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   warningListEmoji: {
     fontSize: 22,
   },
   warningCard: {
-    borderWidth: 3,
+    borderWidth: 1,
     borderRadius: 20,
     paddingTop: 20,
     paddingBottom: 16,
@@ -1886,7 +1880,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    borderWidth: 2.5,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1894,7 +1888,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     textAlign: 'center',
     marginTop: 2,
   },
@@ -1909,7 +1902,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 18,
@@ -1921,7 +1914,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   warningCardHint: {
     fontSize: 10,
@@ -1951,7 +1943,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 12,
     ...hardShadow(2),
@@ -1960,7 +1952,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   detailsScrollContent: {
     padding: 16,
@@ -1983,7 +1974,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -2014,7 +2005,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   backBtnAction: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -2024,12 +2015,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   simControlRow: {
     height: 54,
     borderRadius: 27,
-    borderWidth: 2,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -2055,7 +2045,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 6,
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   simSpeedText: {
     fontSize: 9,
@@ -2065,7 +2055,7 @@ const styles = StyleSheet.create({
   simStartBtn: {
     height: 48,
     borderRadius: 24,
-    borderWidth: 2,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -2075,7 +2065,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
 });
