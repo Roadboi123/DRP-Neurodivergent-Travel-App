@@ -68,7 +68,9 @@ export function getLegUIProps(
       : instruction
       ? instruction.split(' towards ')[0].replace('Take the ', '').replace('Board the ', '')
       : 'Bus';
-    return { iconName: 'bus' as any, bgColor: accents.orange, textColor: BRAND.ink, displayName };
+    // London-bus red (Google-Maps style) — kept distinct from the orange "crowds"
+    // warning marker so a bus leg never reads as a warning.
+    return { iconName: 'bus' as any, bgColor: '#d4351c', textColor: '#ffffff', displayName };
   }
 
   // Resolve the official transport livery from the line name first, then the

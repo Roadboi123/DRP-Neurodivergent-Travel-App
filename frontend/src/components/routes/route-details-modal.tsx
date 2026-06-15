@@ -296,7 +296,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         const { dy, dx } = gestureState;
-        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        const verticalEnough = Math.abs(dy) > 2 && Math.abs(dy) > Math.abs(dx);
         if (!verticalEnough) return false;
         
         // If dragging down and at the top of the scroll view, claim it
@@ -311,7 +311,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       },
       onMoveShouldSetPanResponderCapture: (_, gestureState) => {
         const { dy, dx } = gestureState;
-        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        const verticalEnough = Math.abs(dy) > 2 && Math.abs(dy) > Math.abs(dx);
         if (!verticalEnough) return false;
         
         // If dragging down and at the top of the scroll view, capture it
@@ -636,7 +636,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       visible={visible}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={[styles.modalSheet, { backgroundColor: palette.surface }]}>
+      <SafeAreaView style={[styles.modalSheet, { backgroundColor: CLEARWAY.bgBase }]}>
         {/* Header row — back + home top-left (mirrors the journey screen) */}
         <View style={[styles.headerRow, { borderBottomColor: palette.divider }]}>
           <View style={styles.navButtonsRow}>
@@ -663,16 +663,6 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
             >
               <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
             </TouchableOpacity>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.routeTitle, { color: palette.textPrimary }]} numberOfLines={1}>
-              {route.name}
-            </Text>
-            {route.subName ? (
-              <Text style={[styles.routeSub, { color: palette.textSecondary }]} numberOfLines={1}>
-                {route.subName}
-              </Text>
-            ) : null}
           </View>
         </View>
 

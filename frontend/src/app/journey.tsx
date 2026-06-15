@@ -995,7 +995,7 @@ export default function JourneyScreen() {
           </View>
           <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
         </View>
-        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+        <View style={[styles.legendItem, styles.legendItemCol, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
           <View style={styles.legendEmojiStack}>
             <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
               <Text style={styles.legendEmoji}>🚶</Text>
@@ -1031,8 +1031,8 @@ export default function JourneyScreen() {
 
       {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
       <View style={[styles.reportCapsule, { top: insets.top + 144, backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <View style={[styles.reportCapsuleHeaderPill, { backgroundColor: CLEARWAY.blueStrong }]}>
-          <Text style={[styles.reportCapsuleHeader, { color: CLEARWAY.white }]}>Report</Text>
+        <View style={[styles.reportCapsuleHeaderPill, { backgroundColor: CLEARWAY.okay }]}>
+          <Text style={[styles.reportCapsuleHeader, { color: CLEARWAY.heading }]}>Report</Text>
         </View>
         <View style={[styles.reportDivider, { backgroundColor: palette.divider }]} />
         {REPORT_OPTIONS.map((option) => {
@@ -1522,6 +1522,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     ...hardShadow(1),
   },
+  // The "change mode" bar stacks: emoji row on top, label beneath.
+  legendItemCol: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 4,
+    borderRadius: 16,
+  },
   legendDot: {
     width: 13,
     height: 13,
@@ -1564,11 +1571,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   reportCapsuleHeaderPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
+    alignSelf: 'stretch',
+    borderRadius: 12,
+    paddingHorizontal: 4,
     paddingVertical: 4,
     marginTop: 4,
     marginBottom: 2,
+    alignItems: 'center',
   },
   circleButton: {
     width: 54,
@@ -1614,11 +1623,11 @@ const styles = StyleSheet.create({
     ...hardShadow(3),
   },
   reportCapsuleHeader: {
-    fontSize: 11,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
+    fontSize: 9.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
     textAlign: 'center',
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
   },
   reportDivider: {
     height: 1.5,

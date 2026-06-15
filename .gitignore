@@ -19,3 +19,4 @@ backend/ruff_bin/ruff-0.15.16.dist-info/METADATA
 # Large design source assets (kept locally, not in git)
 Clearway.pdf
 wero-wallet-website.png
+/drp-blue-blur-bg.png
