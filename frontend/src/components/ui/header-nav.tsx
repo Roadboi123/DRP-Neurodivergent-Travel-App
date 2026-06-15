@@ -2,16 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, getAccents, getPalette, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useAuth } from '@/context/auth-context';
 
 export interface HeaderNavProps {
   onProfilePress?: () => void;
 }
 
-/** Top bar: Back + Home circular buttons on the left, theme toggle + profile on the right. */
+/** Top bar: Back + Home glass circular buttons on the left, profile on the right. */
 export function HeaderNav({ onProfilePress }: HeaderNavProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -20,7 +19,7 @@ export function HeaderNav({ onProfilePress }: HeaderNavProps) {
   const btnStyle = [
     styles.iconBtn,
     { backgroundColor: palette.surface, borderColor: palette.border },
-    hardShadow(4),
+    softShadow(1),
   ];
 
   return (
@@ -40,7 +39,6 @@ export function HeaderNav({ onProfilePress }: HeaderNavProps) {
         </TouchableOpacity>
       </View>
       <View style={styles.right}>
-        <ThemeToggle />
         {onProfilePress && (
           <TouchableOpacity
             onPress={onProfilePress}
@@ -83,7 +81,7 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     position: 'relative',
   },
   profileActiveDot: {

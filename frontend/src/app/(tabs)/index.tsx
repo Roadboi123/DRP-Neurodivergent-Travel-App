@@ -8,7 +8,6 @@ import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
 import { GradientBackground } from '@/components/ui/gradient-background';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/auth-context';
@@ -45,7 +44,6 @@ export default function HomeScreen() {
             <Text style={[styles.title, { color: palette.textPrimary }]}>My Planner</Text>
           </View>
           <View style={styles.headerRightActions}>
-            <ThemeToggle />
             <TouchableOpacity
               onPress={() => setProfileModalVisible(true)}
               style={[
