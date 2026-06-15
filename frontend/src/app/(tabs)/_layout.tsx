@@ -5,14 +5,13 @@ import { StyleSheet } from 'react-native';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { CLEARWAY, ClearwayFonts, GLASS, getAccents, getPalette, softShadow } from '@/constants/theme';
+import { CLEARWAY, ClearwayFonts, GLASS, getPalette, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNavBar } from '@/contexts/navbar-context';
 
 export default function TabLayout() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
   // The route-details modal (rendered inside the routes tab) hides the pill so
   // it doesn't bleed over that full-screen view on web.
   const { hidden } = useNavBar();
