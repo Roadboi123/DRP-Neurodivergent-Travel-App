@@ -143,17 +143,20 @@ const styles = StyleSheet.create({
   brand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   logo: {
-    width: 46,
-    height: 46,
+    width: 70,
+    height: 70,
+    // The PNG's brain sits in the upper portion of the square, so nudge it down
+    // a touch to optically centre it against the wordmark.
+    marginTop: 6,
   },
   wordmark: {
-    fontSize: 30,
+    fontSize: 44,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    letterSpacing: -1.2,
+    letterSpacing: -1.6,
   },
   headerRightActions: {
     flexDirection: 'row',
