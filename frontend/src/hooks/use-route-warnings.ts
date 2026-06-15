@@ -14,7 +14,8 @@ import {
   subscribeWarnings,
 } from '@/services/warning-store';
 import type { RouteOption, WarningItem } from '@/types/route';
-import { filterWarningsNearRoute } from '@/utils/geo';
+import { filterWarningsNearRoute, nearestRouteStop } from '@/utils/geo';
+import { cleanPlaceLabel } from '@/utils/place-label';
 import { sendLocalNotification } from '@/services/notifications';
 
 type Accents = ReturnType<typeof getAccents>;
@@ -153,13 +154,22 @@ export function useRouteWarnings(
         if (!knownWarningIdsRef.current.has(w.id)) {
           knownWarningIdsRef.current.add(w.id);
           // Only notify during an active journey (notify), and never for the
-          // current user's own report (they just placed it).
-          const isOwn = !!username && w.username === username;
+          // current user's own report (compare against 'anonymous' too, since a
+          // logged-out user's reports are stored under that name).
+          const me = username || 'anonymous';
+          const isOwn = w.username === me;
           if (notify && !isOwn) {
-            sendLocalNotification(
-              'New warning flagged on your journey',
-              `${w.title}: ${w.desc}`
-            ).catch((err) => console.warn('Failed to send local notification:', err));
+            // Phrase it by roughly where the warning is, e.g. "Sound reported
+            // near South Kensington".
+            const place =
+              w.lat != null && w.lon != null ? nearestRouteStop(route, w.lat, w.lon) : null;
+            const label = (w.title || '').replace(/\s+reported$/i, '').trim() || w.title;
+            const body = place
+              ? `${label} reported near ${cleanPlaceLabel(place, 'your route')}`
+              : `${w.title}: ${w.desc}`;
+            sendLocalNotification('New warning on your journey', body).catch((err) =>
+              console.warn('Failed to send local notification:', err),
+            );
           }
         }
       }

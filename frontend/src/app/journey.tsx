@@ -27,7 +27,7 @@ import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
-import { haversineMeters } from '@/utils/geo';
+import { haversineMeters, nearestRouteStop } from '@/utils/geo';
 import { buildChangeInstruction, cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 import { sendLocalNotification } from '@/services/notifications';
 
@@ -680,8 +680,8 @@ export default function JourneyScreen() {
     // Check all warnings
     warnings.forEach((w) => {
       if (w.lat == null || w.lon == null) return;
-      // Never notify the traveller about their own report.
-      if (username && w.username === username) return;
+      // Never notify the traveller about their own report (anonymous included).
+      if (w.username === (username || 'anonymous')) return;
 
       // Check if it is a medium or higher confidence warning
       if (w.severity !== 'medium' && w.severity !== 'high') return;
@@ -705,11 +705,13 @@ export default function JourneyScreen() {
         // If traveler is within 10 minutes of the warning
         if (timeToReach <= 10.0 && timeToReach > 0 && !notifiedUpcomingWarningIds.current.has(w.id)) {
           notifiedUpcomingWarningIds.current.add(w.id);
-          
-          // Send push notification
+
+          const place = w.lat != null && w.lon != null ? nearestRouteStop(route, w.lat, w.lon) : null;
+          const label = (w.title || '').replace(/\s+reported$/i, '').trim() || w.title;
+          const where = place ? ` near ${cleanPlaceLabel(place, 'your route')}` : '';
           sendLocalNotification(
-            'Upcoming Warning on Journey!',
-            `${w.title} is coming up ahead in about ${Math.round(timeToReach)} minutes.`
+            'Upcoming warning on your journey',
+            `${label}${where} in about ${Math.round(timeToReach)} min ahead.`
           ).catch((err) => console.warn('Failed to send upcoming warning notification:', err));
         }
       }
@@ -1081,11 +1083,7 @@ export default function JourneyScreen() {
                 { backgroundColor: selected ? CLEARWAY.blueStrong : palette.surface },
               ]}
             >
-              {option.type === 'smell' ? (
-                <Text style={{ fontSize: 16 }}>{option.emoji}</Text>
-              ) : (
-                <Ionicons name={option.icon} size={16} color={selected ? CLEARWAY.white : palette.textPrimary} />
-              )}
+              <Ionicons name={option.icon} size={16} color={selected ? CLEARWAY.white : palette.textPrimary} />
               <Text style={[styles.reportCapsuleLabel, { color: selected ? CLEARWAY.white : palette.textPrimary }]}>{option.label}</Text>
             </TouchableOpacity>
           );

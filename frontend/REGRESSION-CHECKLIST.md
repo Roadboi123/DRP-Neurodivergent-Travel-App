@@ -11,9 +11,13 @@ card → details → "Start journey").
 - [ ] Push notifications fire **only on the active-journey screen** (the hook's
       `notify` flag is `true` only there). The pre-Go route-details map must NOT
       notify, and revisiting the map must not re-fire alerts.
-- [ ] You **never** get a notification for **your own** report (`w.username ===
-      username` is skipped in both the hook's "new warning" effect and journey's
-      "upcoming warning" effect).
+- [ ] You **never** get a notification for **your own** report — compared against
+      `username || 'anonymous'` (logged-out reports are stored as `anonymous`), in
+      both the hook's "new warning" effect and journey's "upcoming warning" effect.
+- [ ] Others' warning notifications name roughly where: **"Sound reported near
+      South Kensington"** (via `nearestRouteStop`), not a raw description.
+- [ ] Notification icon is the Clearway logo (web `icon` option +
+      app.json `expo-notifications` plugin icon).
 - [ ] Existing warnings present when the journey opens are seeded into
       `knownWarningIdsRef` (no "new warning" spam on mount).
 

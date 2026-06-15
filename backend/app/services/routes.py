@@ -1292,15 +1292,6 @@ async def get_user_warnings(
                 "icon": "thermometer"
             })
             warning_id_counter += 1
-        elif temp >= 20.0:
-            warnings.append({
-                "id": f"w_temp_{warning_id_counter}",
-                "title": "Warm Carriages",
-                "desc": f"Deep tubes and non-AC buses will be warm ({temp}°C).",
-                "severity": "medium",
-                "icon": "thermometer"
-            })
-            warning_id_counter += 1
 
     # 3. Live line disruptions check from TfL Status API.
     # Suspensions and closures are safety-critical and must always be fetched;
@@ -1428,23 +1419,21 @@ async def get_user_warnings(
         any_high = len(severe_lines) > 0
         severity_val = "high" if any_high else "medium"
 
-        if u_crowds >= 3:
-            desc = f"{lines_str} delays are causing severe platform crowding." if any_high else f"{lines_str} delays are causing platform crowding."
+        # One warning per line delay (instead of separate crowding + noise cards).
+        # Describe whichever sensory effects matter to this traveller.
+        if u_crowds >= 3 or u_noise >= 3:
+            effects = []
+            if u_crowds >= 3:
+                effects.append("platform crowding")
+            if u_noise >= 3:
+                effects.append("louder station announcements")
+            effects_str = " and ".join(effects)
+            severe_prefix = "severe " if any_high and u_crowds >= 3 else ""
+            title = f"{delayed_lines[0]} Line Delays" if len(delayed_lines) == 1 else "Line Delays"
             warnings.append({
-                "id": f"w_tfl_crowds_{warning_id_counter}",
-                "title": "Station Crowding",
-                "desc": desc,
-                "severity": severity_val,
-                "icon": "alert-circle"
-            })
-            warning_id_counter += 1
-
-        if u_noise >= 3:
-            desc = f"{lines_str} delays are causing loud station announcements." if any_high else f"{lines_str} delays are causing station announcements."
-            warnings.append({
-                "id": f"w_tfl_noise_{warning_id_counter}",
-                "title": "Platform Noise",
-                "desc": desc,
+                "id": f"w_tfl_delays_{warning_id_counter}",
+                "title": title,
+                "desc": f"{lines_str} delays are causing {severe_prefix}{effects_str}.",
                 "severity": severity_val,
                 "icon": "alert-circle"
             })

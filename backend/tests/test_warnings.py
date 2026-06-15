@@ -119,9 +119,10 @@ def test_multiple_line_delays_sensory():
         mock_temp.return_value = 18.0
         
         warnings = asyncio.run(get_user_warnings(username="test_user", generic=False))
-        crowd_warnings = [w for w in warnings if w["title"] == "Station Crowding"]
-        assert len(crowd_warnings) == 1
-        assert crowd_warnings[0]["desc"] == "Multiple line delays are causing platform crowding."
+        # Crowding + noise are now merged into a single line-delay warning.
+        delay_warnings = [w for w in warnings if w["title"] == "Line Delays"]
+        assert len(delay_warnings) == 1
+        assert "platform crowding" in delay_warnings[0]["desc"]
 
 def test_line_suspensions_and_closures():
     with patch("app.services.routes.tlf_client.get_live_station_works", new_callable=AsyncMock) as mock_works, \

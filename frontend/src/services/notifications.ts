@@ -1,6 +1,11 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Image, Platform } from 'react-native';
 import { analytics } from '@/services/analytics';
+
+// The Clearway logo, used as the web notification icon. (Native uses the icon
+// configured in app.json's expo-notifications plugin.)
+const CLEARWAY_LOGO = require('../../assets/images/clearway-logo.png');
+const LOGO_URI: string | undefined = Image.resolveAssetSource(CLEARWAY_LOGO)?.uri;
 
 // Configure notification behavior for mobile devices
 if (Platform.OS !== 'web') {
@@ -47,7 +52,7 @@ export async function sendLocalNotification(title: string, body: string): Promis
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (window.Notification.permission === 'granted') {
-        const notification = new window.Notification(title, { body });
+        const notification = new window.Notification(title, { body, icon: LOGO_URI });
         notification.onclick = () => {
           window.focus();
           console.log('[Web Notification] Notification clicked (tap)');
