@@ -174,7 +174,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
   const changeNodes: { lat: number; lon: number; label: string; emoji: string }[] = [];
   nodes.forEach((node) => {
     if (node.isStart || node.isEnd) {
-      const fillColor = node.isStart ? '#5b9d6b' : '#5b8fd6';
+      const fillColor = node.isStart ? '#5b9d6b' : '#e23b3b';
       leafletJS += `
       L.circleMarker([${node.lat}, ${node.lon}], {
         radius: 9,
@@ -395,64 +395,9 @@ export default function JourneyScreen() {
   const [isExpanded, setIsExpanded] = useState(false);
   const initialPanDone = useRef(false);
 
-  // Map key (legend): a left-docked panel that starts on-screen and can be
-  // swiped off to the left (leaving a pull-tab) and back. `hideChanges` toggles
-  // the white "change here" markers on the map.
-  const [legendHidden, setLegendHidden] = useState(false);
+  // `hideChanges` toggles the white "change here" markers on the map (the toggle
+  // now lives in the top-right pill row; the legend itself is a static panel).
   const [hideChanges, setHideChanges] = useState(false);
-  const LEGEND_WIDTH = 210;
-  const LEGEND_TAB = 28;
-  const LEGEND_HIDDEN_X = -(LEGEND_WIDTH - LEGEND_TAB);
-  const legendX = useRef(new Animated.Value(0)).current; // 0 = fully shown
-  const legendCurX = useRef(0);
-  const legendStartX = useRef(0);
-
-  useEffect(() => {
-    const id = legendX.addListener(({ value }) => {
-      legendCurX.current = value;
-    });
-    return () => legendX.removeListener(id);
-  }, [legendX]);
-
-  const animateLegend = useCallback(
-    (hidden: boolean) => {
-      setLegendHidden(hidden);
-      Animated.spring(legendX, {
-        toValue: hidden ? LEGEND_HIDDEN_X : 0,
-        useNativeDriver: Platform.OS !== 'web',
-        overshootClamping: true,
-        tension: 60,
-        friction: 9,
-      }).start();
-    },
-    [legendX, LEGEND_HIDDEN_X],
-  );
-
-  const legendPan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-      onPanResponderGrant: () => {
-        legendStartX.current = legendCurX.current;
-        legendX.setOffset(legendStartX.current);
-        legendX.setValue(0);
-      },
-      onPanResponderMove: (_, g) => {
-        const min = LEGEND_HIDDEN_X - legendStartX.current;
-        const max = 0 - legendStartX.current;
-        legendX.setValue(Math.max(min, Math.min(max, g.dx)));
-      },
-      onPanResponderRelease: (_, g) => {
-        legendX.flattenOffset();
-        const current = legendCurX.current;
-        const hide = g.vx < -0.25 ? true : g.vx > 0.25 ? false : current < LEGEND_HIDDEN_X / 2;
-        animateLegend(hide);
-      },
-      onPanResponderTerminate: () => {
-        legendX.flattenOffset();
-      },
-    }),
-  ).current;
 
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
@@ -972,133 +917,105 @@ export default function JourneyScreen() {
         )}
       </View>
 
-      {/* Top Left Navigation Icons (Back and Home) */}
+      {/* Top controls: Back (left); Hide changes + Hide warnings (right, inline) */}
       <View
         pointerEvents="box-none"
         style={[styles.topControls, { top: insets.top + 16 }]}
       >
-        <View style={styles.navButtonsRow}>
-          <TouchableOpacity
-            onPress={() => {
-              // Return to the route details sheet shown before "Go", not the bare list.
-              requestReopenJourneyDetails();
-              router.back();
-            }}
-            style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-            accessibilityRole="button"
-            accessibilityLabel="Back to route details"
-          >
-            <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.replace('/(tabs)/routes')}
-            style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-            accessibilityRole="button"
-            accessibilityLabel="Home"
-          >
-            <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Hide / show all warning markers */}
         <TouchableOpacity
           onPress={() => {
-            analytics.trackClick();
-            setHideAll(!hideAll);
+            // Return to the route details sheet shown before "Go", not the bare list.
+            requestReopenJourneyDetails();
+            router.back();
           }}
-          style={[
-            styles.topPill,
-            { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
-          ]}
+          style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
           accessibilityRole="button"
-          accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+          accessibilityLabel="Back to route details"
         >
-          <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
-          <Text style={[styles.topPillText, { color: palette.textPrimary }]}>
-            {hideAll ? 'Show warnings' : 'Hide warnings'}
-          </Text>
+          <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
         </TouchableOpacity>
-      </View>
 
-      {/* Map key / legend — a left-docked panel you can swipe off and back.
-          Starts on-screen; the chevron tab shows it can slide away. */}
-      <Animated.View
-        style={[
-          styles.legendPanel,
-          {
-            top: insets.top + 80,
-            width: LEGEND_WIDTH,
-            backgroundColor: palette.surface,
-            borderColor: palette.border,
-            transform: [{ translateX: legendX }],
-          },
-        ]}
-        {...legendPan.panHandlers}
-      >
-        <View style={[styles.legendBody, { width: LEGEND_WIDTH - LEGEND_TAB }]}>
-          <Text style={[styles.legendTitle, { color: palette.textPrimary }]}>Map key</Text>
-
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#5b9d6b', borderColor: palette.border }]} />
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Start</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#5b8fd6', borderColor: palette.border }]} />
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Destination</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={styles.legendWalkDots}>
-              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-            </View>
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Walking</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendChangeDot, { borderColor: palette.border }]}>
-              <Text style={styles.legendChangeEmoji}>🚌</Text>
-            </View>
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Change (bus/train/tube)</Text>
-          </View>
-
-          <View style={[styles.legendDivider, { backgroundColor: palette.divider }]} />
-
+        <View style={styles.topPillRow}>
           {/* Hide / show the white change markers */}
           <TouchableOpacity
             onPress={() => {
               analytics.trackClick();
               setHideChanges((v) => !v);
             }}
-            style={[styles.legendToggleBtn, { backgroundColor: hideChanges ? accents.yellow : palette.surface, borderColor: palette.border }]}
+            style={[
+              styles.topPill,
+              { backgroundColor: hideChanges ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideChanges ? CLEARWAY.blueStrong : palette.border },
+            ]}
             accessibilityRole="button"
             accessibilityLabel={hideChanges ? 'Show change icons on map' : 'Hide change icons from map'}
           >
-            <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={15} color={palette.textPrimary} />
-            <Text style={[styles.legendToggleText, { color: palette.textPrimary }]}>
+            <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={16} color={hideChanges ? CLEARWAY.white : palette.textPrimary} />
+            <Text style={[styles.topPillText, { color: hideChanges ? CLEARWAY.white : palette.textPrimary }]}>
               {hideChanges ? 'Show changes' : 'Hide changes'}
             </Text>
           </TouchableOpacity>
-        </View>
 
-        {/* Pull-tab on the right edge — tap or swipe to slide the key off/on */}
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackClick();
-            animateLegend(!legendHidden);
-          }}
-          style={[styles.legendTab, { width: LEGEND_TAB, borderColor: palette.border }]}
-          accessibilityRole="button"
-          accessibilityLabel={legendHidden ? 'Show map key' : 'Hide map key'}
-        >
-          <Ionicons name={legendHidden ? 'chevron-forward' : 'chevron-back'} size={16} color={palette.textPrimary} />
-        </TouchableOpacity>
-      </Animated.View>
+          {/* Hide / show all warning markers */}
+          <TouchableOpacity
+            onPress={() => {
+              analytics.trackClick();
+              setHideAll(!hideAll);
+            }}
+            style={[
+              styles.topPill,
+              { backgroundColor: hideAll ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideAll ? CLEARWAY.blueStrong : palette.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+          >
+            <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={hideAll ? CLEARWAY.white : palette.textPrimary} />
+            <Text style={[styles.topPillText, { color: hideAll ? CLEARWAY.white : palette.textPrimary }]}>
+              {hideAll ? 'Show warnings' : 'Hide warnings'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Static map key (top-left): small, non-collapsible bars. Sits below the
+          top pill row and clears the transient notice banner above it. */}
+      <View style={[styles.legendStatic, { top: insets.top + 124 }]} pointerEvents="none">
+        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+          <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
+          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
+        </View>
+        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+          <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
+          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
+        </View>
+        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+          <View style={styles.legendWalkDots}>
+            <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+            <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+            <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+          </View>
+          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
+        </View>
+        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+          <View style={styles.legendEmojiStack}>
+            <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
+              <Text style={styles.legendEmoji}>🚶</Text>
+            </View>
+            <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+              <Text style={styles.legendEmoji}>🚌</Text>
+            </View>
+            <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+              <Text style={styles.legendEmoji}>🚆</Text>
+            </View>
+          </View>
+          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Change mode of transport</Text>
+        </View>
+      </View>
 
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
-        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.yellow, borderColor: palette.border }]}>
-          <Ionicons name="information-circle-outline" size={16} color={palette.textPrimary} />
-          <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>{reportNotice}</Text>
+        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: CLEARWAY.blueStrong, borderColor: CLEARWAY.blueStrong }]}>
+          <Ionicons name="information-circle-outline" size={16} color={CLEARWAY.white} />
+          <Text style={[styles.noticeBannerText, { color: CLEARWAY.white }]}>{reportNotice}</Text>
         </View>
       )}
 
@@ -1114,27 +1031,30 @@ export default function JourneyScreen() {
 
       {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
       <View style={[styles.reportCapsule, { top: insets.top + 144, backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <Text style={[styles.reportCapsuleHeader, { color: palette.textSecondary }]}>Report</Text>
+        <View style={[styles.reportCapsuleHeaderPill, { backgroundColor: CLEARWAY.blueStrong }]}>
+          <Text style={[styles.reportCapsuleHeader, { color: CLEARWAY.white }]}>Report</Text>
+        </View>
         <View style={[styles.reportDivider, { backgroundColor: palette.divider }]} />
-        {REPORT_OPTIONS.map((option) => (
-          <TouchableOpacity
-            key={option.type}
-            activeOpacity={0.85}
-            onPress={() => {
-              analytics.startDisruptionReport();
-              setReportingType(option.type);
-            }}
-            style={[
-              styles.reportCapsuleBtn,
-              {
-                backgroundColor: reportingType === option.type ? accents[option.accent] : palette.surface,
-              },
-            ]}
-          >
-            <Ionicons name={option.icon} size={16} color={palette.textPrimary} />
-            <Text style={[styles.reportCapsuleLabel, { color: palette.textPrimary }]}>{option.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {REPORT_OPTIONS.map((option) => {
+          const selected = reportingType === option.type;
+          return (
+            <TouchableOpacity
+              key={option.type}
+              activeOpacity={0.85}
+              onPress={() => {
+                analytics.startDisruptionReport();
+                setReportingType(option.type);
+              }}
+              style={[
+                styles.reportCapsuleBtn,
+                { backgroundColor: selected ? CLEARWAY.blueStrong : palette.surface },
+              ]}
+            >
+              <Ionicons name={option.icon} size={16} color={selected ? CLEARWAY.white : palette.textPrimary} />
+              <Text style={[styles.reportCapsuleLabel, { color: selected ? CLEARWAY.white : palette.textPrimary }]}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Swipe-up journey sheet — collapsed shows duration·cost; swipe up for details */}
@@ -1562,7 +1482,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  navButtonsRow: {
+  topPillRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -1575,65 +1495,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 19,
     borderWidth: 1,
-    ...hardShadow(3),
+    ...hardShadow(2),
   },
   topPillText: {
-    fontSize: 10.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    letterSpacing: 0.2,
-  },
-  legendPanel: {
-    position: 'absolute',
-    left: 0,
-    zIndex: 12,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    borderTopWidth: 2,
-    borderRightWidth: 2,
-    borderBottomWidth: 2,
-    borderTopRightRadius: 16,
-    borderBottomRightRadius: 16,
-    ...hardShadow(4),
-  },
-  legendBody: {
-    paddingVertical: 12,
-    paddingLeft: 14,
-    paddingRight: 8,
-  },
-  legendTab: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderLeftWidth: 2,
-  },
-  legendDivider: {
-    height: 1.5,
-    marginVertical: 8,
-  },
-  legendTitle: {
     fontSize: 11,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-    marginBottom: 8,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
-  legendRow: {
+  // Static map key — a small column of separate bars, top-left.
+  legendStatic: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 9,
+    gap: 6,
+    alignItems: 'flex-start',
+  },
+  legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 4,
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    ...hardShadow(1),
   },
   legendDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
   },
   legendWalkDots: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    width: 16,
+    width: 13,
     justifyContent: 'center',
   },
   legendWalkDot: {
@@ -1641,38 +1539,36 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  legendChangeDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  legendLabel: {
+    fontSize: 11.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+  },
+  legendEmojiStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendEmojiChip: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 1,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -3,
   },
-  legendChangeEmoji: {
-    fontSize: 11,
+  legendEmojiOverlap: {
+    marginLeft: -8,
   },
-  legendLabel: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    flex: 1,
+  legendEmoji: {
+    fontSize: 10,
   },
-  legendToggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 9,
-    marginTop: 2,
-  },
-  legendToggleText: {
-    fontSize: 10.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
+  reportCapsuleHeaderPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 4,
+    marginBottom: 2,
   },
   circleButton: {
     width: 54,
@@ -1708,7 +1604,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     // `top` applied inline as insets.top + 144 (see render).
     right: 16,
-    width: 54,
+    width: 60,
     zIndex: 10,
     borderWidth: 1,
     borderRadius: 22,
@@ -1718,13 +1614,11 @@ const styles = StyleSheet.create({
     ...hardShadow(3),
   },
   reportCapsuleHeader: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: Fonts?.display,
-    fontWeight: '900',
+    fontWeight: '800',
     textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 4,
-    letterSpacing: 0.5,
+    letterSpacing: 0.1,
   },
   reportDivider: {
     height: 1.5,

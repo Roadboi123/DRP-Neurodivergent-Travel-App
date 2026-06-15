@@ -526,7 +526,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       // emoji, matching the live journey map.
       pointsList.forEach((p) => {
         if (p.isStart || p.isEnd) {
-          const fillColor = p.isStart ? '#5b9d6b' : '#5b8fd6';
+          const fillColor = p.isStart ? '#5b9d6b' : '#e23b3b';
           leafletJS += `
             L.circleMarker([${p.lat}, ${p.lon}], {
               radius: 9,
@@ -727,13 +727,13 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                 }}
                 style={[
                   styles.hideWarningsBtn,
-                  { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
+                  { backgroundColor: hideAll ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideAll ? CLEARWAY.blueStrong : palette.border },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
               >
-                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
-                <Text style={[styles.hideWarningsText, { color: palette.textPrimary }]}>
+                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={hideAll ? CLEARWAY.white : palette.textPrimary} />
+                <Text style={[styles.hideWarningsText, { color: hideAll ? CLEARWAY.white : palette.textPrimary }]}>
                   {hideAll ? 'Show warnings' : 'Hide warnings'}
                 </Text>
               </TouchableOpacity>
