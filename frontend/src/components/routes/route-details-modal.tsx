@@ -16,7 +16,7 @@ import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { setActiveJourneyLabels, setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
 import { analytics } from '@/services/analytics';
-import { cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
+import { buildChangeInstruction, cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 
 interface RouteDetailsModalProps {
   visible: boolean;
@@ -232,10 +232,22 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
     }
   }, [visible, route, panY, MAX_TRANSLATE_Y]);
 
+  // On web the sheet sits over a full-screen map <iframe>. While dragging the
+  // sheet the pointer can pass over the iframe, which swallows the gesture and
+  // makes the drag stutter/"snap". Disabling the iframe's pointer events for the
+  // duration of the drag keeps the JS-driven gesture smooth (mirrors the live
+  // journey screen, where the same trick keeps the swipe fluid).
+  const setMapInteractive = (interactive: boolean) => {
+    if (Platform.OS !== 'web') return;
+    const f = document.querySelector('iframe');
+    if (f) (f as HTMLElement).style.pointerEvents = interactive ? 'auto' : 'none';
+  };
+
   const onPanResponderGrant = () => {
     startTranslateY.current = lastTranslateY.current;
     panY.setOffset(startTranslateY.current);
     panY.setValue(0);
+    setMapInteractive(false);
   };
 
   const onPanResponderMove = (_: any, gestureState: any) => {
@@ -246,6 +258,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
   };
 
   const onPanResponderRelease = (_: any, gestureState: any) => {
+    setMapInteractive(true);
     panY.flattenOffset();
     const currentY = lastTranslateY.current;
     const velocityY = gestureState.vy;
@@ -293,7 +306,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       onPanResponderGrant,
       onPanResponderMove,
       onPanResponderRelease,
-      onPanResponderTerminate: () => {},
+      onPanResponderTerminate: () => setMapInteractive(true),
     })
   ).current;
 
@@ -335,7 +348,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       onPanResponderGrant,
       onPanResponderMove,
       onPanResponderRelease,
-      onPanResponderTerminate: () => {},
+      onPanResponderTerminate: () => setMapInteractive(true),
     })
   ).current;
 
@@ -528,31 +541,14 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
         }
       });
 
-      // Build a "from X take Y at Z" instruction for each interchange, keyed by
-      // the change station, so a tapped change marker explains the transfer.
-      const describeLeg = (mode: string, line: string): string => {
-        const m = (mode || '').toLowerCase();
-        if (m === 'walking' || m === 'walk') return 'walking';
-        if (m === 'bus' || m === 'coach' || m.includes('bus')) return line ? `Bus ${line}` : 'the bus';
-        if (m === 'tube' || m === 'subway' || m === 'underground') return line ? `the ${line} line` : 'the Tube';
-        return line || (m ? m.charAt(0).toUpperCase() + m.slice(1) : 'transit');
-      };
-      const isBusMode = (mode: string) => {
-        const m = (mode || '').toLowerCase();
-        return m === 'bus' || m === 'coach' || m.includes('bus');
-      };
+      // Build a readable interchange instruction for each change, keyed by the
+      // change station, so a tapped change marker explains the transfer.
       const changePopupByKey: Record<string, string> = {};
       for (let i = 0; i < processedLegs.length - 1; i++) {
         const fromLeg = processedLegs[i];
         const toLeg = processedLegs[i + 1];
-        const station = cleanPlaceLabel(toLeg.arrival || fromLeg.arrival, 'the change');
-        const fromDesc = describeLeg(fromLeg.mode, fromLeg.line);
-        const toDesc = describeLeg(toLeg.mode, toLeg.line);
-        const sameMode = isBusMode(fromLeg.mode) && isBusMode(toLeg.mode);
-        const text = sameMode
-          ? `Switch ${fromDesc} to ${toDesc} at ${station}`
-          : `From ${fromDesc} take ${toDesc} at ${station}`;
-        changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] = text;
+        changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] =
+          buildChangeInstruction(fromLeg, toLeg);
       }
 
       // B. Draw nodes: start (green) and end (red) are plain dots; every
@@ -698,6 +694,45 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
             </TouchableOpacity>
           </View>
+
+          {/* Compact 2×2 map key, inline with the nav buttons (above the map's
+              Hide-warnings button) — same content/position as the live journey. */}
+          <View style={[styles.headerLegend, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
+              </View>
+            </View>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendWalkDots}>
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendEmojiStack}>
+                  <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚶</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚌</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚆</Text>
+                  </View>
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Changes</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
         {/* Content Area - Map fills the screen, sheet Panel sits absolutely at the bottom */}
@@ -765,45 +800,6 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               </TouchableOpacity>
             )}
 
-            {/* Compact 2×2 map key (top-left), same as the live journey screen. */}
-            {hasMapCoords && (
-              <View style={[styles.mapLegend, { backgroundColor: '#f6f8fb', borderColor: palette.border }]} pointerEvents="none">
-                <View style={styles.legendCol}>
-                  <View style={styles.legendRowItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
-                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
-                  </View>
-                  <View style={styles.legendRowItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
-                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
-                  </View>
-                </View>
-                <View style={styles.legendCol}>
-                  <View style={styles.legendRowItem}>
-                    <View style={styles.legendWalkDots}>
-                      <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-                      <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-                      <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-                    </View>
-                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
-                  </View>
-                  <View style={styles.legendRowItem}>
-                    <View style={styles.legendEmojiStack}>
-                      <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
-                        <Text style={styles.legendEmoji}>🚶</Text>
-                      </View>
-                      <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
-                        <Text style={styles.legendEmoji}>🚌</Text>
-                      </View>
-                      <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
-                        <Text style={styles.legendEmoji}>🚆</Text>
-                      </View>
-                    </View>
-                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Changes</Text>
-                  </View>
-                </View>
-              </View>
-            )}
           </View>
 
           {/* Timeline sheet panel overlapping the bottom of the map */}
@@ -1423,11 +1419,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   // Compact 2×2 map key overlay (top-left of the pre-Go map).
-  mapLegend: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    zIndex: 10,
+  // Map key inline in the header row, pushed to the right (above the map's
+  // Hide-warnings button), matching the live journey screen's position.
+  headerLegend: {
+    marginLeft: 'auto',
     flexDirection: 'row',
     gap: 12,
     paddingVertical: 8,

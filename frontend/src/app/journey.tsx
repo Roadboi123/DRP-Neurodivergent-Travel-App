@@ -28,7 +28,7 @@ import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
 import { haversineMeters } from '@/utils/geo';
-import { cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
+import { buildChangeInstruction, cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 import { sendLocalNotification } from '@/services/notifications';
 
 // How close (metres) the traveller must get to a warning before we ask them to
@@ -170,31 +170,14 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
     `;
   });
 
-  // Build a "from X take Y at Z" instruction for each interchange, keyed by the
-  // change station, so a tapped change marker explains the transfer in words.
-  const describeLeg = (mode: string, line: string): string => {
-    const m = (mode || '').toLowerCase();
-    if (m === 'walking' || m === 'walk') return 'walking';
-    if (m === 'bus' || m === 'coach' || m.includes('bus')) return line ? `Bus ${line}` : 'the bus';
-    if (m === 'tube' || m === 'subway' || m === 'underground') return line ? `the ${line} line` : 'the Tube';
-    return line || (m ? m.charAt(0).toUpperCase() + m.slice(1) : 'transit');
-  };
-  const isBusMode = (mode: string) => {
-    const m = (mode || '').toLowerCase();
-    return m === 'bus' || m === 'coach' || m.includes('bus');
-  };
+  // Build a readable interchange instruction for each change, keyed by the change
+  // station, so a tapped change marker explains the transfer in plain language.
   const changePopupByKey: Record<string, string> = {};
   for (let i = 0; i < processedLegs.length - 1; i++) {
     const fromLeg = processedLegs[i];
     const toLeg = processedLegs[i + 1];
-    const station = cleanPlaceLabel(toLeg.departure || fromLeg.arrival, 'the change');
-    const fromDesc = describeLeg(fromLeg.mode, fromLeg.line);
-    const toDesc = describeLeg(toLeg.mode, toLeg.line);
-    const sameMode = isBusMode(fromLeg.mode) && isBusMode(toLeg.mode);
-    const text = sameMode
-      ? `Switch ${fromDesc} to ${toDesc} at ${station}`
-      : `From ${fromDesc} take ${toDesc} at ${station}`;
-    changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] = text;
+    changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] =
+      buildChangeInstruction(fromLeg, toLeg);
   }
 
   // Start (green) and end (red) stay as plain dots; every interior point is a
@@ -1628,11 +1611,13 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
     gap: 10,
   },
   topPillRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     alignSelf: 'flex-start',
     gap: 8,
   },
