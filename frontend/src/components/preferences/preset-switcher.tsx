@@ -1,14 +1,13 @@
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import { presetDisplayName } from '@/constants/presets';
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, Fonts, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePresets } from '@/context/presets-context';
 
 export function PresetSwitcher() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
   const { presets, activeId, selectPreset } = usePresets();
 
   return (
@@ -26,10 +25,10 @@ export function PresetSwitcher() {
             style={({ pressed }) => [
               styles.chip,
               {
-                backgroundColor: selected ? accents.pink : palette.surface,
-                borderColor: palette.border,
+                backgroundColor: selected ? CLEARWAY.blue : palette.surface,
+                borderColor: selected ? CLEARWAY.blue : palette.border,
               },
-              hardShadow(pressed ? 2 : 4),
+              softShadow(1),
               pressed ? styles.chipPressed : null,
             ]}>
             <Text
@@ -58,18 +57,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
     paddingHorizontal: 4,
-    borderRadius: 14,
-    borderWidth: 2,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
   } as ViewStyle,
   chipPressed: {
-    transform: [{ translateY: 2 }],
+    transform: [{ scale: 0.97 }],
+    opacity: 0.9,
   } as ViewStyle,
   chipLabel: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
     textAlign: 'center',
   },
 });

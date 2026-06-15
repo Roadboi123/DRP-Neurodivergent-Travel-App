@@ -53,8 +53,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
   },
   chipRow: {
     flexDirection: 'row',

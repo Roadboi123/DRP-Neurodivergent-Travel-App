@@ -126,6 +126,8 @@ export const Fonts = Platform.select({
     rounded: 'ui-rounded',
     mono: 'ui-monospace',
     display: ClearwayFonts.display,
+    heading: ClearwayFonts.heading,
+    semibold: ClearwayFonts.semibold,
     body: ClearwayFonts.body,
   },
   default: {
@@ -134,6 +136,8 @@ export const Fonts = Platform.select({
     rounded: 'normal',
     mono: 'monospace',
     display: ClearwayFonts.display,
+    heading: ClearwayFonts.heading,
+    semibold: ClearwayFonts.semibold,
     body: ClearwayFonts.body,
   },
   web: {
@@ -142,6 +146,8 @@ export const Fonts = Platform.select({
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
     display: ClearwayFonts.display,
+    heading: ClearwayFonts.heading,
+    semibold: ClearwayFonts.semibold,
     body: ClearwayFonts.body,
   },
 });
