@@ -6,11 +6,12 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { WarningConfidence } from '@/components/routes/warning-confidence';
-import { WALK_BLUE, modeEmoji, warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
+import { WALK_BLUE, modeEmoji, warningDisplayDesc, warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
 import { BlurView } from 'expo-blur';
 
 import { CLEARWAY, Fonts, GLASS, getAccents, getPalette, getSemanticColors, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuth } from '@/context/auth-context';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { setActiveJourneyLabels, setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
@@ -81,6 +82,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
+  const { username } = useAuth();
   const semantic = getSemanticColors(isDark);
   const linkColor = semantic.link;
 
@@ -145,7 +147,10 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
     formattedWarnings,
     selectedWarning,
     setSelectedWarning,
+    selectedCluster,
+    setSelectedCluster,
     openWarningById,
+    openClusterByIds,
     selectedIsOwn,
     removeOwnWarning,
     dismissWarning,
@@ -186,6 +191,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data.type === 'warningClick' && data.id) {
           openWarningById(data.id);
+        } else if (data.type === 'warningClusterClick' && data.ids) {
+          openClusterByIds(data.ids);
         }
       } catch {
         // Ignore other/external window messages
@@ -193,7 +200,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
     };
     window.addEventListener('message', handleWebMessage);
     return () => window.removeEventListener('message', handleWebMessage);
-  }, [openWarningById]);
+  }, [openWarningById, openClusterByIds]);
 
   // Bottom Sheet animations and dimensions
   const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -521,7 +528,34 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
         }
       });
 
-      // B. Draw nodes: start (green) and end (pink) are plain dots; every
+      // Build a "from X take Y at Z" instruction for each interchange, keyed by
+      // the change station, so a tapped change marker explains the transfer.
+      const describeLeg = (mode: string, line: string): string => {
+        const m = (mode || '').toLowerCase();
+        if (m === 'walking' || m === 'walk') return 'walking';
+        if (m === 'bus' || m === 'coach' || m.includes('bus')) return line ? `Bus ${line}` : 'the bus';
+        if (m === 'tube' || m === 'subway' || m === 'underground') return line ? `the ${line} line` : 'the Tube';
+        return line || (m ? m.charAt(0).toUpperCase() + m.slice(1) : 'transit');
+      };
+      const isBusMode = (mode: string) => {
+        const m = (mode || '').toLowerCase();
+        return m === 'bus' || m === 'coach' || m.includes('bus');
+      };
+      const changePopupByKey: Record<string, string> = {};
+      for (let i = 0; i < processedLegs.length - 1; i++) {
+        const fromLeg = processedLegs[i];
+        const toLeg = processedLegs[i + 1];
+        const station = cleanPlaceLabel(toLeg.arrival || fromLeg.arrival, 'the change');
+        const fromDesc = describeLeg(fromLeg.mode, fromLeg.line);
+        const toDesc = describeLeg(toLeg.mode, toLeg.line);
+        const sameMode = isBusMode(fromLeg.mode) && isBusMode(toLeg.mode);
+        const text = sameMode
+          ? `Switch ${fromDesc} to ${toDesc} at ${station}`
+          : `From ${fromDesc} take ${toDesc} at ${station}`;
+        changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] = text;
+      }
+
+      // B. Draw nodes: start (green) and end (red) are plain dots; every
       // interchange is a white "change here" marker with the boarding mode's
       // emoji, matching the live journey map.
       pointsList.forEach((p) => {
@@ -539,7 +573,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
           `;
         } else {
           const emoji = modeEmoji(p.boardMode);
-          const label = cleanPlaceLabel(p.label, 'Change here').replace(/"/g, '&quot;');
+          const popupText = (changePopupByKey[(p.label || '').toLowerCase()] || cleanPlaceLabel(p.label, 'Change here')).replace(/"/g, '&quot;');
           leafletJS += `
             L.marker([${p.lat}, ${p.lon}], {
               icon: L.divIcon({
@@ -548,7 +582,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                 iconSize: [30, 30],
                 iconAnchor: [15, 15]
               })
-            }).addTo(map).bindPopup("<b>${label}</b>");
+            }).addTo(map).bindPopup("<b>${popupText}</b>");
           `;
         }
       });
@@ -697,6 +731,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                         const data = JSON.parse(event.nativeEvent.data);
                         if (data.type === 'warningClick' && data.id) {
                           openWarningById(data.id);
+                        } else if (data.type === 'warningClusterClick' && data.ids) {
+                          openClusterByIds(data.ids);
                         }
                       } catch {
                         // Ignore
@@ -727,6 +763,46 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                   {hideAll ? 'Show warnings' : 'Hide warnings'}
                 </Text>
               </TouchableOpacity>
+            )}
+
+            {/* Compact 2×2 map key (top-left), same as the live journey screen. */}
+            {hasMapCoords && (
+              <View style={[styles.mapLegend, { backgroundColor: '#f6f8fb', borderColor: palette.border }]} pointerEvents="none">
+                <View style={styles.legendCol}>
+                  <View style={styles.legendRowItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
+                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
+                  </View>
+                  <View style={styles.legendRowItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
+                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
+                  </View>
+                </View>
+                <View style={styles.legendCol}>
+                  <View style={styles.legendRowItem}>
+                    <View style={styles.legendWalkDots}>
+                      <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                      <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                      <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                    </View>
+                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
+                  </View>
+                  <View style={styles.legendRowItem}>
+                    <View style={styles.legendEmojiStack}>
+                      <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
+                        <Text style={styles.legendEmoji}>🚶</Text>
+                      </View>
+                      <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                        <Text style={styles.legendEmoji}>🚌</Text>
+                      </View>
+                      <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                        <Text style={styles.legendEmoji}>🚆</Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Changes</Text>
+                  </View>
+                </View>
+              </View>
             )}
           </View>
 
@@ -932,7 +1008,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
 
                   <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
                   <WarningConfidence warning={selectedWarning} />
-                  <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
+                  <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{warningDisplayDesc(selectedWarning, username)}</Text>
 
                   <TouchableOpacity
                     onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
@@ -951,6 +1027,63 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                   <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
                     {selectedIsOwn ? 'Removes it from the map for everyone' : 'Hides it for you only'}
                   </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Cluster breakdown — all sensory warnings in one ~100m area. */}
+          {selectedCluster && (
+            <View style={styles.warningOverlayRoot} pointerEvents="box-none">
+              <TouchableOpacity
+                style={styles.warningBackdrop}
+                activeOpacity={1}
+                onPress={() => setSelectedCluster(null)}
+              />
+              <View style={styles.warningCenterContainer} pointerEvents="box-none">
+                <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedCluster(null)}
+                    style={[styles.warningCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss"
+                  >
+                    <Ionicons name="close" size={16} color={palette.textPrimary} />
+                  </TouchableOpacity>
+                  <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>
+                    {selectedCluster.length} warnings here
+                  </Text>
+                  <ScrollView style={styles.clusterList} showsVerticalScrollIndicator={false}>
+                    {selectedCluster.map((w) => (
+                      <TouchableOpacity
+                        key={w.id}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setSelectedCluster(null);
+                          setSelectedWarning(w);
+                        }}
+                        style={styles.clusterRow}
+                      >
+                        <View
+                          style={[
+                            styles.clusterRowIcon,
+                            { backgroundColor: warningVisual(w.icon, accents).color, borderColor: palette.border },
+                          ]}
+                        >
+                          <Text style={{ fontSize: 15 }}>{warningVisual(w.icon, accents).emoji}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.clusterRowTitle, { color: palette.textPrimary }]} numberOfLines={1}>
+                            {w.title}
+                          </Text>
+                          <Text style={[styles.clusterRowDesc, { color: palette.textSecondary }]} numberOfLines={2}>
+                            {warningDisplayDesc(w, username)}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={palette.textMuted} />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
                 </View>
               </View>
             </View>
@@ -1289,4 +1422,38 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
+  // Compact 2×2 map key overlay (top-left of the pre-Go map).
+  mapLegend: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 10,
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    ...softShadow(1),
+  },
+  legendCol: { gap: 5 },
+  legendRowItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 13, height: 13, borderRadius: 7 },
+  legendWalkDots: { flexDirection: 'row', alignItems: 'center', gap: 3, width: 13, justifyContent: 'center' },
+  legendWalkDot: { width: 4, height: 4, borderRadius: 2 },
+  legendLabel: { fontSize: 11.5, fontFamily: Fonts?.semibold, fontWeight: '700' },
+  legendEmojiStack: { flexDirection: 'row', alignItems: 'center' },
+  legendEmojiChip: {
+    width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: '#ffffff',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  legendEmojiOverlap: { marginLeft: -8 },
+  legendEmoji: { fontSize: 10 },
+  clusterList: { alignSelf: 'stretch', maxHeight: 260, marginTop: 4 },
+  clusterRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  clusterRowIcon: {
+    width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+  },
+  clusterRowTitle: { fontSize: 13, fontFamily: Fonts?.semibold, fontWeight: '700' },
+  clusterRowDesc: { fontSize: 12, fontFamily: Fonts?.body, lineHeight: 16 },
 });

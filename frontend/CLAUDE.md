@@ -1,6 +1,11 @@
 @AGENTS.md
 @DESIGN.md
 
+> **Before touching routes / route-details / journey / warnings code, read
+> `REGRESSION-CHECKLIST.md`** and re-verify the relevant rows — those features
+> (journey notifications, warning markers/clustering, map legend, change popups)
+> regress easily on unrelated changes.
+
 # Frontend (Expo / React Native)
 
 > **Before any UI work, read `DESIGN.md`** — the design system and the **required**
