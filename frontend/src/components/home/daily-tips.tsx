@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { getPalette, hardShadow } from '@/constants/theme';
+import { Glass } from '@/components/ui/glass';
+import { Fonts, getPalette, Radii } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
 
@@ -81,19 +82,16 @@ export function DailyTips({ warnings = [] }: DailyTipsProps) {
   };
 
   return (
-    <View style={[styles.tipsContainer, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      {renderTips()}
-    </View>
+    <Glass radius={Radii.card} shadow={2}>
+      <View style={styles.tipsContainer}>{renderTips()}</View>
+    </Glass>
   );
 }
 
 const styles = StyleSheet.create({
   tipsContainer: {
-    borderRadius: 14,
-    borderWidth: 2,
-    padding: 16,
+    padding: 18,
     gap: 12,
-    ...hardShadow(5),
   },
   tipRow: {
     flexDirection: 'row',
@@ -102,8 +100,9 @@ const styles = StyleSheet.create({
   },
   tipText: {
     flex: 1,
-    fontSize: 12.5,
-    lineHeight: 17,
+    fontSize: 13,
+    fontFamily: Fonts?.body,
+    lineHeight: 18,
   },
   tipDivider: {
     height: 1,

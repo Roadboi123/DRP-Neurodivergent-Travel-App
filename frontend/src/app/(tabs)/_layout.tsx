@@ -1,9 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { StyleSheet } from 'react-native';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, ClearwayFonts, GLASS, getAccents, getPalette, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNavBar } from '@/contexts/navbar-context';
 
@@ -20,18 +22,26 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarActiveTintColor: accents.pink,
+        tabBarActiveTintColor: CLEARWAY.blueStrong,
         tabBarInactiveTintColor: palette.textMuted,
         tabBarLabelStyle: {
-          fontFamily: Fonts?.display,
-          fontSize: 10,
-          fontWeight: '800',
-          textTransform: 'uppercase',
-          letterSpacing: 0.3,
+          fontFamily: ClearwayFonts.semibold,
+          fontSize: 11,
+          letterSpacing: 0.2,
         },
-        // Floating Wero pill: outlined surface with a hard offset shadow,
-        // letting users move between Home, Routes and Preferences. Hidden
-        // entirely while a screen opts out (e.g. the route-details modal).
+        // Floating frosted-glass pill, letting users move between Home, Routes
+        // and Preferences. The blur sits behind a translucent fill (set on the
+        // tabBarStyle). Hidden entirely while a screen opts out (e.g. the
+        // route-details modal).
+        tabBarBackground: hidden
+          ? undefined
+          : () => (
+              <BlurView
+                intensity={GLASS.light.blur}
+                tint="light"
+                style={[StyleSheet.absoluteFill, { borderRadius: 33, overflow: 'hidden' }]}
+              />
+            ),
         tabBarStyle: hidden
           ? { display: 'none' }
           : {
@@ -41,13 +51,13 @@ export default function TabLayout() {
               bottom: 16,
               height: 66,
               borderRadius: 33,
-              backgroundColor: palette.surface,
-              borderWidth: 2,
-              borderTopWidth: 2,
-              borderColor: palette.border,
+              backgroundColor: GLASS.light.fill,
+              borderWidth: 1,
+              borderTopWidth: 1,
+              borderColor: GLASS.light.border,
               paddingTop: 8,
               paddingBottom: 8,
-              ...hardShadow(6),
+              ...softShadow(3),
             },
       }}>
       <Tabs.Screen

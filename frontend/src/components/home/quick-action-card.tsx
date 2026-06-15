@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Glass } from '@/components/ui/glass';
+import { CLEARWAY, Fonts, getPalette, Radii } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface QuickActionCardProps {
@@ -12,9 +13,10 @@ interface QuickActionCardProps {
   title: string;
   description: string;
   onPress: () => void;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
 }
 
+/** A frosted-glass action card (Clearway). The icon sits in a soft tinted tile. */
 export function QuickActionCard({
   iconName,
   iconColor,
@@ -28,50 +30,49 @@ export function QuickActionCard({
   const palette = getPalette(isDark);
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      style={[styles.gridCard, { backgroundColor: palette.surface, borderColor: palette.border }, style]}>
-      <View
-        style={[
-          styles.iconContainer,
-          { backgroundColor: iconBackground, borderColor: palette.border },
-        ]}>
-        <Ionicons name={iconName} size={24} color={iconColor} />
-      </View>
-      <Text style={[styles.cardTitleText, { color: palette.textPrimary }]}>{title}</Text>
-      <Text style={[styles.cardDescText, { color: palette.textMuted }]}>{description}</Text>
-    </TouchableOpacity>
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      style={({ pressed }) => [pressed && styles.pressed, style]}>
+      <Glass radius={Radii.card} shadow={2}>
+        <View style={styles.inner}>
+          <View style={[styles.iconContainer, { backgroundColor: iconBackground }]}>
+            <Ionicons name={iconName} size={24} color={iconColor} />
+          </View>
+          <Text style={[styles.cardTitleText, { color: palette.textPrimary }]}>{title}</Text>
+          <Text style={[styles.cardDescText, { color: palette.textMuted }]}>{description}</Text>
+        </View>
+      </Glass>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  gridCard: {
-    flex: 0.5,
-    borderRadius: 14,
-    borderWidth: 2,
-    padding: 16,
+  pressed: { transform: [{ scale: 0.985 }], opacity: 0.9 },
+  inner: {
+    padding: 18,
     alignItems: 'flex-start',
-    ...hardShadow(6),
   },
   iconContainer: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
-    borderWidth: 2,
   },
   cardTitleText: {
-    fontSize: 15,
+    fontSize: 18,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: -0.4,
     marginBottom: 4,
+    color: CLEARWAY.heading,
   },
   cardDescText: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 13,
+    fontFamily: Fonts?.body,
+    lineHeight: 17,
   },
 });

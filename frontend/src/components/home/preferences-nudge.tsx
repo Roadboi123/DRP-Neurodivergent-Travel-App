@@ -1,15 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { Glass } from '@/components/ui/glass';
+import { CLEARWAY, Fonts, getPalette, Radii } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 /**
- * Friendly speech-bubble that points first-time / logged-out travellers toward
- * setting their sensory preferences — the thing that makes route scoring
- * personal. Wero styling (ink border, hard shadow, bright fill); a gentle pulse
- * on the leading icon draws the eye without being noisy.
+ * Friendly card that points first-time / logged-out travellers toward setting
+ * their sensory preferences — the thing that makes route scoring personal.
+ * Clearway styling: a frosted-glass card with a blue→lilac gradient icon chip
+ * and a gentle pulse to draw the eye without being noisy.
  */
 export function PreferencesNudge({
   title = 'Make it yours',
@@ -22,7 +24,6 @@ export function PreferencesNudge({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
 
   // Subtle attention pulse on the icon (transform/opacity only — RN-web safe).
   const pulse = useRef(new Animated.Value(0)).current;
@@ -54,31 +55,25 @@ export function PreferencesNudge({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${message}`}
-      style={({ pressed }) => [styles.wrap, pressed ? styles.wrapPressed : null]}
-    >
-      {/* Little downward tail (drawn first so the bubble body covers its top). */}
-      <View style={[styles.tail, { backgroundColor: accents.yellow, borderColor: palette.border }]} />
-      <View
-        style={[
-          styles.bubble,
-          { backgroundColor: accents.yellow, borderColor: palette.border },
-          hardShadow(4),
-        ]}
-      >
-        <Animated.View
-          style={[
-            styles.iconCircle,
-            { backgroundColor: palette.surface, borderColor: palette.border, transform: [{ scale }] },
-          ]}
-        >
-          <Ionicons name="sparkles" size={16} color={palette.textPrimary} />
-        </Animated.View>
-        <View style={styles.textCol}>
-          <Text style={[styles.title, { color: palette.textPrimary }]}>{title}</Text>
-          <Text style={[styles.message, { color: palette.textPrimary }]}>{message}</Text>
+      style={({ pressed }) => [styles.wrap, pressed ? styles.wrapPressed : null]}>
+      <Glass radius={Radii.card} shadow={2}>
+        <View style={styles.bubble}>
+          <Animated.View style={{ transform: [{ scale }] }}>
+            <LinearGradient
+              colors={[CLEARWAY.bluePillTo, CLEARWAY.lilac]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.iconCircle}>
+              <Ionicons name="sparkles" size={17} color={CLEARWAY.white} />
+            </LinearGradient>
+          </Animated.View>
+          <View style={styles.textCol}>
+            <Text style={[styles.title, { color: palette.textPrimary }]}>{title}</Text>
+            <Text style={[styles.message, { color: palette.textSecondary }]}>{message}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={palette.textMuted} />
         </View>
-        <Ionicons name="chevron-forward" size={18} color={palette.textPrimary} />
-      </View>
+      </Glass>
     </Pressable>
   );
 }
@@ -88,22 +83,20 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   wrapPressed: {
-    transform: [{ translateY: 2 }],
+    transform: [{ scale: 0.99 }],
+    opacity: 0.92,
   },
   bubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
+    gap: 14,
+    paddingVertical: 16,
     paddingHorizontal: 16,
-    borderRadius: 16,
-    borderWidth: 2,
   },
   iconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 2,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -111,27 +104,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 13,
+    fontSize: 16,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: -0.3,
     marginBottom: 2,
   },
   message: {
-    fontSize: 12.5,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-  // A 2px-bordered square rotated 45° reads as a triangular tail; it sits just
-  // under the bubble's left, with the top half hidden behind the bubble body.
-  tail: {
-    position: 'absolute',
-    bottom: -7,
-    left: 28,
-    width: 14,
-    height: 14,
-    borderWidth: 2,
-    transform: [{ rotate: '45deg' }],
+    fontSize: 13,
+    fontFamily: Fonts?.body,
+    lineHeight: 18,
+    fontWeight: '500',
   },
 });

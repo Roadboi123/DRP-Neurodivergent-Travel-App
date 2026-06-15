@@ -8,7 +8,7 @@ import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
 import { GradientBackground } from '@/components/ui/gradient-background';
-import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { BRAND, CLEARWAY, Fonts, getAccents, getPalette, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/auth-context';
 
@@ -48,7 +48,8 @@ export default function HomeScreen() {
               onPress={() => setProfileModalVisible(true)}
               style={[
                 styles.profileIconBtn,
-                { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }
+                { backgroundColor: palette.surface, borderColor: palette.border, borderWidth: 1 },
+                softShadow(1),
               ]}
               activeOpacity={0.8}
               accessibilityLabel="Open profile modal"
@@ -56,9 +57,9 @@ export default function HomeScreen() {
               <Ionicons
                 name={isLoggedIn ? "person" : "person-outline"}
                 size={18}
-                color={isLoggedIn ? "#E91E63" : palette.textPrimary}
+                color={isLoggedIn ? CLEARWAY.blueStrong : palette.textPrimary}
               />
-              {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: palette.background }]} />}
+              {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: CLEARWAY.white }]} />}
             </TouchableOpacity>
           </View>
         </View>
@@ -102,9 +103,9 @@ export default function HomeScreen() {
                 styles.editButton,
                 {
                   backgroundColor: palette.surface,
-                  borderColor: palette.border,
+                  borderColor: palette.borderStrong,
                 },
-                hardShadow(pressed ? 2 : 3),
+                softShadow(1),
                 pressed ? styles.editButtonPressed : null,
               ]}>
               <Ionicons name="build" size={14} color={palette.textPrimary} />
@@ -143,21 +144,21 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   profileIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   profileActiveDot: {
     position: 'absolute',
-    top: 2,
-    right: 2,
+    top: 3,
+    right: 3,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#2E7D32',
+    backgroundColor: CLEARWAY.good,
     borderWidth: 1.5,
   },
   statusRow: {
@@ -166,24 +167,23 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   greetingText: {
-    fontSize: 13,
+    fontSize: 14,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
   },
   title: {
-    fontSize: 36,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: -1,
-    lineHeight: 36,
-  },
-  sectionTitle: {
-    fontSize: 17,
+    fontSize: 40,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
+    letterSpacing: -1.4,
+    lineHeight: 42,
+  },
+  sectionTitle: {
+    fontSize: 19,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
     marginBottom: 12,
-    letterSpacing: 0.2,
+    letterSpacing: -0.4,
   },
   planCard: {
     width: '100%',
@@ -200,20 +200,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
     marginBottom: 12,
   },
   editButtonPressed: {
-    transform: [{ translateY: 2 }],
+    transform: [{ scale: 0.97 }],
+    opacity: 0.85,
   },
   editButtonLabel: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontFamily: Fonts?.body,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
 });
