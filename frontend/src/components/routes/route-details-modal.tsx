@@ -7,7 +7,9 @@ import { WebView } from 'react-native-webview';
 import { getLegUIProps } from '@/components/routes/route-card';
 import { WarningConfidence } from '@/components/routes/warning-confidence';
 import { WALK_BLUE, modeEmoji, warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
-import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
+import { BlurView } from 'expo-blur';
+
+import { CLEARWAY, Fonts, GLASS, getAccents, getPalette, getSemanticColors, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { setActiveJourneyLabels, setActiveJourneyRoute } from '@/services/active-journey';
@@ -524,7 +526,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       // emoji, matching the live journey map.
       pointsList.forEach((p) => {
         if (p.isStart || p.isEnd) {
-          const fillColor = p.isStart ? '#83f582' : '#ff158a';
+          const fillColor = p.isStart ? '#5b9d6b' : '#5b8fd6';
           leafletJS += `
             L.circleMarker([${p.lat}, ${p.lon}], {
               radius: 9,
@@ -744,8 +746,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
             style={[
             styles.sheetPanel,
             {
-              backgroundColor: palette.surface,
-              borderColor: palette.border,
+              backgroundColor: GLASS.light.fill,
+              borderColor: GLASS.light.border,
               height: SHEET_HEIGHT,
               position: 'absolute',
               bottom: 0,
@@ -754,6 +756,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               transform: [{ translateY: panY }]
             }
           ]}>
+            <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
             {/* Drag handle header wrapper */}
             <View
               style={styles.sheetHeaderTouch}
@@ -779,12 +782,12 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={startJourney}
-                  style={[styles.startJourneyButton, { backgroundColor: accents.green, borderColor: palette.border }]}
+                  style={[styles.startJourneyButton, { backgroundColor: CLEARWAY.blue }]}
                   accessibilityRole="button"
                   accessibilityLabel="Start journey mode"
                 >
-                  <Ionicons name="play" size={18} color={palette.textPrimary} />
-                  <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Start journey</Text>
+                  <Ionicons name="play" size={18} color={CLEARWAY.white} />
+                  <Text style={[styles.startJourneyText, { color: CLEARWAY.white }]}>Start journey</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -918,10 +921,10 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                 onPress={() => setSelectedWarning(null)}
               />
               <View style={styles.warningCenterContainer} pointerEvents="box-none">
-                <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
                   <TouchableOpacity
                     onPress={() => setSelectedWarning(null)}
-                    style={[styles.warningCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                    style={[styles.warningCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
                     accessibilityRole="button"
                     accessibilityLabel="Dismiss"
                   >
@@ -946,11 +949,11 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                     activeOpacity={0.85}
                     style={[
                       styles.warningCardAction,
-                      { backgroundColor: selectedIsOwn ? accents.pink : accents.green, borderColor: palette.border },
+                      { backgroundColor: selectedIsOwn ? CLEARWAY.bad : CLEARWAY.blue },
                     ]}
                   >
-                    <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
-                    <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                    <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={CLEARWAY.white} />
+                    <Text style={[styles.warningCardActionText, { color: CLEARWAY.white }]}>
                       {selectedIsOwn ? 'Remove' : 'Close'}
                     </Text>
                   </TouchableOpacity>
@@ -982,7 +985,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 16,
-    borderBottomWidth: 1.5,
+    borderBottomWidth: 1,
   },
   navButtonsRow: {
     flexDirection: 'row',
@@ -990,23 +993,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   circleButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 2,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    ...hardShadow(3),
+    ...softShadow(1),
   },
   routeTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontWeight: '800',
+    letterSpacing: -0.4,
   },
   routeSub: {
-    fontSize: 11,
+    fontSize: 12,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -1022,13 +1025,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sheetPanel: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
+    borderTopLeftRadius: Radii.cardLg,
+    borderTopRightRadius: Radii.cardLg,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     overflow: 'hidden',
-    ...hardShadow(10),
+    ...softShadow(3),
   },
   sheetHeaderTouch: {
     width: '100%',
@@ -1048,7 +1051,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderBottomWidth: 1.5,
+    borderBottomWidth: 1,
   },
   statsGroup: {
     flexDirection: 'row',
@@ -1059,33 +1062,32 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   statLabel: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 10,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   statVal: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: Fonts?.display,
     fontWeight: '800',
+    letterSpacing: -0.3,
     marginTop: 2,
   },
   startJourneyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    borderWidth: 2.5,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: Radii.pill,
+    paddingVertical: 13,
     paddingHorizontal: 24,
-    ...hardShadow(4),
+    ...softShadow(1),
   },
   startJourneyText: {
     fontSize: 15,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   scrollContent: {
     padding: 16,
@@ -1108,7 +1110,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -1126,15 +1128,18 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   stationText: {
-    fontSize: 13,
+    fontSize: 13.5,
+    fontFamily: Fonts?.semibold,
     fontWeight: '800',
   },
   instructionText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
   },
   arrivalText: {
-    fontSize: 11.5,
+    fontSize: 12,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -1150,8 +1155,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   stopsHeader: {
-    fontSize: 10.5,
-    fontWeight: '800',
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
   },
   stopsList: {
     gap: 2,
@@ -1165,14 +1171,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radii.input,
+    borderWidth: 1,
     marginTop: 8,
   },
   waitWarningText: {
-    fontSize: 11,
+    fontSize: 11.5,
+    fontFamily: Fonts?.body,
     fontWeight: '700',
     flex: 1,
   },
@@ -1192,19 +1199,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     height: 38,
-    paddingHorizontal: 12,
-    borderRadius: 19,
-    borderWidth: 2,
+    paddingHorizontal: 14,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
     justifyContent: 'center',
     zIndex: 10,
-    ...hardShadow(3),
+    ...softShadow(1),
   },
   hideWarningsText: {
-    fontSize: 10.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   warningOverlayRoot: {
     ...StyleSheet.absoluteFillObject,
@@ -1221,8 +1227,8 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   warningCard: {
-    borderWidth: 3,
-    borderRadius: 20,
+    borderWidth: 1,
+    borderRadius: Radii.cardLg,
     paddingTop: 20,
     paddingBottom: 16,
     paddingHorizontal: 18,
@@ -1230,7 +1236,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 300,
     gap: 8,
-    ...hardShadow(6),
+    ...softShadow(3),
   },
   warningCancelBtn: {
     position: 'absolute',
@@ -1239,16 +1245,16 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    ...hardShadow(2),
+    ...softShadow(1),
   },
   warningCardIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    borderWidth: 2.5,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1256,17 +1262,18 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   warningCardTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: '800',
+    letterSpacing: -0.4,
     textAlign: 'center',
     marginTop: 2,
   },
   warningCardDesc: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
+    fontSize: 12.5,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
+    lineHeight: 17,
     textAlign: 'center',
   },
   warningCardAction: {
@@ -1274,23 +1281,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderWidth: 2.5,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: Radii.pill,
+    paddingVertical: 13,
     paddingHorizontal: 18,
     alignSelf: 'stretch',
     marginTop: 4,
-    ...hardShadow(2),
+    ...softShadow(1),
   },
   warningCardActionText: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontSize: 13,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
   },
   warningCardHint: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
     textAlign: 'center',
   },
 });

@@ -1,9 +1,10 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { Modal, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
-import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, Fonts, GLASS, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { AcFilter, RouteFilters, SortMode } from '@/components/routes/route-filtering';
 
@@ -41,7 +42,6 @@ export function RouteFilterSheet({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -49,8 +49,9 @@ export function RouteFilterSheet({
         {/* Stop backdrop taps from closing when they land on the sheet itself */}
         <TouchableOpacity
           activeOpacity={1}
-          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
+          style={[styles.sheet, { backgroundColor: GLASS.light.fill, borderColor: GLASS.light.border }]}
           onPress={(e) => e.stopPropagation()}>
+          <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} />
           <View style={styles.handle} />
 
           <View style={styles.header}>
@@ -87,9 +88,9 @@ export function RouteFilterSheet({
             <Switch
               value={filters.groupByChanges}
               onValueChange={(groupByChanges) => onChange({ ...filters, groupByChanges })}
-              trackColor={{ false: isDark ? '#3A4150' : '#D1D5DB', true: accents.pink }}
+              trackColor={{ false: '#c9d0d8', true: CLEARWAY.blue }}
               thumbColor="#FFF"
-              ios_backgroundColor={isDark ? '#3A4150' : '#D1D5DB'}
+              ios_backgroundColor="#c9d0d8"
             />
           </View>
           <Text style={[styles.helperNote, { color: palette.textSecondary }]}>
@@ -100,7 +101,7 @@ export function RouteFilterSheet({
           <TouchableOpacity
             onPress={onClose}
             activeOpacity={0.85}
-            style={[styles.doneButton, { backgroundColor: accents.pink, borderColor: palette.border }]}>
+            style={[styles.doneButton, { backgroundColor: CLEARWAY.blue }]}>
             <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -117,12 +118,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: Radii.cardLg,
+    borderTopRightRadius: Radii.cardLg,
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
-    borderWidth: 2,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...softShadow(3),
   },
   handle: {
     alignSelf: 'center',
@@ -139,11 +142,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   sectionHeading: {
     flexDirection: 'row',
@@ -153,11 +155,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionHeadingText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: -0.2,
   },
   switchRow: {
     flexDirection: 'row',
@@ -174,27 +175,27 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontSize: 15,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
   },
   helperNote: {
     fontSize: 13,
+    fontFamily: Fonts?.body,
     lineHeight: 18,
     marginTop: 8,
   },
   doneButton: {
     marginTop: 26,
-    paddingVertical: 15,
-    borderRadius: 30,
+    paddingVertical: 16,
+    borderRadius: Radii.pill,
     alignItems: 'center',
-    borderWidth: 2,
-    ...hardShadow(5),
+    ...softShadow(1),
   },
   doneButtonText: {
-    color: BRAND.white,
-    fontFamily: Fonts?.display,
-    fontSize: 15,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: CLEARWAY.white,
+    fontFamily: Fonts?.semibold,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });
