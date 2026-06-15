@@ -3,9 +3,59 @@ import os
 import time
 import asyncio
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 TFL_BASE = "https://api.tfl.gov.uk"
 APP_KEY  = os.environ.get("TFL_APP_KEY", "")
+
+# ---------------------------------------------------------------------------
+# Rate-limit handler for the TfL API.
+#
+# TfL throttles unregistered/low-tier keys (HTTP 429). Two guards:
+#   1. An app-wide semaphore caps how many TfL requests we have in flight at
+#      once (a burst of route + crowding + disruption calls can otherwise fan
+#      out to dozens of simultaneous requests and trip the limit).
+#   2. On a 429 we back off (honouring `Retry-After` when present) and retry a
+#      couple of times before giving up, so transient throttling self-heals
+#      instead of surfacing as a failed route lookup.
+# Every outbound TfL GET in this module goes through `tfl_get`.
+# ---------------------------------------------------------------------------
+_TFL_MAX_CONCURRENCY = int(os.environ.get("TFL_MAX_CONCURRENCY", "8"))
+_TFL_SEMAPHORE = asyncio.Semaphore(_TFL_MAX_CONCURRENCY)
+_TFL_MAX_RETRIES = int(os.environ.get("TFL_MAX_RETRIES", "2"))
+_TFL_BACKOFF_CAP_SECS = 5.0
+
+
+async def tfl_get(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: dict | None = None,
+    retries: int = _TFL_MAX_RETRIES,
+) -> httpx.Response:
+    """GET a TfL endpoint with app-wide concurrency limiting + 429 backoff.
+
+    Returns the final `httpx.Response` (the caller still checks `status_code`).
+    Network errors propagate to the caller's existing try/except as before.
+    """
+    attempt = 0
+    while True:
+        async with _TFL_SEMAPHORE:
+            res = await client.get(url, params=params)
+        if res.status_code == 429 and attempt < retries:
+            retry_after = res.headers.get("Retry-After")
+            try:
+                delay = float(retry_after) if retry_after else 0.5 * (2 ** attempt)
+            except ValueError:
+                delay = 0.5 * (2 ** attempt)
+            delay = min(delay, _TFL_BACKOFF_CAP_SECS)
+            logger.warning("TfL rate limited (429) on %s; backing off %.1fs (attempt %d)", url, delay, attempt + 1)
+            await asyncio.sleep(delay)
+            attempt += 1
+            continue
+        return res
 
 # In-memory caches to prevent spamming the TfL API and restore sub-100ms response times
 _LIVE_DISRUPTION_CACHE: dict[str, tuple[bool, float]] = {}
@@ -256,7 +306,7 @@ async def check_live_station_disruption(naptan_id: str) -> bool:
             
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                res = await client.get(url, params=params)
+                res = await tfl_get(client, url, params=params)
                 if res.status_code == 200:
                     disruptions = res.json()
                     for d in disruptions:
@@ -305,7 +355,7 @@ async def check_live_station_crowding(naptan_id: str) -> bool:
             
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                res = await client.get(url, params=params)
+                res = await tfl_get(client, url, params=params)
                 if res.status_code == 200:
                     data = res.json()
                     live_pct = data.get("liveStatus", {}).get("congestionPercentage", 0.0)
@@ -406,7 +456,7 @@ async def get_routes(
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 url = f"{TFL_BASE}/Journey/JourneyResults/{origin}/to/{destination}"
-                res = await client.get(url, params=local_params)
+                res = await tfl_get(client, url, params=local_params)
                 if res.status_code == 200:
                     return [_parse_journey(j) for j in res.json().get("journeys", [])]
                 
@@ -426,7 +476,7 @@ async def get_routes(
                         
                     if new_origin != origin or new_dest != destination:
                         retry_url = f"{TFL_BASE}/Journey/JourneyResults/{new_origin}/to/{new_dest}"
-                        retry_res = await client.get(retry_url, params=local_params)
+                        retry_res = await tfl_get(client, retry_url, params=local_params)
                         if retry_res.status_code == 200:
                             return [_parse_journey(j) for j in retry_res.json().get("journeys", [])]
         except Exception as e:
@@ -468,7 +518,7 @@ async def get_live_line_disruptions() -> list[dict]:
         
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            res = await client.get(url, params=params)
+            res = await tfl_get(client, url, params=params)
             if res.status_code == 200:
                 lines = res.json()
                 disruptions = []
@@ -508,7 +558,7 @@ async def _refresh_live_station_works_task() -> None:
     stations = set()
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url, params=params)
+            res = await tfl_get(client, url, params=params)
             if res.status_code == 200:
                 disruptions = res.json()
                 keywords = [
@@ -566,7 +616,7 @@ async def _refresh_live_station_events_task() -> None:
     events = []
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url, params=params)
+            res = await tfl_get(client, url, params=params)
             if res.status_code == 200:
                 disruptions = res.json()
                 keywords = ["crowd", "busy", "congestion", "football", "match", "concert", "stadium", "event"]

@@ -38,7 +38,7 @@ export function PresetGlimpse() {
           <View key={key} style={styles.cell}>
             <Text style={styles.emoji}>{SENSORY_META[key].emoji}</Text>
             <Text
-              style={[styles.senseLabel, { color: palette.textMuted }]}
+              style={[styles.senseLabel, { color: palette.textPrimary }]}
               numberOfLines={1}>
               {SENSORY_META[key].short}
             </Text>

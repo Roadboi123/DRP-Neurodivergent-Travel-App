@@ -27,8 +27,13 @@ export interface RouteWarnings {
   /** The warning whose action card is open, if any. */
   selectedWarning: WarningItem | null;
   setSelectedWarning: (w: WarningItem | null) => void;
+  /** Warnings in a tapped cluster, shown as a breakdown list (or null). */
+  selectedCluster: WarningItem[] | null;
+  setSelectedCluster: (w: WarningItem[] | null) => void;
   /** Open the action card for a marker tapped on the map. */
   openWarningById: (id: string) => void;
+  /** Open the breakdown list for a tapped cluster of nearby markers. */
+  openClusterByIds: (ids: string[]) => void;
   /** Whether the selected warning belongs to the current user. */
   selectedIsOwn: boolean;
   /** Own warning: delete from the DB (gone for everyone). */
@@ -57,6 +62,11 @@ export function useRouteWarnings(
   route: RouteOption | null,
   accents: Accents,
   enabled: boolean = true,
+  // Push notifications for newly-arriving warnings only fire when `notify` is
+  // true. This is reserved for the *active journey* screen — the pre-Go map
+  // (route details) polls/show warnings but must NOT notify, so revisiting it
+  // doesn't spam alerts.
+  notify: boolean = false,
 ): RouteWarnings {
   const routesService = useRoutesService();
   const { username } = useAuth();
@@ -72,6 +82,8 @@ export function useRouteWarnings(
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   // The warning whose action card (Remove / Close) is currently open.
   const [selectedWarning, setSelectedWarning] = useState<WarningItem | null>(null);
+  // The warnings in a tapped cluster (breakdown list), or null.
+  const [selectedCluster, setSelectedCluster] = useState<WarningItem[] | null>(null);
   // Hide the whole warning layer from the map without dismissing any item.
   const [hideAll, setHideAll] = useState(false);
 
@@ -92,6 +104,17 @@ export function useRouteWarnings(
     if (warning) {
       analytics.trackWarningInteraction();
       setSelectedWarning(warning);
+    }
+  }, []);
+
+  const openClusterByIds = useCallback((ids: string[]) => {
+    const group = warningsRef.current.filter((w) => ids.includes(w.id));
+    if (group.length === 1) {
+      analytics.trackWarningInteraction();
+      setSelectedWarning(group[0]);
+    } else if (group.length > 1) {
+      analytics.trackWarningInteraction();
+      setSelectedCluster(group);
     }
   }, []);
 
@@ -129,17 +152,19 @@ export function useRouteWarnings(
       for (const w of warnings) {
         if (!knownWarningIdsRef.current.has(w.id)) {
           knownWarningIdsRef.current.add(w.id);
-          // Only notify if it was reported by someone else (not the current user)
-          if (!username || w.username !== username) {
+          // Only notify during an active journey (notify), and never for the
+          // current user's own report (they just placed it).
+          const isOwn = !!username && w.username === username;
+          if (notify && !isOwn) {
             sendLocalNotification(
-              'New Real-time Warning on your Route!',
+              'New warning flagged on your journey',
               `${w.title}: ${w.desc}`
             ).catch((err) => console.warn('Failed to send local notification:', err));
           }
         }
       }
     }
-  }, [warnings, route, enabled, username]);
+  }, [warnings, route, enabled, username, notify]);
 
   const formattedWarnings = useMemo(
     () => formatWarnings(warnings, accents, dismissedIds, hideAll),
@@ -188,7 +213,10 @@ export function useRouteWarnings(
     formattedWarnings,
     selectedWarning,
     setSelectedWarning,
+    selectedCluster,
+    setSelectedCluster,
     openWarningById,
+    openClusterByIds,
     selectedIsOwn,
     removeOwnWarning,
     dismissWarning,

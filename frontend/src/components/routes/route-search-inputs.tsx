@@ -323,7 +323,12 @@ export function RouteSearchInputs({
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={startLoc}
               onChangeText={onStartChange}
-              onFocus={() => setFocusedInput('start')}
+              selectTextOnFocus
+              onFocus={(e) => {
+                setFocusedInput('start');
+                // Web: highlight the whole field so it's easy to replace.
+                (e?.target as any)?.select?.();
+              }}
               onBlur={handleBlur}
               placeholder="Enter starting location..."
               placeholderTextColor={placeholderColor}
@@ -349,7 +354,11 @@ export function RouteSearchInputs({
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={endLoc}
               onChangeText={onEndChange}
-              onFocus={() => setFocusedInput('end')}
+              selectTextOnFocus
+              onFocus={(e) => {
+                setFocusedInput('end');
+                (e?.target as any)?.select?.();
+              }}
               onBlur={handleBlur}
               placeholder="Enter destination..."
               placeholderTextColor={placeholderColor}

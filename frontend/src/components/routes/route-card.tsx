@@ -157,9 +157,9 @@ function RouteCardBase({
         <View style={styles.leftContent}>
           {leave && (
             <View style={styles.leaveIndicator}>
-              <Ionicons name="time-outline" size={11} color={palette.textMuted} />
+              <Ionicons name="time-outline" size={11} color={palette.textPrimary} />
               <Text
-                style={[styles.leaveIndicatorText, { color: palette.textMuted }]}
+                style={[styles.leaveIndicatorText, { color: palette.textPrimary }]}
                 numberOfLines={1}>
                 {leave.label} {leave.time}
               </Text>
@@ -260,10 +260,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    // Sits inside the card, top-right of the left column — i.e. next to the
-    // green stats box. leftContent's marginRight is the trailing gap that keeps
-    // the text clear of the box while staying within the card.
-    alignSelf: 'flex-end',
+    // Top-left of the card's left column.
+    alignSelf: 'flex-start',
   },
   leaveIndicatorText: {
     fontSize: 11,

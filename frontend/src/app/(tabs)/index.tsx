@@ -1,23 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PreferencesNudge } from '@/components/home/preferences-nudge';
-import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
 import { GradientBackground } from '@/components/ui/gradient-background';
-import { BRAND, CLEARWAY, Fonts, getAccents, getPalette, softShadow } from '@/constants/theme';
+import { Glass } from '@/components/ui/glass';
+import { CLEARWAY, Fonts, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/auth-context';
+
+const LOGO = require('../../../assets/images/clearway-logo.png');
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
   const router = useRouter();
-  const { username, isLoggedIn, setProfileModalVisible } = useAuth();
+  const { isLoggedIn, setProfileModalVisible } = useAuth();
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
@@ -35,13 +37,11 @@ export default function HomeScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Header — Clearway brand lockup + profile */}
         <View style={styles.headerRow}>
-          <View>
-            <Text style={[styles.greetingText, { color: palette.textSecondary }]}>
-              {isLoggedIn ? `Hello, ${username}!` : 'Hello!'}
-            </Text>
-            <Text style={[styles.title, { color: palette.textPrimary }]}>My Planner</Text>
+          <View style={styles.brand}>
+            <Image source={LOGO} style={styles.logo} contentFit="contain" />
+            <Text style={[styles.wordmark, { color: palette.textPrimary }]}>Clearway</Text>
           </View>
           <View style={styles.headerRightActions}>
             <TouchableOpacity
@@ -64,19 +64,21 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Plan a route — the single primary action, full-width. */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-          Plan a route
-        </Text>
-        <QuickActionCard
-          iconName="navigate"
-          iconColor={BRAND.ink}
-          iconBackground={accents.cyan}
-          title="Plan Calm Route"
-          description="Find sensory friendly paths"
+        {/* Primary action — an inviting, search-bar-style rectangular CTA. */}
+        <Pressable
           onPress={() => router.push('/routes')}
-          style={styles.planCard}
-        />
+          accessibilityRole="button"
+          accessibilityLabel="Get me somewhere — plan a calm route"
+          style={({ pressed }) => [styles.planCard, pressed && styles.ctaPressed]}>
+          <Glass radius={Radii.input} shadow={2}>
+            <View style={styles.searchRow}>
+              <View style={styles.searchIconTile}>
+                <Ionicons name="search" size={22} color={CLEARWAY.blueStrong} />
+              </View>
+              <Text style={[styles.searchText, { color: palette.textPrimary }]}>Get me somewhere</Text>
+            </View>
+          </Glass>
+        </Pressable>
 
         {/* Signpost for travellers who haven't personalised yet: preferences are
             account-bound, so for logged-out users this opens the login/profile
@@ -136,12 +138,52 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logo: {
+    width: 46,
+    height: 46,
+  },
+  wordmark: {
+    fontSize: 30,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    letterSpacing: -1.2,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  searchIconTile: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: CLEARWAY.bluePillFrom,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchText: {
+    fontSize: 20,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  ctaPressed: {
+    transform: [{ scale: 0.99 }],
+    opacity: 0.92,
   },
   profileIconBtn: {
     width: 42,

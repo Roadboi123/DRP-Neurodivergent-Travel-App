@@ -11,6 +11,7 @@ import {
   REPORT_OPTIONS,
   WALK_BLUE,
   modeEmoji,
+  warningDisplayDesc,
   warningMarkerScript,
   warningVisual,
   type SensoryReportType,
@@ -169,9 +170,36 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
     `;
   });
 
-  // Start (green) and end (pink) stay as plain dots; every interior point is a
+  // Build a "from X take Y at Z" instruction for each interchange, keyed by the
+  // change station, so a tapped change marker explains the transfer in words.
+  const describeLeg = (mode: string, line: string): string => {
+    const m = (mode || '').toLowerCase();
+    if (m === 'walking' || m === 'walk') return 'walking';
+    if (m === 'bus' || m === 'coach' || m.includes('bus')) return line ? `Bus ${line}` : 'the bus';
+    if (m === 'tube' || m === 'subway' || m === 'underground') return line ? `the ${line} line` : 'the Tube';
+    return line || (m ? m.charAt(0).toUpperCase() + m.slice(1) : 'transit');
+  };
+  const isBusMode = (mode: string) => {
+    const m = (mode || '').toLowerCase();
+    return m === 'bus' || m === 'coach' || m.includes('bus');
+  };
+  const changePopupByKey: Record<string, string> = {};
+  for (let i = 0; i < processedLegs.length - 1; i++) {
+    const fromLeg = processedLegs[i];
+    const toLeg = processedLegs[i + 1];
+    const station = cleanPlaceLabel(toLeg.departure || fromLeg.arrival, 'the change');
+    const fromDesc = describeLeg(fromLeg.mode, fromLeg.line);
+    const toDesc = describeLeg(toLeg.mode, toLeg.line);
+    const sameMode = isBusMode(fromLeg.mode) && isBusMode(toLeg.mode);
+    const text = sameMode
+      ? `Switch ${fromDesc} to ${toDesc} at ${station}`
+      : `From ${fromDesc} take ${toDesc} at ${station}`;
+    changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] = text;
+  }
+
+  // Start (green) and end (red) stay as plain dots; every interior point is a
   // "change here" and gets a white marker with the boarding mode's emoji.
-  const changeNodes: { lat: number; lon: number; label: string; emoji: string }[] = [];
+  const changeNodes: { lat: number; lon: number; label: string; emoji: string; popup: string }[] = [];
   nodes.forEach((node) => {
     if (node.isStart || node.isEnd) {
       const fillColor = node.isStart ? '#5b9d6b' : '#e23b3b';
@@ -186,11 +214,13 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
       }).addTo(map).bindPopup("<b>${cleanPlaceLabel(node.label, 'Stop').replace(/"/g, '\\"')}</b>");
       `;
     } else {
+      const label = cleanPlaceLabel(node.label, 'Change here');
       changeNodes.push({
         lat: node.lat,
         lon: node.lon,
-        label: cleanPlaceLabel(node.label, 'Change here'),
+        label,
         emoji: modeEmoji(node.boardMode),
+        popup: changePopupByKey[(node.label || '').toLowerCase()] || label,
       });
     }
   });
@@ -207,7 +237,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
       changeNodes.forEach((c) => {
         const html = '<div style="background:#ffffff;width:32px;height:32px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:16px;line-height:1;">' + c.emoji + '</span></div>';
         const icon = L.divIcon({ html: html, className: 'change-marker-icon', iconSize: [32, 32], iconAnchor: [16, 16] });
-        const m = L.marker([c.lat, c.lon], { icon: icon }).addTo(map).bindPopup('<b>' + c.label.replace(/"/g, '&quot;') + '</b>');
+        const m = L.marker([c.lat, c.lon], { icon: icon }).addTo(map).bindPopup('<b>' + c.popup.replace(/"/g, '&quot;') + '</b>');
         changeMarkers.push(m);
       });
     }
@@ -369,14 +399,17 @@ export default function JourneyScreen() {
     formattedWarnings,
     selectedWarning,
     setSelectedWarning,
+    selectedCluster,
+    setSelectedCluster,
     openWarningById,
+    openClusterByIds,
     selectedIsOwn,
     removeOwnWarning,
     dismissWarning,
     addWarning,
     hideAll,
     setHideAll,
-  } = useRouteWarnings(route, accents);
+  } = useRouteWarnings(route, accents, true, true);
 
   // States
   const [reportingType, setReportingType] = useState<SensoryReportType | null>(null);
@@ -396,8 +429,10 @@ export default function JourneyScreen() {
   const initialPanDone = useRef(false);
 
   // `hideChanges` toggles the white "change here" markers on the map (the toggle
-  // now lives in the top-right pill row; the legend itself is a static panel).
+  // now lives in the top pill row; the legend itself is a static panel).
   const [hideChanges, setHideChanges] = useState(false);
+  // Per-leg expanded state for the intermediate-stops dropdown in the journey sheet.
+  const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
 
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
@@ -516,6 +551,8 @@ export default function JourneyScreen() {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data.type === 'warningClick' && data.id) {
           openWarningById(data.id);
+        } else if (data.type === 'warningClusterClick' && data.ids) {
+          openClusterByIds(data.ids);
         } else if (data.type === 'mapDrag') {
           setFollowUser(false);
         }
@@ -535,7 +572,7 @@ export default function JourneyScreen() {
       }
       analytics.endJourney();
     };
-  }, [openWarningById]);
+  }, [openWarningById, openClusterByIds]);
 
   // Concatenate path coordinates from all route legs
   const allPathCoords = useMemo(() => {
@@ -660,7 +697,9 @@ export default function JourneyScreen() {
     // Check all warnings
     warnings.forEach((w) => {
       if (w.lat == null || w.lon == null) return;
-      
+      // Never notify the traveller about their own report.
+      if (username && w.username === username) return;
+
       // Check if it is a medium or higher confidence warning
       if (w.severity !== 'medium' && w.severity !== 'high') return;
 
@@ -692,7 +731,7 @@ export default function JourneyScreen() {
         }
       }
     });
-  }, [simulating, liveCoords, userCoords, route, allPathCoords, pathTimes, warnings]);
+  }, [simulating, liveCoords, userCoords, route, allPathCoords, pathTimes, warnings, username]);
 
   // Auto-play journey simulation
   useEffect(() => {
@@ -804,6 +843,8 @@ export default function JourneyScreen() {
       const data = JSON.parse(dataStr);
       if (data.type === 'warningClick' && data.id) {
         openWarningById(data.id);
+      } else if (data.type === 'warningClusterClick' && data.ids) {
+        openClusterByIds(data.ids);
       } else if (data.type === 'mapDrag') {
         setFollowUser(false);
       }
@@ -922,19 +963,60 @@ export default function JourneyScreen() {
         pointerEvents="box-none"
         style={[styles.topControls, { top: insets.top + 16 }]}
       >
-        <TouchableOpacity
-          onPress={() => {
-            // Return to the route details sheet shown before "Go", not the bare list.
-            requestReopenJourneyDetails();
-            router.back();
-          }}
-          style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-          accessibilityRole="button"
-          accessibilityLabel="Back to route details"
-        >
-          <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
-        </TouchableOpacity>
+        {/* Row 1: back button + compact 2×2 map key inline */}
+        <View style={styles.topRow}>
+          <TouchableOpacity
+            onPress={() => {
+              // Return to the route details sheet shown before "Go", not the bare list.
+              requestReopenJourneyDetails();
+              router.back();
+            }}
+            style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Back to route details"
+          >
+            <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
+          </TouchableOpacity>
 
+          <View style={[styles.legendCard, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
+              </View>
+            </View>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendWalkDots}>
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendEmojiStack}>
+                  <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚶</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚌</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚆</Text>
+                  </View>
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Changes</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Row 2: hide toggles, below the back button */}
         <View style={styles.topPillRow}>
           {/* Hide / show the white change markers */}
           <TouchableOpacity
@@ -976,41 +1058,6 @@ export default function JourneyScreen() {
         </View>
       </View>
 
-      {/* Static map key (top-left): small, non-collapsible bars. Sits below the
-          top pill row and clears the transient notice banner above it. */}
-      <View style={[styles.legendStatic, { top: insets.top + 124 }]} pointerEvents="none">
-        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
-          <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
-          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
-        </View>
-        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
-          <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
-          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
-        </View>
-        <View style={[styles.legendItem, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
-          <View style={styles.legendWalkDots}>
-            <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-            <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-            <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-          </View>
-          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
-        </View>
-        <View style={[styles.legendItem, styles.legendItemCol, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
-          <View style={styles.legendEmojiStack}>
-            <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
-              <Text style={styles.legendEmoji}>🚶</Text>
-            </View>
-            <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
-              <Text style={styles.legendEmoji}>🚌</Text>
-            </View>
-            <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
-              <Text style={styles.legendEmoji}>🚆</Text>
-            </View>
-          </View>
-          <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Change mode of transport</Text>
-        </View>
-      </View>
-
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
         <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: CLEARWAY.blueStrong, borderColor: CLEARWAY.blueStrong }]}>
@@ -1033,6 +1080,7 @@ export default function JourneyScreen() {
       <View style={[styles.reportCapsule, { top: insets.top + 144, backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={[styles.reportCapsuleHeaderPill, { backgroundColor: CLEARWAY.okay }]}>
           <Text style={[styles.reportCapsuleHeader, { color: CLEARWAY.heading }]}>Report</Text>
+          <Text style={[styles.reportCapsuleHeader, { color: CLEARWAY.heading }]}>below</Text>
         </View>
         <View style={[styles.reportDivider, { backgroundColor: palette.divider }]} />
         {REPORT_OPTIONS.map((option) => {
@@ -1050,7 +1098,11 @@ export default function JourneyScreen() {
                 { backgroundColor: selected ? CLEARWAY.blueStrong : palette.surface },
               ]}
             >
-              <Ionicons name={option.icon} size={16} color={selected ? CLEARWAY.white : palette.textPrimary} />
+              {option.type === 'smell' ? (
+                <Text style={{ fontSize: 16 }}>{option.emoji}</Text>
+              ) : (
+                <Ionicons name={option.icon} size={16} color={selected ? CLEARWAY.white : palette.textPrimary} />
+              )}
               <Text style={[styles.reportCapsuleLabel, { color: selected ? CLEARWAY.white : palette.textPrimary }]}>{option.label}</Text>
             </TouchableOpacity>
           );
@@ -1133,6 +1185,39 @@ export default function JourneyScreen() {
                           <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{cleanPlaceLabel(leg.arrival, lIdx === (route.legs?.length ?? 0) - 1 ? destinationFallback : 'the next stop')}</Text>
                         </Text>
                       </View>
+
+                      {/* Intermediate stops along this leg (collapsible) — keeps the
+                          live journey detail consistent with the pre-Go sheet. */}
+                      {leg.stops && leg.stops.length > 0 && (
+                        <View style={[styles.stopsDropdown, { borderLeftColor: CLEARWAY.blueStrong }]}>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            onPress={() =>
+                              setStopsExpanded((prev) => ({ ...prev, [lIdx]: !prev[lIdx] }))
+                            }
+                            style={styles.stopsDropdownHeader}
+                          >
+                            <Text style={[styles.stopsHeader, { color: CLEARWAY.blueStrong }]}>
+                              {stopsExpanded[lIdx] ? 'Hide' : 'Show'} {leg.stops.length} stop{leg.stops.length > 1 ? 's' : ''}
+                            </Text>
+                            <Ionicons
+                              name={stopsExpanded[lIdx] ? 'chevron-up' : 'chevron-down'}
+                              size={11}
+                              color={CLEARWAY.blueStrong}
+                              style={{ marginLeft: 4 }}
+                            />
+                          </TouchableOpacity>
+                          {stopsExpanded[lIdx] && (
+                            <View style={styles.stopsList}>
+                              {leg.stops.map((stop, sIdx) => (
+                                <Text key={sIdx} style={[styles.stopItemText, { color: palette.textMuted }]}>
+                                  • {stop}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </View>
                   </View>
                 );
@@ -1226,7 +1311,7 @@ export default function JourneyScreen() {
 
               <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
               <WarningConfidence warning={selectedWarning} />
-              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
+              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{warningDisplayDesc(selectedWarning, username)}</Text>
 
               <TouchableOpacity
                 onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
@@ -1245,6 +1330,64 @@ export default function JourneyScreen() {
               <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
                 {selectedIsOwn ? 'Removes it from the map for everyone' : 'Hides it for you only'}
               </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Cluster breakdown — all sensory warnings in one ~100m area. */}
+      {selectedCluster && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.reportBackdrop}
+            activeOpacity={1}
+            onPress={() => setSelectedCluster(null)}
+          />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
+              <TouchableOpacity
+                onPress={() => setSelectedCluster(null)}
+                style={[styles.reportCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+              >
+                <Ionicons name="close" size={16} color={palette.textPrimary} />
+              </TouchableOpacity>
+
+              <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>
+                {selectedCluster.length} warnings here
+              </Text>
+              <ScrollView style={styles.clusterList} showsVerticalScrollIndicator={false}>
+                {selectedCluster.map((w) => (
+                  <TouchableOpacity
+                    key={w.id}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setSelectedCluster(null);
+                      setSelectedWarning(w);
+                    }}
+                    style={styles.clusterRow}
+                  >
+                    <View
+                      style={[
+                        styles.clusterRowIcon,
+                        { backgroundColor: warningVisual(w.icon, accents).color, borderColor: palette.border },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 15 }}>{warningVisual(w.icon, accents).emoji}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.clusterRowTitle, { color: palette.textPrimary }]} numberOfLines={1}>
+                        {w.title}
+                      </Text>
+                      <Text style={[styles.clusterRowDesc, { color: palette.textSecondary }]} numberOfLines={2}>
+                        {warningDisplayDesc(w, username)}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={palette.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           </View>
         </View>
@@ -1478,13 +1621,19 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 10,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  topRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 10,
   },
   topPillRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 8,
   },
   topPill: {
@@ -1503,31 +1652,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.1,
   },
-  // Static map key — a small column of separate bars, top-left.
-  legendStatic: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 9,
-    gap: 6,
-    alignItems: 'flex-start',
-  },
-  legendItem: {
+  // Compact 2×2 map key sitting inline beside the back button.
+  legendCard: {
+    flexShrink: 1,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
     borderWidth: 1,
     ...hardShadow(1),
   },
-  // The "change mode" bar stacks: emoji row on top, label beneath.
-  legendItemCol: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 4,
-    borderRadius: 16,
+  legendCol: {
+    gap: 5,
+  },
+  legendRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   legendDot: {
     width: 13,
@@ -1822,6 +1964,60 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  stopsDropdown: {
+    marginTop: 6,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    gap: 3,
+  },
+  stopsDropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  stopsHeader: {
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+  },
+  stopsList: {
+    gap: 2,
+    marginTop: 2,
+  },
+  stopItemText: {
+    fontSize: 11,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
+  },
+  clusterList: {
+    alignSelf: 'stretch',
+    maxHeight: 260,
+    marginTop: 4,
+  },
+  clusterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  clusterRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clusterRowTitle: {
+    fontSize: 13,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+  },
+  clusterRowDesc: {
+    fontSize: 12,
+    fontFamily: Fonts?.body,
+    lineHeight: 16,
   },
   proximityPromptSub: {
     fontSize: 13,
