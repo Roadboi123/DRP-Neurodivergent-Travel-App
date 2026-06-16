@@ -692,8 +692,12 @@ export default function JourneyScreen() {
   }, [route]);
 
   useEffect(() => {
-    const activeLocationSource = simulating ? userCoords : liveCoords;
-    if (!activeLocationSource || !route || allPathCoords.length === 0 || pathTimes.length === 0) return;
+    // Use userCoords (which falls back to the route origin when GPS is off or
+    // denied) instead of requiring a live fix — otherwise the advance alert
+    // silently never fires with location off. At the origin every warning is
+    // "ahead", which is exactly what we want to surface at journey start.
+    const activeLocationSource = userCoords;
+    if (!route || allPathCoords.length === 0 || pathTimes.length === 0) return;
 
     // Find the traveler's current index in allPathCoords
     let userIdx = 0;
@@ -714,8 +718,9 @@ export default function JourneyScreen() {
       // Never notify the traveller about their own report (anonymous included).
       if (w.username === (username || 'anonymous')) return;
 
-      // Check if it is a medium or higher confidence warning
-      if (w.severity !== 'medium' && w.severity !== 'high') return;
+      // Alert for any reported warning ahead, including single "info" reports —
+      // a lone traveller's report scores below the medium threshold, so gating
+      // on medium/high silently dropped exactly the case we want to surface.
 
       // Find the warning's index in allPathCoords
       let wIdx = 0;
@@ -740,10 +745,13 @@ export default function JourneyScreen() {
           const place = w.lat != null && w.lon != null ? nearestRouteStop(route, w.lat, w.lon) : null;
           const label = (w.title || '').replace(/\s+reported$/i, '').trim() || w.title;
           const where = place ? ` near ${cleanPlaceLabel(place, 'your route')}` : '';
-          sendLocalNotification(
-            'Upcoming warning on your journey',
-            `${label} reported by a traveller${where}, about ${Math.round(timeToReach)} min ahead.`
-          ).catch((err) => console.warn('Failed to send upcoming warning notification:', err));
+          const body = `${label} reported by a traveller${where}, about ${Math.round(timeToReach)} min ahead.`;
+          sendLocalNotification('Upcoming warning on your journey', body).catch((err) =>
+            console.warn('Failed to send upcoming warning notification:', err),
+          );
+          // Also surface it in-app — the OS banner is unreliable while the
+          // journey screen is foregrounded, which is exactly when this fires.
+          setWarningAlert(body);
         }
       }
     });
