@@ -28,22 +28,31 @@ export const REPORT_OPTIONS: {
 export type SensoryReportType = (typeof REPORT_OPTIONS)[number]['type'];
 
 /**
- * Human description for a warning's action card. The user's own report reads
- * "<thing> flagged by you"; another traveller's reads "<thing> flagged by
- * <username>". Live (non-user) warnings keep their stored description.
+ * Human description for a warning's action card, phrased by *where* it was
+ * reported rather than "flagged here by a traveller" (which reads wrong when
+ * you're viewing it from elsewhere on the route). The user's own report reads
+ * "<thing> flagged by you near <place>"; another traveller's reads "<thing>
+ * reported near <place>". `place` is the nearest stop on the *viewer's* route
+ * (pass `null`/omit when unknown → "nearby"). Live (non-user) warnings such as
+ * TfL disruptions keep their stored description.
  */
 export function warningDisplayDesc(
   w: { title?: string; desc: string; username?: string | null },
   username: string | null | undefined,
+  place?: string | null,
 ): string {
-  const isOwn = !!username && w.username === username;
   const label = (w.title || '').replace(/\s+reported$/i, '').trim() || 'Warning';
+  const near = place ? ` near ${place}` : ' nearby';
+  // Logged-out users report under "anonymous", so compare against that too.
+  const isOwn = !!w.username && w.username === (username || 'anonymous');
   if (isOwn) {
-    return `${label} flagged by you`;
+    return `${label} flagged by you${near}`;
   }
-  if (w.username && w.username !== 'anonymous') {
-    return `${label} flagged by ${w.username}`;
+  if (w.username) {
+    // Another traveller's community report — locate it, never "here".
+    return `${label} reported${near}`;
   }
+  // A live system warning (TfL disruption etc.) keeps its stored description.
   return w.desc;
 }
 

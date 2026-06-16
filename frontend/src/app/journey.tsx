@@ -394,6 +394,16 @@ export default function JourneyScreen() {
     setHideAll,
   } = useRouteWarnings(route, accents, true, true);
 
+  // Nearest stop on this route to a warning, for "<thing> reported near <place>"
+  // card wording (null when the warning has no/too-far coords → "nearby").
+  const warningPlace = useCallback(
+    (w: WarningItem | null): string | null =>
+      w && w.lat != null && w.lon != null
+        ? cleanPlaceLabel(nearestRouteStop(route, w.lat, w.lon) ?? '', '') || null
+        : null,
+    [route],
+  );
+
   // States
   const [reportingType, setReportingType] = useState<SensoryReportType | null>(null);
   // Transient banner shown e.g. when a report is rejected as a near-duplicate.
@@ -870,7 +880,7 @@ export default function JourneyScreen() {
       username: username || 'anonymous',
       warning_type: option.icon,
       title: `${option.label} reported`,
-      desc: `${option.label} flagged here by a traveller.`,
+      desc: `${option.label} reported nearby by a traveller.`,
       lat: userCoords[0],
       lon: userCoords[1],
     };
@@ -1294,7 +1304,7 @@ export default function JourneyScreen() {
 
               <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
               <WarningConfidence warning={selectedWarning} />
-              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{warningDisplayDesc(selectedWarning, username)}</Text>
+              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{warningDisplayDesc(selectedWarning, username, warningPlace(selectedWarning))}</Text>
 
               <TouchableOpacity
                 onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
@@ -1364,7 +1374,7 @@ export default function JourneyScreen() {
                         {w.title}
                       </Text>
                       <Text style={[styles.clusterRowDesc, { color: palette.textSecondary }]} numberOfLines={2}>
-                        {warningDisplayDesc(w, username)}
+                        {warningDisplayDesc(w, username, warningPlace(w))}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={palette.textMuted} />
