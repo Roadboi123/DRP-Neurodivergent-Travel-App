@@ -3,9 +3,15 @@ import { Image, Platform } from 'react-native';
 import { analytics } from '@/services/analytics';
 
 // The Clearway logo, used as the web notification icon. (Native uses the icon
-// configured in app.json's expo-notifications plugin.)
+// configured in app.json's expo-notifications plugin.) `resolveAssetSource` is
+// absent in some environments (notably expo-router's web static/SSR render),
+// where calling it throws at module load and 500s the whole page — guard it so
+// importing this module (and everything that depends on it) can never crash.
 const CLEARWAY_LOGO = require('../../assets/images/clearway-logo.png');
-const LOGO_URI: string | undefined = Image.resolveAssetSource(CLEARWAY_LOGO)?.uri;
+const LOGO_URI: string | undefined =
+  typeof Image.resolveAssetSource === 'function'
+    ? Image.resolveAssetSource(CLEARWAY_LOGO)?.uri
+    : undefined;
 
 // Configure notification behavior for mobile devices
 if (Platform.OS !== 'web') {
