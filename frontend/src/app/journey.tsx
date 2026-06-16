@@ -438,6 +438,11 @@ export default function JourneyScreen() {
   const lastTranslateY = useRef(MAX_TRANSLATE_Y);
   const startTranslateY = useRef(MAX_TRANSLATE_Y);
   const scrollOffsetY = useRef(0);
+  // `gestureState.dy` is measured from touch-down, but the sheet pan is often
+  // granted *mid-gesture* (once the inner list scrolls back to the top). Record
+  // the dy at grant time and subtract it so the drag starts from the finger's
+  // current position instead of jumping ("snapping") by the pre-grant travel.
+  const grantDy = useRef(0);
 
   useEffect(() => {
     const id = panY.addListener(({ value }) => {
@@ -446,16 +451,18 @@ export default function JourneyScreen() {
     return () => panY.removeListener(id);
   }, [panY]);
 
-  const onPanResponderGrant = () => {
+  const onPanResponderGrant = (_: any, gestureState: any) => {
     startTranslateY.current = lastTranslateY.current;
+    grantDy.current = gestureState?.dy ?? 0;
     panY.setOffset(startTranslateY.current);
     panY.setValue(0);
   };
 
   const onPanResponderMove = (_: any, gestureState: any) => {
+    const dy = gestureState.dy - grantDy.current;
     const minVal = -startTranslateY.current;
     const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
-    panY.setValue(Math.max(minVal, Math.min(maxVal, gestureState.dy)));
+    panY.setValue(Math.max(minVal, Math.min(maxVal, dy)));
   };
 
   const onPanResponderRelease = (_: any, gestureState: any) => {
@@ -721,7 +728,7 @@ export default function JourneyScreen() {
           const where = place ? ` near ${cleanPlaceLabel(place, 'your route')}` : '';
           sendLocalNotification(
             'Upcoming warning on your journey',
-            `${label}${where} in about ${Math.round(timeToReach)} min ahead.`
+            `${label} reported by a traveller${where}, about ${Math.round(timeToReach)} min ahead.`
           ).catch((err) => console.warn('Failed to send upcoming warning notification:', err));
         }
       }

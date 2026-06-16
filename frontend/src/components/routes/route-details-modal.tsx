@@ -167,6 +167,9 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
   const [isExpanded, setIsExpanded] = React.useState(false);
+  // Toggles the white "change here" markers on the map (mirrors the live journey
+  // screen's top pill); the legend itself stays in the header.
+  const [hideChanges, setHideChanges] = React.useState(false);
 
   // Push the latest markers to the map, and listen for marker taps coming back.
   React.useEffect(() => {
@@ -214,6 +217,11 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
   // Current scroll offset of the inner list, so a downward drag at the very top
   // collapses the sheet instead of being swallowed by the ScrollView.
   const scrollOffsetY = React.useRef(0);
+  // `gestureState.dy` is measured from touch-down, but the sheet pan is often
+  // granted *mid-gesture* (once the inner list scrolls back to the top). Record
+  // the dy at grant time and subtract it so the drag starts from the finger's
+  // current position instead of jumping ("snapping") by the pre-grant travel.
+  const grantDy = React.useRef(0);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -229,8 +237,23 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       panY.setValue(MAX_TRANSLATE_Y);
       lastTranslateY.current = MAX_TRANSLATE_Y;
       setIsExpanded(false);
+      setHideChanges(false);
     }
   }, [visible, route, panY, MAX_TRANSLATE_Y]);
+
+  // Push the change-marker toggle to the map (re-pushed once the map signals it
+  // is ready via `mapReadyTick`, since the first push can race the map load).
+  React.useEffect(() => {
+    if (!visible) return;
+    if (Platform.OS === 'web') {
+      const iframe = document.querySelector('iframe');
+      iframe?.contentWindow?.postMessage({ type: 'setChangeMarkersHidden', hidden: hideChanges }, '*');
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `if (window.setChangeMarkersHidden) { window.setChangeMarkersHidden(${hideChanges}); } true;`,
+      );
+    }
+  }, [visible, hideChanges, mapReadyTick]);
 
   // On web the sheet sits over a full-screen map <iframe>. While dragging the
   // sheet the pointer can pass over the iframe, which swallows the gesture and
@@ -243,15 +266,16 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
     if (f) (f as HTMLElement).style.pointerEvents = interactive ? 'auto' : 'none';
   };
 
-  const onPanResponderGrant = () => {
+  const onPanResponderGrant = (_: any, gestureState: any) => {
     startTranslateY.current = lastTranslateY.current;
+    grantDy.current = gestureState?.dy ?? 0;
     panY.setOffset(startTranslateY.current);
     panY.setValue(0);
     setMapInteractive(false);
   };
 
   const onPanResponderMove = (_: any, gestureState: any) => {
-    const newY = gestureState.dy;
+    const newY = gestureState.dy - grantDy.current;
     const minVal = -startTranslateY.current;
     const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
     panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
@@ -553,7 +577,9 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
 
       // B. Draw nodes: start (green) and end (red) are plain dots; every
       // interchange is a white "change here" marker with the boarding mode's
-      // emoji, matching the live journey map.
+      // emoji, matching the live journey map. The change markers are rendered
+      // via a toggle-able function so the "Hide changes" pill can drop them.
+      const changeNodes: { lat: number; lon: number; emoji: string; popup: string }[] = [];
       pointsList.forEach((p) => {
         if (p.isStart || p.isEnd) {
           const fillColor = p.isStart ? '#5b9d6b' : '#e23b3b';
@@ -568,20 +594,33 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
             }).addTo(map).bindPopup("<b>${cleanPlaceLabel(p.label, 'Stop').replace(/"/g, '\\"')}</b>");
           `;
         } else {
-          const emoji = modeEmoji(p.boardMode);
-          const popupText = (changePopupByKey[(p.label || '').toLowerCase()] || cleanPlaceLabel(p.label, 'Change here')).replace(/"/g, '&quot;');
-          leafletJS += `
-            L.marker([${p.lat}, ${p.lon}], {
-              icon: L.divIcon({
-                html: '<div style="background:#ffffff;width:30px;height:30px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:15px;line-height:1;">${emoji}</span></div>',
-                className: 'change-marker-icon',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
-              })
-            }).addTo(map).bindPopup("<b>${popupText}</b>");
-          `;
+          changeNodes.push({
+            lat: p.lat,
+            lon: p.lon,
+            emoji: modeEmoji(p.boardMode),
+            popup: changePopupByKey[(p.label || '').toLowerCase()] || cleanPlaceLabel(p.label, 'Change here'),
+          });
         }
       });
+
+      leafletJS += `
+        const changeNodes = ${JSON.stringify(changeNodes)};
+        let changeMarkers = [];
+        let changeHidden = false;
+        function renderChangeMarkers() {
+          changeMarkers.forEach((m) => map.removeLayer(m));
+          changeMarkers = [];
+          if (changeHidden) return;
+          changeNodes.forEach((c) => {
+            const html = '<div style="background:#ffffff;width:30px;height:30px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:15px;line-height:1;">' + c.emoji + '</span></div>';
+            const icon = L.divIcon({ html: html, className: 'change-marker-icon', iconSize: [30, 30], iconAnchor: [15, 15] });
+            const m = L.marker([c.lat, c.lon], { icon: icon }).addTo(map).bindPopup('<b>' + c.popup.replace(/"/g, '&quot;') + '</b>');
+            changeMarkers.push(m);
+          });
+        }
+        window.setChangeMarkersHidden = function(hidden) { changeHidden = !!hidden; renderChangeMarkers(); };
+        renderChangeMarkers();
+      `;
     }
 
     const leafletHtml = `
@@ -648,6 +687,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
               if (data.type === 'updateWarnings') {
                 window.updateWarnings(data.warnings);
+              } else if (data.type === 'setChangeMarkersHidden') {
+                if (window.setChangeMarkersHidden) { window.setChangeMarkersHidden(data.hidden); }
               }
             } catch (e) {}
           });
@@ -779,25 +820,44 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               </View>
             )}
 
-            {/* Hide / show all warning markers (mirrors the journey screen) */}
+            {/* Map toggles: Hide changes + Hide warnings (mirrors the journey screen) */}
             {hasMapCoords && (
-              <TouchableOpacity
-                onPress={() => {
-                  analytics.trackClick();
-                  setHideAll(!hideAll);
-                }}
-                style={[
-                  styles.hideWarningsBtn,
-                  { backgroundColor: hideAll ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideAll ? CLEARWAY.blueStrong : palette.border },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
-              >
-                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={hideAll ? CLEARWAY.white : palette.textPrimary} />
-                <Text style={[styles.hideWarningsText, { color: hideAll ? CLEARWAY.white : palette.textPrimary }]}>
-                  {hideAll ? 'Show warnings' : 'Hide warnings'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.mapTopControls} pointerEvents="box-none">
+                <TouchableOpacity
+                  onPress={() => {
+                    analytics.trackClick();
+                    setHideChanges((v) => !v);
+                  }}
+                  style={[
+                    styles.mapPill,
+                    { backgroundColor: hideChanges ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideChanges ? CLEARWAY.blueStrong : palette.border },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={hideChanges ? 'Show change icons on map' : 'Hide change icons from map'}
+                >
+                  <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={16} color={hideChanges ? CLEARWAY.white : palette.textPrimary} />
+                  <Text style={[styles.hideWarningsText, { color: hideChanges ? CLEARWAY.white : palette.textPrimary }]}>
+                    {hideChanges ? 'Show changes' : 'Hide changes'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    analytics.trackClick();
+                    setHideAll(!hideAll);
+                  }}
+                  style={[
+                    styles.mapPill,
+                    { backgroundColor: hideAll ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideAll ? CLEARWAY.blueStrong : palette.border },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+                >
+                  <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={hideAll ? CLEARWAY.white : palette.textPrimary} />
+                  <Text style={[styles.hideWarningsText, { color: hideAll ? CLEARWAY.white : palette.textPrimary }]}>
+                    {hideAll ? 'Show warnings' : 'Hide warnings'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
 
           </View>
@@ -1312,10 +1372,15 @@ const styles = StyleSheet.create({
     bottom: '75%',
     zIndex: 5,
   },
-  hideWarningsBtn: {
+  mapTopControls: {
     position: 'absolute',
     top: 16,
     right: 16,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 10,
+  },
+  mapPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -1324,7 +1389,6 @@ const styles = StyleSheet.create({
     borderRadius: Radii.pill,
     borderWidth: 1,
     justifyContent: 'center',
-    zIndex: 10,
     ...softShadow(1),
   },
   hideWarningsText: {
