@@ -26,6 +26,16 @@ if (Platform.OS !== 'web') {
   });
 }
 
+// On Android a notification only pops a heads-up banner if its channel has HIGH
+// (or higher) importance; without an explicit channel the default is too quiet,
+// so foreground alerts are silently filed instead of shown. Create it up front.
+if (Platform.OS === 'android') {
+  Notifications.setNotificationChannelAsync('default', {
+    name: 'Journey alerts',
+    importance: Notifications.AndroidImportance.HIGH,
+  }).catch((err) => console.warn('Failed to set up Android notification channel:', err));
+}
+
 /**
  * Request notification permissions for web or mobile.
  */

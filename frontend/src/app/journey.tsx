@@ -376,6 +376,14 @@ export default function JourneyScreen() {
 
   const webViewRef = useRef<WebView>(null);
 
+  // In-app alert shown when another traveller's warning arrives mid-journey. The
+  // OS notification fires too, but is unreliable while the app is foregrounded
+  // (which is exactly this case), so the banner is the alert the user sees.
+  const [warningAlert, setWarningAlert] = useState<string | null>(null);
+  const handleNewWarning = useCallback((_title: string, body: string) => {
+    setWarningAlert(body);
+  }, []);
+
   // Warnings state, polling and remove/hide actions — shared with route details.
   const {
     warnings,
@@ -392,7 +400,7 @@ export default function JourneyScreen() {
     addWarning,
     hideAll,
     setHideAll,
-  } = useRouteWarnings(route, accents, true, true);
+  } = useRouteWarnings(route, accents, true, true, handleNewWarning);
 
   // Nearest stop on this route to a warning, for "<thing> reported near <place>"
   // card wording (null when the warning has no/too-far coords → "nearby").
@@ -480,7 +488,13 @@ export default function JourneyScreen() {
     setIsExpanded(targetY === 0);
     Animated.spring(panY, {
       toValue: targetY,
-      useNativeDriver: Platform.OS !== 'web',
+      // Keep the JS driver (NOT native): the drag is JS-driven via
+      // panY.setValue/setOffset, and panY.addListener — which keeps
+      // lastTranslateY.current in sync — does NOT fire for native-driven
+      // animations. A native release spring would leave lastTranslateY stale,
+      // so the next drag's setOffset(startTranslateY) jumps ("jerks"). Staying
+      // on one (JS) driver keeps the listener firing and the next drag smooth.
+      useNativeDriver: false,
       tension: 50,
       friction: 8,
       // Clamp overshoot so collapsing doesn't dip past the resting position and
@@ -678,8 +692,12 @@ export default function JourneyScreen() {
   }, [route]);
 
   useEffect(() => {
-    const activeLocationSource = simulating ? userCoords : liveCoords;
-    if (!activeLocationSource || !route || allPathCoords.length === 0 || pathTimes.length === 0) return;
+    // Use userCoords (which falls back to the route origin when GPS is off or
+    // denied) instead of requiring a live fix — otherwise the advance alert
+    // silently never fires with location off. At the origin every warning is
+    // "ahead", which is exactly what we want to surface at journey start.
+    const activeLocationSource = userCoords;
+    if (!route || allPathCoords.length === 0 || pathTimes.length === 0) return;
 
     // Find the traveler's current index in allPathCoords
     let userIdx = 0;
@@ -700,8 +718,9 @@ export default function JourneyScreen() {
       // Never notify the traveller about their own report (anonymous included).
       if (w.username === (username || 'anonymous')) return;
 
-      // Check if it is a medium or higher confidence warning
-      if (w.severity !== 'medium' && w.severity !== 'high') return;
+      // Alert for any reported warning ahead, including single "info" reports —
+      // a lone traveller's report scores below the medium threshold, so gating
+      // on medium/high silently dropped exactly the case we want to surface.
 
       // Find the warning's index in allPathCoords
       let wIdx = 0;
@@ -726,10 +745,13 @@ export default function JourneyScreen() {
           const place = w.lat != null && w.lon != null ? nearestRouteStop(route, w.lat, w.lon) : null;
           const label = (w.title || '').replace(/\s+reported$/i, '').trim() || w.title;
           const where = place ? ` near ${cleanPlaceLabel(place, 'your route')}` : '';
-          sendLocalNotification(
-            'Upcoming warning on your journey',
-            `${label} reported by a traveller${where}, about ${Math.round(timeToReach)} min ahead.`
-          ).catch((err) => console.warn('Failed to send upcoming warning notification:', err));
+          const body = `${label} reported by a traveller${where}, about ${Math.round(timeToReach)} min ahead.`;
+          sendLocalNotification('Upcoming warning on your journey', body).catch((err) =>
+            console.warn('Failed to send upcoming warning notification:', err),
+          );
+          // Also surface it in-app — the OS banner is unreliable while the
+          // journey screen is foregrounded, which is exactly when this fires.
+          setWarningAlert(body);
         }
       }
     });
@@ -916,6 +938,13 @@ export default function JourneyScreen() {
     return () => clearTimeout(timer);
   }, [reportNotice]);
 
+  // Auto-dismiss the in-app new-warning alert after a few seconds.
+  useEffect(() => {
+    if (!warningAlert) return;
+    const timer = setTimeout(() => setWarningAlert(null), 6000);
+    return () => clearTimeout(timer);
+  }, [warningAlert]);
+
   const mapHtml = useMemo(() => {
     return route ? buildJourneyMap(route, accents) : '';
   }, [route, accents]);
@@ -1060,9 +1089,22 @@ export default function JourneyScreen() {
         </View>
       </View>
 
+      {/* New-warning alert — another traveller reported on this route mid-journey */}
+      {warningAlert && (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setWarningAlert(null)}
+          style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.orange, borderColor: accents.orange }]}
+          accessibilityRole="alert"
+        >
+          <Ionicons name="warning-outline" size={16} color={CLEARWAY.white} />
+          <Text style={[styles.noticeBannerText, { color: CLEARWAY.white }]}>{warningAlert}</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
-        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: CLEARWAY.blueStrong, borderColor: CLEARWAY.blueStrong }]}>
+        <View style={[styles.noticeBanner, { top: insets.top + (warningAlert ? 124 : 76), backgroundColor: CLEARWAY.blueStrong, borderColor: CLEARWAY.blueStrong }]}>
           <Ionicons name="information-circle-outline" size={16} color={CLEARWAY.white} />
           <Text style={[styles.noticeBannerText, { color: CLEARWAY.white }]}>{reportNotice}</Text>
         </View>
@@ -1070,7 +1112,7 @@ export default function JourneyScreen() {
 
       {/* Location-off fallback notice — reports/marker use the route start instead */}
       {!reportNotice && locationPermission === 'denied' && (
-        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.orange, borderColor: palette.border }]}>
+        <View style={[styles.noticeBanner, { top: insets.top + (warningAlert ? 124 : 76), backgroundColor: accents.orange, borderColor: palette.border }]}>
           <Ionicons name="location-outline" size={16} color={palette.textPrimary} />
           <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>
             Location off — using route start

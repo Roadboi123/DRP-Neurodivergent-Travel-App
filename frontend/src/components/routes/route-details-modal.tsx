@@ -305,7 +305,13 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
     setIsExpanded(targetY === 0);
     Animated.spring(panY, {
       toValue: targetY,
-      useNativeDriver: Platform.OS !== 'web',
+      // Keep the JS driver (NOT native): the drag is JS-driven via
+      // panY.setValue/setOffset, and panY.addListener — which keeps
+      // lastTranslateY.current in sync — does NOT fire for native-driven
+      // animations. A native release spring would leave lastTranslateY stale,
+      // so the next drag's setOffset(startTranslateY) jumps ("jerks"). Staying
+      // on one (JS) driver keeps the listener firing and the next drag smooth.
+      useNativeDriver: false,
       tension: 50,
       friction: 8,
       // Clamp overshoot so collapsing doesn't dip past the resting position and

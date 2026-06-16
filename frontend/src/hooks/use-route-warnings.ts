@@ -68,6 +68,11 @@ export function useRouteWarnings(
   // (route details) polls/show warnings but must NOT notify, so revisiting it
   // doesn't spam alerts.
   notify: boolean = false,
+  // Called for the same new, non-own warnings that fire a notification, so the
+  // active-journey screen can also show an in-app banner. An OS notification is
+  // unreliable while the app is foregrounded (the user is staring at the
+  // screen); the banner is the alert they actually see. Same gating as notify.
+  onNewWarning?: (title: string, body: string) => void,
 ): RouteWarnings {
   const routesService = useRoutesService();
   const { username } = useAuth();
@@ -168,14 +173,18 @@ export function useRouteWarnings(
             const body = place
               ? `${label} reported by a traveller near ${cleanPlaceLabel(place, 'your route')}`
               : `${label} reported by a traveller nearby`;
-            sendLocalNotification('New warning on your journey', body).catch((err) =>
+            const title = 'New warning on your journey';
+            sendLocalNotification(title, body).catch((err) =>
               console.warn('Failed to send local notification:', err),
             );
+            // Also surface it in-app — the OS banner is unreliable while the
+            // journey screen is foregrounded, which is exactly when this fires.
+            onNewWarning?.(title, body);
           }
         }
       }
     }
-  }, [warnings, route, enabled, username, notify]);
+  }, [warnings, route, enabled, username, notify, onNewWarning]);
 
   const formattedWarnings = useMemo(
     () => formatWarnings(warnings, accents, dismissedIds, hideAll),
