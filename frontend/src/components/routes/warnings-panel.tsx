@@ -9,6 +9,51 @@ import type { WarningItem } from '@/types/route';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
+// Auto heat/overheating disruption cards are unavoidable on non-A/C buses and
+// deep tubes, so they're noise rather than actionable — drop them (the per-leg
+// heat score and user-submitted heat reports are unaffected).
+const HEAT_RE = /heat|overheat|temperatur|thermo|swelter/i;
+// TfL line-delay disruptions, collapsed into a single "Line Delays" card.
+const DELAY_RE = /\bdelays?\b/i;
+const sevRank = (s: WarningItem['severity']): number =>
+  s === 'high' ? 2 : s === 'medium' ? 1 : 0;
+
+/**
+ * Shape the raw warnings for the routes-list panel:
+ *  - keep every live (TfL) disruption, but only *high-confidence* user reports;
+ *  - drop auto heat/overheating cards (see `HEAT_RE`);
+ *  - collapse every TfL line-delay card into one consolidated "Line Delays"
+ *    warning (strongest severity wins) so a disruption reads as a single card.
+ */
+function consolidateWarnings(warnings: WarningItem[]): WarningItem[] {
+  const kept = warnings.filter((w) => {
+    if (isAggregatedReport(w)) return w.severity === 'high';
+    return !HEAT_RE.test(`${w.title} ${w.desc} ${w.icon}`);
+  });
+
+  let delayCard: WarningItem | null = null;
+  const out: WarningItem[] = [];
+  for (const w of kept) {
+    const isDelay = !isAggregatedReport(w) && DELAY_RE.test(w.title);
+    if (isDelay) {
+      if (!delayCard) {
+        delayCard = { ...w };
+        out.push(delayCard);
+      } else {
+        // A second+ delayed line: merge into one generic card, strongest severity.
+        if (sevRank(w.severity) > sevRank(delayCard.severity)) {
+          delayCard.severity = w.severity;
+        }
+        delayCard.title = 'Line Delays';
+        delayCard.desc = 'Multiple lines are experiencing delays.';
+      }
+      continue;
+    }
+    out.push(w);
+  }
+  return out;
+}
+
 export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
@@ -17,12 +62,7 @@ export function WarningsPanel({ warnings = [] }: { warnings?: WarningItem[] }) {
   // Expanded by default; the header chevron lets the user minimise the list.
   const [expanded, setExpanded] = useState(true);
 
-  const filteredWarnings = warnings.filter((w) => {
-    if (isAggregatedReport(w)) {
-      return w.severity === 'high';
-    }
-    return true;
-  });
+  const filteredWarnings = consolidateWarnings(warnings);
 
   if (!filteredWarnings || filteredWarnings.length === 0) {
     return null;
