@@ -32,7 +32,7 @@ import { RouteTimeSheet, journeyTimeLabel } from '@/components/routes/route-time
 import { toRouteTimeQuery, type JourneyTime } from '@/components/routes/journey-time';
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { WarningsPanel } from '@/components/routes/warnings-panel';
-import { Fonts, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
+import { Fonts, getPalette, getSemanticColors, Radii, softShadow } from '@/constants/theme';
 import { useIsFocused } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useNavBar } from '@/contexts/navbar-context';
@@ -322,7 +322,7 @@ export default function RoutesScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       {/* Top Header Navigation Icons */}
-      <HeaderNav onProfilePress={() => setProfileModalVisible(true)} />
+      <HeaderNav onProfilePress={() => setProfileModalVisible(true)} showHome={false} />
 
       <RouteSearchInputs
         startLoc={startLoc}
@@ -536,15 +536,15 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 2,
+    borderRadius: Radii.input,
+    borderWidth: 1,
     gap: 10,
-    ...hardShadow(3),
+    ...softShadow(1),
   },
   loginWarningText: {
     fontSize: 13,
     fontWeight: '700',
-    fontFamily: Fonts?.sans,
+    fontFamily: Fonts?.body,
     flex: 1,
   },
   scrollContent: {
@@ -560,18 +560,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 30,
-    borderWidth: 2,
-    ...hardShadow(3),
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    ...softShadow(1),
   },
   timeButtonText: {
     fontSize: 13,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   controlsRow: {
     flexDirection: 'row',
@@ -586,16 +585,15 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 11,
     paddingHorizontal: 18,
-    borderRadius: 30,
-    borderWidth: 2,
-    ...hardShadow(4),
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    ...softShadow(1),
   },
   filtersButtonText: {
     fontSize: 13,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   chipRow: {
     flexDirection: 'row',
@@ -606,16 +604,15 @@ const styles = StyleSheet.create({
   statusChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 30,
-    borderWidth: 2,
-    ...hardShadow(3),
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    ...softShadow(1),
   },
   statusChipText: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontSize: 12.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   routesList: {
     gap: 18,
@@ -625,11 +622,10 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   groupHeading: {
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
   },
   loadingSpinner: {
     paddingVertical: 40,
@@ -638,6 +634,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 13,
+    fontFamily: Fonts?.body,
   },
   emptyContainer: {
     paddingVertical: 40,
@@ -645,7 +642,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 14,
+    fontFamily: Fonts?.body,
     textAlign: 'center',
   },
 });

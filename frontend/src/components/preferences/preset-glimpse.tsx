@@ -38,7 +38,7 @@ export function PresetGlimpse() {
           <View key={key} style={styles.cell}>
             <Text style={styles.emoji}>{SENSORY_META[key].emoji}</Text>
             <Text
-              style={[styles.senseLabel, { color: palette.textMuted }]}
+              style={[styles.senseLabel, { color: palette.textPrimary }]}
               numberOfLines={1}>
               {SENSORY_META[key].short}
             </Text>
@@ -74,10 +74,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   senseLabel: {
-    fontSize: 9,
+    fontSize: 10,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: 0,
   },
   chip: {
     alignSelf: 'stretch',
@@ -85,14 +85,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 6,
     paddingHorizontal: 2,
-    borderRadius: 10,
-    borderWidth: 2.5,
+    borderRadius: 999,
+    borderWidth: 1,
   } as ViewStyle,
   chipLabel: {
-    fontSize: 9.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
+    fontSize: 10,
+    fontFamily: Fonts?.body,
+    fontWeight: '700',
     letterSpacing: 0,
     textAlign: 'center',
   },

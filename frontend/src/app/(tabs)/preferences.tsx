@@ -17,8 +17,11 @@ import { PreferenceScaleLegend } from '@/components/preferences/preference-scale
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetNameEditor } from '@/components/preferences/preset-name-editor';
 import { GradientBackground } from '@/components/ui/gradient-background';
+import { Glass } from '@/components/ui/glass';
+import { GlassButton } from '@/components/ui/glass-button';
+import { GradientDot } from '@/components/ui/gradient-dot';
 import { HeaderNav } from '@/components/ui/header-nav';
-import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, Fonts, getPalette, Radii, softShadow } from '@/constants/theme';
 import { SENSORY_KEYS, SENSORY_META, type SensoryKey } from '@/constants/presets';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePresets } from '@/context/presets-context';
@@ -64,32 +67,35 @@ export default function UserPreferencesScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+            <Text style={[styles.title, { color: palette.textPrimary }]}>
               Your preferences
             </Text>
+            <GradientDot size={16} style={styles.titleDot} />
           </View>
         </View>
 
         {!isLoggedIn ? (
-          <View style={[styles.splashContainer, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <View style={[styles.iconCircle, { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }]}>
-              <Ionicons name="options-outline" size={36} color="#E91E63" />
+          <Glass radius={Radii.cardLg} shadow={2} style={styles.splashWrap}>
+            <View style={styles.splashContainer}>
+              <View style={[styles.iconCircle, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <Ionicons name="options-outline" size={34} color={CLEARWAY.blueStrong} />
+              </View>
+              <Text style={[styles.splashTitle, { color: palette.textPrimary }]}>
+                Sign in to customize
+              </Text>
+              <Text style={[styles.splashDesc, { color: palette.textSecondary }]}>
+                Create an account or sign in to set your comfort levels for noise, crowds, temperature, and more. Your preferences will be saved to your profile and applied automatically to all planned routes.
+              </Text>
+
+              <GlassButton
+                label="Sign In / Register"
+                variant="primary"
+                fullWidth
+                onPress={() => setProfileModalVisible(true)}
+                style={styles.loginBtn}
+              />
             </View>
-            <Text style={[styles.splashTitle, { color: palette.textPrimary }]}>
-              Sign in to customize
-            </Text>
-            <Text style={[styles.splashDesc, { color: palette.textSecondary }]}>
-              Create an account or sign in to set your comfort levels for noise, crowds, temperature, and more. Your preferences will be saved to your profile and applied automatically to all planned routes.
-            </Text>
-            
-            <TouchableOpacity
-              style={[styles.loginBtn, { backgroundColor: '#E91E63' }]}
-              onPress={() => setProfileModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.loginBtnText}>Sign In / Register</Text>
-            </TouchableOpacity>
-          </View>
+          </Glass>
         ) : (
           <>
             <View style={styles.presetHeaderRow}>
@@ -102,7 +108,7 @@ export default function UserPreferencesScreen() {
                 accessibilityLabel={renaming ? 'Finish renaming presets' : 'Rename presets'}
                 style={[
                   styles.renameButton,
-                  { backgroundColor: palette.surface, borderColor: palette.border },
+                  { backgroundColor: palette.surface, borderColor: palette.borderStrong },
                 ]}>
                 <Ionicons
                   name={renaming ? 'checkmark' : 'pencil'}
@@ -145,17 +151,19 @@ export default function UserPreferencesScreen() {
 
             <PreferenceScaleLegend />
 
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              {preferences.map((pref, i) => (
-                <View key={pref.id}>
-                  <PreferenceRow preference={pref} onSelect={handleSelect} />
+            <Glass radius={Radii.card} shadow={2}>
+              <View style={styles.card}>
+                {preferences.map((pref, i) => (
+                  <View key={pref.id}>
+                    <PreferenceRow preference={pref} onSelect={handleSelect} />
 
-                  {i < preferences.length - 1 && (
-                    <View style={[styles.rowDivider, { backgroundColor: palette.divider }]} />
-                  )}
-                </View>
-              ))}
-            </View>
+                    {i < preferences.length - 1 && (
+                      <View style={[styles.rowDivider, { backgroundColor: palette.divider }]} />
+                    )}
+                  </View>
+                ))}
+              </View>
+            </Glass>
           </>
         )}
       </ScrollView>
@@ -181,26 +189,26 @@ const styles = StyleSheet.create({
 
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
+    alignItems: 'center',
+    gap: 8,
   },
 
   title: {
-    flex: 1,
-    fontSize: 34,
+    fontSize: 38,
     fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: -1,
+    fontWeight: '800',
+    letterSpacing: -1.3,
+  },
+
+  titleDot: {
+    marginTop: 14,
   },
 
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 19,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: -0.4,
     marginBottom: 12,
   },
 
@@ -224,19 +232,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 2,
-    ...hardShadow(3),
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    ...softShadow(1),
   } as ViewStyle,
 
   renameButtonLabel: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontFamily: Fonts?.body,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   } as TextStyle,
 
   statusText: {
@@ -255,11 +262,8 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    borderRadius: 14,
-    borderWidth: 2,
     paddingVertical: 8,
     paddingHorizontal: 16,
-    ...hardShadow(6),
   },
 
   rowDivider: {
@@ -267,18 +271,14 @@ const styles = StyleSheet.create({
   } as ViewStyle,
 
   // Splash styling
+  splashWrap: {
+    marginTop: 20,
+  } as ViewStyle,
+
   splashContainer: {
     alignItems: 'center',
     paddingVertical: 40,
     paddingHorizontal: 24,
-    borderRadius: 24,
-    borderWidth: 1,
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
   } as ViewStyle,
 
   iconCircle: {
@@ -288,17 +288,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
+    borderWidth: 1,
   } as ViewStyle,
 
   splashTitle: {
-    fontSize: 20,
+    fontSize: 22,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
+    letterSpacing: -0.5,
     textAlign: 'center',
     marginBottom: 12,
   } as TextStyle,
 
   splashDesc: {
     fontSize: 14,
+    fontFamily: Fonts?.body,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 28,
@@ -306,22 +310,7 @@ const styles = StyleSheet.create({
 
   loginBtn: {
     width: '100%',
-    height: 50,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#E91E63',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
   } as ViewStyle,
-
-  loginBtnText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-  } as TextStyle,
 
   loggedInHeaderRow: {
     flexDirection: 'row',

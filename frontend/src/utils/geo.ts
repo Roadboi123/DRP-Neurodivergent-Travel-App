@@ -43,6 +43,37 @@ export function routePathCoords(route: RouteOption | null): [number, number][] {
 }
 
 /**
+ * The route station (a leg's departure/arrival) nearest to a [lat, lon], within
+ * `maxM` metres — e.g. to phrase a warning as "near South Kensington". Returns
+ * the raw station name, or null if none is close enough.
+ */
+export function nearestRouteStop(
+  route: RouteOption | null,
+  lat: number,
+  lon: number,
+  maxM = 700,
+): string | null {
+  if (!route?.legs) return null;
+  let best: string | null = null;
+  let bestDist = maxM;
+  for (const leg of route.legs) {
+    const points: [number | null | undefined, number | null | undefined, string | undefined][] = [
+      [leg.departure_lat, leg.departure_lon, leg.departure],
+      [leg.arrival_lat, leg.arrival_lon, leg.arrival],
+    ];
+    for (const [plat, plon, name] of points) {
+      if (plat == null || plon == null || !name) continue;
+      const d = haversineMeters([lat, lon], [plat, plon]);
+      if (d <= bestDist) {
+        bestDist = d;
+        best = name;
+      }
+    }
+  }
+  return best;
+}
+
+/**
  * Keep only the warnings within `radiusM` of any point along the route's path.
  * Mirrors the backend's proximity rule but measures against the whole traced
  * journey rather than just stations. Warning counts are small, so the

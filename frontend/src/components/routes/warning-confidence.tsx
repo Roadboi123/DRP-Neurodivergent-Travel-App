@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Fonts, getAccents, getPalette, type Accents } from '@/constants/theme';
+import { CLEARWAY, Fonts, getAccents, getPalette, Radii, type Accents } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { WarningItem } from '@/types/route';
 
@@ -13,15 +13,15 @@ const CONFIDENCE_LABEL: Record<WarningItem['severity'], string> = {
   info: 'Low',
 };
 
-/** Severity → accent fill, shared so every warning surface agrees on colour. */
-export function confidenceColor(severity: WarningItem['severity'], accents: Accents): string {
+/** Severity → solid fill (white-text readable), shared so warning surfaces agree. */
+export function confidenceColor(severity: WarningItem['severity'], _accents?: Accents): string {
   if (severity === 'high') {
-    return accents.pink;
+    return CLEARWAY.bad;
   }
   if (severity === 'medium') {
-    return accents.orange;
+    return '#c98a2a';
   }
-  return accents.cyan;
+  return CLEARWAY.blue;
 }
 
 /**
@@ -63,10 +63,10 @@ export function WarningConfidence({
         <View
           style={[
             styles.pillCompact,
-            { backgroundColor: confidenceColor(warning.severity, accents), borderColor: palette.border },
+            { backgroundColor: confidenceColor(warning.severity, accents) },
           ]}
         >
-          <Text style={[styles.pillTextCompact, { color: palette.textPrimary }]}>{label}</Text>
+          <Text style={[styles.pillTextCompact, { color: CLEARWAY.white }]}>{label}</Text>
         </View>
         <Text style={[styles.countCompact, { color: palette.textMuted }]}>
           {countText}
@@ -80,10 +80,10 @@ export function WarningConfidence({
       <View
         style={[
           styles.pill,
-          { backgroundColor: confidenceColor(warning.severity, accents), borderColor: palette.border },
+          { backgroundColor: confidenceColor(warning.severity, accents) },
         ]}
       >
-        <Text style={[styles.pillText, { color: palette.textPrimary }]}>{label} confidence</Text>
+        <Text style={[styles.pillText, { color: CLEARWAY.white }]}>{label} confidence</Text>
       </View>
       <Text style={[styles.count, { color: palette.textMuted }]}>
         Reported by {countText}
@@ -100,19 +100,18 @@ const styles = StyleSheet.create({
   },
   pill: {
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 30,
-    borderWidth: 2,
+    paddingVertical: 5,
+    borderRadius: Radii.pill,
   },
   pillText: {
     fontSize: 11,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   count: {
     fontSize: 12,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
   },
   compactRow: {
@@ -122,20 +121,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   pillCompact: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 30,
-    borderWidth: 1.5,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: Radii.pill,
   },
   pillTextCompact: {
-    fontSize: 9,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    fontSize: 9.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   countCompact: {
     fontSize: 11,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
   },
 });

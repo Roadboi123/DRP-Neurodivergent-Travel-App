@@ -16,9 +16,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 
 import { useAuth } from '@/context/auth-context';
-import { Fonts, getPalette } from '@/constants/theme';
+import { CLEARWAY, Fonts, GLASS, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { API_BASE_URL, LOCAL_API_BASE_URL } from '@/constants/config';
 
@@ -199,7 +200,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
         <Pressable style={styles.backdrop} onPress={handleClose}>
           <TouchableOpacity
             activeOpacity={1}
-            style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
+            style={[styles.sheet, { backgroundColor: GLASS.light.fill, borderColor: GLASS.light.border }]}
             // Tapping the sheet (outside an input) dismisses the keyboard on
             // native; stopPropagation keeps the backdrop from closing the modal.
             // On web the press bubbles up from the inputs, so calling
@@ -212,10 +213,11 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
               }
             }}
           >
+            <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
             <View style={styles.handle} />
 
           <View style={styles.header}>
-            <Text style={[styles.title, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+            <Text style={[styles.title, { color: palette.textPrimary }]}>
               {mode === 'profile' ? 'Your Profile' : mode === 'login' ? 'Sign In' : 'Register Account'}
             </Text>
 
@@ -234,14 +236,14 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
               <View style={styles.loggedInContainer}>
                 {/* Avatar */}
                 <View style={styles.avatarContainer}>
-                  <View style={[styles.avatarCircle, { backgroundColor: '#E91E63' }]}>
+                  <View style={[styles.avatarCircle, { backgroundColor: CLEARWAY.blue }]}>
                     <Text style={styles.avatarInitials}>{getInitials(username)}</Text>
                   </View>
                   <View style={styles.activeDot} />
                 </View>
 
                 {/* Info */}
-                <Text style={[styles.usernameText, { color: palette.textPrimary, fontFamily: Fonts?.rounded }]}>
+                <Text style={[styles.usernameText, { color: palette.textPrimary }]}>
                   @{username}
                 </Text>
                 <Text style={[styles.infoText, { color: palette.textSecondary }]}>
@@ -278,16 +280,16 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
             ) : (
               <View style={styles.loginFormContainer}>
                 {errorMsg ? (
-                  <View style={[styles.alertCard, styles.alertError, { backgroundColor: isDark ? '#3D1F1C' : '#FDF2F2' }]}>
-                    <Ionicons name="alert-circle" size={18} color="#FF4D4D" />
-                    <Text style={[styles.alertText, { color: '#FF4D4D' }]}>{errorMsg}</Text>
+                  <View style={[styles.alertCard, styles.alertError, { backgroundColor: 'rgba(207,107,91,0.12)' }]}>
+                    <Ionicons name="alert-circle" size={18} color={CLEARWAY.bad} />
+                    <Text style={[styles.alertText, { color: '#a8392c' }]}>{errorMsg}</Text>
                   </View>
                 ) : null}
 
                 {successMsg ? (
-                  <View style={[styles.alertCard, styles.alertSuccess, { backgroundColor: isDark ? '#1C3224' : '#E8F5E9' }]}>
-                    <Ionicons name="checkmark-circle" size={18} color="#2E7D32" />
-                    <Text style={[styles.alertText, { color: isDark ? '#81C784' : '#2E7D32' }]}>{successMsg}</Text>
+                  <View style={[styles.alertCard, styles.alertSuccess, { backgroundColor: 'rgba(91,157,107,0.14)' }]}>
+                    <Ionicons name="checkmark-circle" size={18} color={CLEARWAY.good} />
+                    <Text style={[styles.alertText, { color: '#3c7a4e' }]}>{successMsg}</Text>
                   </View>
                 ) : null}
 
@@ -298,7 +300,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                     style={[
                       styles.textInput,
                       {
-                        backgroundColor: isDark ? '#2E3543' : '#F0F0EE',
+                        backgroundColor: 'rgba(255,255,255,0.5)',
                         borderColor: palette.border,
                         color: palette.textPrimary,
                       },
@@ -306,7 +308,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                     value={inputName}
                     onChangeText={setInputName}
                     placeholder="Enter your username"
-                    placeholderTextColor={isDark ? '#777' : '#999'}
+                    placeholderTextColor={palette.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
@@ -318,7 +320,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                     style={[
                       styles.textInput,
                       {
-                        backgroundColor: isDark ? '#2E3543' : '#F0F0EE',
+                        backgroundColor: 'rgba(255,255,255,0.5)',
                         borderColor: palette.border,
                         color: palette.textPrimary,
                       },
@@ -326,7 +328,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                     value={password}
                     onChangeText={setPassword}
                     placeholder="Enter your password"
-                    placeholderTextColor={isDark ? '#777' : '#999'}
+                    placeholderTextColor={palette.textMuted}
                     secureTextEntry={true}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -348,7 +350,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                       value={confirmPassword}
                       onChangeText={setConfirmPassword}
                       placeholder="Confirm your password"
-                      placeholderTextColor={isDark ? '#777' : '#999'}
+                      placeholderTextColor={palette.textMuted}
                       secureTextEntry={true}
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -358,10 +360,10 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
 
                 <View style={styles.submitRow}>
                   {loading ? (
-                    <ActivityIndicator size="small" color="#E91E63" style={styles.spinner} />
+                    <ActivityIndicator size="small" color={CLEARWAY.blue} style={styles.spinner} />
                   ) : (
                     <TouchableOpacity
-                      style={[styles.submitBtn, { backgroundColor: '#E91E63' }]}
+                      style={[styles.submitBtn, { backgroundColor: CLEARWAY.blue }]}
                       onPress={mode === 'login' ? handleLogin : handleRegister}
                     >
                       <Text style={styles.submitBtnText}>
@@ -379,7 +381,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                         {"Don't have an account? "}
                       </Text>
                       <TouchableOpacity onPress={() => { setMode('register'); setErrorMsg(''); }}>
-                        <Text style={[styles.toggleLink, { color: '#E91E63' }]}>Sign Up</Text>
+                        <Text style={[styles.toggleLink, { color: CLEARWAY.blueStrong }]}>Sign Up</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
@@ -388,7 +390,7 @@ export function ProfileModal({ visible, onClose }: ProfileModalProps) {
                         Already have an account?{' '}
                       </Text>
                       <TouchableOpacity onPress={() => { setMode('login'); setErrorMsg(''); }}>
-                        <Text style={[styles.toggleLink, { color: '#E91E63' }]}>Sign In</Text>
+                        <Text style={[styles.toggleLink, { color: CLEARWAY.blueStrong }]}>Sign In</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -414,12 +416,14 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   sheet: {
     maxHeight: '85%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: Radii.cardLg,
+    borderTopRightRadius: Radii.cardLg,
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
-    borderWidth: 2,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...softShadow(3),
   } as ViewStyle,
   handle: {
     alignSelf: 'center',
@@ -436,7 +440,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   } as ViewStyle,
   title: {
-    fontSize: 20,
+    fontSize: 22,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
     letterSpacing: -0.5,
   } as TextStyle,
@@ -466,6 +471,7 @@ const styles = StyleSheet.create({
   avatarInitials: {
     color: '#FFF',
     fontSize: 26,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
     letterSpacing: -0.5,
   } as TextStyle,
@@ -476,17 +482,20 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#2E7D32',
+    backgroundColor: CLEARWAY.good,
     borderWidth: 2,
     borderColor: '#FFF',
   } as ViewStyle,
   usernameText: {
-    fontSize: 20,
+    fontSize: 22,
+    fontFamily: Fonts?.display,
     fontWeight: '800',
+    letterSpacing: -0.4,
     marginBottom: 8,
   } as TextStyle,
   infoText: {
     fontSize: 13,
+    fontFamily: Fonts?.body,
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: 16,
@@ -508,10 +517,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 13,
+    borderRadius: Radii.pill,
     gap: 6,
-    borderWidth: 1.5,
+    borderWidth: 1,
   } as ViewStyle,
   switchBtn: {
     backgroundColor: 'transparent',
@@ -521,7 +530,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   } as ViewStyle,
   actionBtnText: {
-    fontSize: 12,
+    fontSize: 13,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
   } as TextStyle,
   loginFormContainer: {
@@ -544,6 +554,7 @@ const styles = StyleSheet.create({
   alertText: {
     flex: 1,
     fontSize: 12.5,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
     lineHeight: 16,
   } as TextStyle,
@@ -553,14 +564,16 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   inputLabel: {
     fontSize: 13,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
   } as TextStyle,
   textInput: {
     height: 50,
-    borderRadius: 12,
-    borderWidth: 1.5,
+    borderRadius: Radii.input,
+    borderWidth: 1,
     paddingHorizontal: 14,
     fontSize: 15,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
   } as TextStyle,
   submitRow: {
@@ -569,20 +582,18 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   submitBtn: {
     width: '100%',
-    height: 50,
-    borderRadius: 12,
+    height: 52,
+    borderRadius: Radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...softShadow(1),
   } as ViewStyle,
   submitBtnText: {
     color: '#FFF',
-    fontSize: 15,
+    fontSize: 16,
+    fontFamily: Fonts?.semibold,
     fontWeight: '700',
+    letterSpacing: 0.2,
   } as TextStyle,
   spinner: {
     paddingVertical: 14,

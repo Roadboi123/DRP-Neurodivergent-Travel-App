@@ -1240,7 +1240,7 @@ async def get_user_warnings(
     # 1. Fetch user preferences if username is provided and not generic request
     u_noise = 2
     u_crowds = 2
-    u_heat = 2
+    _u_heat = 2
     _u_light = 2
     _u_smell = 2
     is_anon = True
@@ -1257,7 +1257,7 @@ async def get_user_warnings(
                 if isinstance(prefs_data, dict):
                     u_noise = int(prefs_data.get("noise_sensitivity") or 2)
                     u_crowds = int(prefs_data.get("crowd_sensitivity") or 2)
-                    u_heat = int(prefs_data.get("heat_sensitivity") or 2)
+                    _u_heat = int(prefs_data.get("heat_sensitivity") or 2)
                     _u_light = int(prefs_data.get("light_sensitivity") or 2)
                     _u_smell = int(prefs_data.get("smell_sensitivity") or 2)
                     is_anon = False
@@ -1269,38 +1269,17 @@ async def get_user_warnings(
     if is_anon or generic:
         u_noise = 3
         u_crowds = 3
-        u_heat = 3
+        _u_heat = 3
         _u_light = 3
         _u_smell = 3
 
     warnings: List[Dict[str, Any]] = []
     warning_id_counter = 1
 
-    # 2. Temperature check
-    try:
-        temp = await get_current_london_temp()
-    except Exception:
-        temp = 18.0
-
-    if u_heat >= 3:
-        if temp >= 24.0:
-            warnings.append({
-                "id": f"w_temp_{warning_id_counter}",
-                "title": "Severe Heat",
-                "desc": f"Piccadilly & Central lines are running hot ({temp}°C).",
-                "severity": "high",
-                "icon": "thermometer"
-            })
-            warning_id_counter += 1
-        elif temp >= 20.0:
-            warnings.append({
-                "id": f"w_temp_{warning_id_counter}",
-                "title": "Warm Carriages",
-                "desc": f"Deep tubes and non-AC buses will be warm ({temp}°C).",
-                "severity": "medium",
-                "icon": "thermometer"
-            })
-            warning_id_counter += 1
+    # Note: no automatic heat/temperature warning. Many buses and deep-tube lines
+    # have no air conditioning, so heat is unavoidable rather than route-specific —
+    # surfacing it as a warning is misleading. Heat still factors into per-leg
+    # sensory scoring and remains a user-reportable warning type.
 
     # 3. Live line disruptions check from TfL Status API.
     # Suspensions and closures are safety-critical and must always be fetched;
@@ -1428,77 +1407,31 @@ async def get_user_warnings(
         any_high = len(severe_lines) > 0
         severity_val = "high" if any_high else "medium"
 
-        if u_crowds >= 3:
-            desc = f"{lines_str} delays are causing severe platform crowding." if any_high else f"{lines_str} delays are causing platform crowding."
+        # One warning per line delay (instead of separate crowding + noise cards).
+        # Describe whichever sensory effects matter to this traveller.
+        if u_crowds >= 3 or u_noise >= 3:
+            effects = []
+            if u_crowds >= 3:
+                effects.append("platform crowding")
+            if u_noise >= 3:
+                effects.append("louder station announcements")
+            effects_str = " and ".join(effects)
+            severe_prefix = "severe " if any_high and u_crowds >= 3 else ""
+            title = f"{delayed_lines[0]} Line Delays" if len(delayed_lines) == 1 else "Line Delays"
             warnings.append({
-                "id": f"w_tfl_crowds_{warning_id_counter}",
-                "title": "Station Crowding",
-                "desc": desc,
+                "id": f"w_tfl_delays_{warning_id_counter}",
+                "title": title,
+                "desc": f"{lines_str} delays are causing {severe_prefix}{effects_str}.",
                 "severity": severity_val,
                 "icon": "alert-circle"
             })
             warning_id_counter += 1
 
-        if u_noise >= 3:
-            desc = f"{lines_str} delays are causing loud station announcements." if any_high else f"{lines_str} delays are causing station announcements."
-            warnings.append({
-                "id": f"w_tfl_noise_{warning_id_counter}",
-                "title": "Platform Noise",
-                "desc": desc,
-                "severity": severity_val,
-                "icon": "alert-circle"
-            })
-            warning_id_counter += 1
-
-    # 4. Live station works check (drilling, construction)
-    if u_noise >= 3:
-        try:
-            works_stations = await tlf_client.get_live_station_works()
-            # Filter to stations actually on this route (if context was supplied).
-            if route_stations and works_stations:
-                works_stations = [
-                    s for s in works_stations if s.lower() in route_stations
-                ]
-            if works_stations:
-                if len(works_stations) == 1:
-                    desc = f"Drilling works reported at {works_stations[0]} station."
-                elif len(works_stations) == 2:
-                    desc = f"Drilling works reported at {works_stations[0]} and {works_stations[1]} stations."
-                else:
-                    desc = f"Drilling works reported at {works_stations[0]}, {works_stations[1]}, and {len(works_stations)-2} other stations."
-
-                warnings.append({
-                    "id": f"w_station_works_{warning_id_counter}",
-                    "title": "Drilling & Works",
-                    "desc": desc,
-                    "severity": "medium",
-                    "icon": "volume-high"
-                })
-                warning_id_counter += 1
-        except Exception as e:
-            print(f"Error checking live station works: {e}")
-
-    # 4b. Live station events check (football, crowd, concerts)
-    if u_crowds >= 3:
-        try:
-            event_alerts = await tlf_client.get_live_station_events()
-            if event_alerts:
-                if route_stations:
-                    event_alerts = [
-                        e for e in event_alerts if e["station"].lower() in route_stations
-                    ]
-                for event in event_alerts:
-                    desc_text = event["desc"]
-                    warnings.append({
-                        "id": f"w_station_event_{warning_id_counter}",
-                        "title": f"Event & Crowds at {event['station']}",
-                        "desc": desc_text,
-                        "severity": "high" if any(w in desc_text.lower() for w in ("football", "match", "concert", "stadium")) else "medium",
-                        "icon": "people"
-                    })
-                    warning_id_counter += 1
-        except Exception as e:
-            print(f"Error checking live station events: {e}")
+    # Station-level platform noise (works) and crowding (events) are intentionally
+    # NOT surfaced as their own cards: a delayed line already produces a single
+    # consolidated "Line Delays" warning above that describes both the platform
+    # crowding and louder-announcement effects. Splitting them back out produced
+    # two separate cards for what travellers experience as one disruption.
 
     # 5. Fetch user-reported warnings from database
     try:

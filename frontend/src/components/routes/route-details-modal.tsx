@@ -6,14 +6,17 @@ import { WebView } from 'react-native-webview';
 
 import { getLegUIProps } from '@/components/routes/route-card';
 import { WarningConfidence } from '@/components/routes/warning-confidence';
-import { WALK_BLUE, modeEmoji, warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
-import { Fonts, getAccents, getPalette, getSemanticColors, hardShadow } from '@/constants/theme';
+import { WALK_BLUE, modeEmoji, warningDisplayDesc, warningMarkerScript, warningVisual } from '@/components/routes/warning-markers';
+import { BlurView } from 'expo-blur';
+
+import { CLEARWAY, Fonts, GLASS, getAccents, getPalette, getSemanticColors, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuth } from '@/context/auth-context';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
 import { setActiveJourneyLabels, setActiveJourneyRoute } from '@/services/active-journey';
 import type { RouteOption } from '@/types/route';
 import { analytics } from '@/services/analytics';
-import { cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
+import { buildChangeInstruction, cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 
 interface RouteDetailsModalProps {
   visible: boolean;
@@ -79,6 +82,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
+  const { username } = useAuth();
   const semantic = getSemanticColors(isDark);
   const linkColor = semantic.link;
 
@@ -143,7 +147,10 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
     formattedWarnings,
     selectedWarning,
     setSelectedWarning,
+    selectedCluster,
+    setSelectedCluster,
     openWarningById,
+    openClusterByIds,
     selectedIsOwn,
     removeOwnWarning,
     dismissWarning,
@@ -160,6 +167,9 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
 
   const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
   const [isExpanded, setIsExpanded] = React.useState(false);
+  // Toggles the white "change here" markers on the map (mirrors the live journey
+  // screen's top pill); the legend itself stays in the header.
+  const [hideChanges, setHideChanges] = React.useState(false);
 
   // Push the latest markers to the map, and listen for marker taps coming back.
   React.useEffect(() => {
@@ -184,6 +194,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data.type === 'warningClick' && data.id) {
           openWarningById(data.id);
+        } else if (data.type === 'warningClusterClick' && data.ids) {
+          openClusterByIds(data.ids);
         }
       } catch {
         // Ignore other/external window messages
@@ -191,7 +203,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
     };
     window.addEventListener('message', handleWebMessage);
     return () => window.removeEventListener('message', handleWebMessage);
-  }, [openWarningById]);
+  }, [openWarningById, openClusterByIds]);
 
   // Bottom Sheet animations and dimensions
   const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -205,6 +217,11 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
   // Current scroll offset of the inner list, so a downward drag at the very top
   // collapses the sheet instead of being swallowed by the ScrollView.
   const scrollOffsetY = React.useRef(0);
+  // `gestureState.dy` is measured from touch-down, but the sheet pan is often
+  // granted *mid-gesture* (once the inner list scrolls back to the top). Record
+  // the dy at grant time and subtract it so the drag starts from the finger's
+  // current position instead of jumping ("snapping") by the pre-grant travel.
+  const grantDy = React.useRef(0);
 
   React.useEffect(() => {
     const listenerId = panY.addListener(({ value }) => {
@@ -220,23 +237,52 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       panY.setValue(MAX_TRANSLATE_Y);
       lastTranslateY.current = MAX_TRANSLATE_Y;
       setIsExpanded(false);
+      setHideChanges(false);
     }
   }, [visible, route, panY, MAX_TRANSLATE_Y]);
 
-  const onPanResponderGrant = () => {
+  // Push the change-marker toggle to the map (re-pushed once the map signals it
+  // is ready via `mapReadyTick`, since the first push can race the map load).
+  React.useEffect(() => {
+    if (!visible) return;
+    if (Platform.OS === 'web') {
+      const iframe = document.querySelector('iframe');
+      iframe?.contentWindow?.postMessage({ type: 'setChangeMarkersHidden', hidden: hideChanges }, '*');
+    } else if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `if (window.setChangeMarkersHidden) { window.setChangeMarkersHidden(${hideChanges}); } true;`,
+      );
+    }
+  }, [visible, hideChanges, mapReadyTick]);
+
+  // On web the sheet sits over a full-screen map <iframe>. While dragging the
+  // sheet the pointer can pass over the iframe, which swallows the gesture and
+  // makes the drag stutter/"snap". Disabling the iframe's pointer events for the
+  // duration of the drag keeps the JS-driven gesture smooth (mirrors the live
+  // journey screen, where the same trick keeps the swipe fluid).
+  const setMapInteractive = (interactive: boolean) => {
+    if (Platform.OS !== 'web') return;
+    const f = document.querySelector('iframe');
+    if (f) (f as HTMLElement).style.pointerEvents = interactive ? 'auto' : 'none';
+  };
+
+  const onPanResponderGrant = (_: any, gestureState: any) => {
     startTranslateY.current = lastTranslateY.current;
+    grantDy.current = gestureState?.dy ?? 0;
     panY.setOffset(startTranslateY.current);
     panY.setValue(0);
+    setMapInteractive(false);
   };
 
   const onPanResponderMove = (_: any, gestureState: any) => {
-    const newY = gestureState.dy;
+    const newY = gestureState.dy - grantDy.current;
     const minVal = -startTranslateY.current;
     const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
     panY.setValue(Math.max(minVal, Math.min(maxVal, newY)));
   };
 
   const onPanResponderRelease = (_: any, gestureState: any) => {
+    setMapInteractive(true);
     panY.flattenOffset();
     const currentY = lastTranslateY.current;
     const velocityY = gestureState.vy;
@@ -284,7 +330,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       onPanResponderGrant,
       onPanResponderMove,
       onPanResponderRelease,
-      onPanResponderTerminate: () => {},
+      onPanResponderTerminate: () => setMapInteractive(true),
     })
   ).current;
 
@@ -294,7 +340,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         const { dy, dx } = gestureState;
-        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        const verticalEnough = Math.abs(dy) > 2 && Math.abs(dy) > Math.abs(dx);
         if (!verticalEnough) return false;
         
         // If dragging down and at the top of the scroll view, claim it
@@ -309,7 +355,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       },
       onMoveShouldSetPanResponderCapture: (_, gestureState) => {
         const { dy, dx } = gestureState;
-        const verticalEnough = Math.abs(dy) > 4 && Math.abs(dy) > Math.abs(dx);
+        const verticalEnough = Math.abs(dy) > 2 && Math.abs(dy) > Math.abs(dx);
         if (!verticalEnough) return false;
         
         // If dragging down and at the top of the scroll view, capture it
@@ -326,7 +372,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       onPanResponderGrant,
       onPanResponderMove,
       onPanResponderRelease,
-      onPanResponderTerminate: () => {},
+      onPanResponderTerminate: () => setMapInteractive(true),
     })
   ).current;
 
@@ -519,12 +565,24 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
         }
       });
 
-      // B. Draw nodes: start (green) and end (pink) are plain dots; every
+      // Build a readable interchange instruction for each change, keyed by the
+      // change station, so a tapped change marker explains the transfer.
+      const changePopupByKey: Record<string, string> = {};
+      for (let i = 0; i < processedLegs.length - 1; i++) {
+        const fromLeg = processedLegs[i];
+        const toLeg = processedLegs[i + 1];
+        changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] =
+          buildChangeInstruction(fromLeg, toLeg);
+      }
+
+      // B. Draw nodes: start (green) and end (red) are plain dots; every
       // interchange is a white "change here" marker with the boarding mode's
-      // emoji, matching the live journey map.
+      // emoji, matching the live journey map. The change markers are rendered
+      // via a toggle-able function so the "Hide changes" pill can drop them.
+      const changeNodes: { lat: number; lon: number; emoji: string; popup: string }[] = [];
       pointsList.forEach((p) => {
         if (p.isStart || p.isEnd) {
-          const fillColor = p.isStart ? '#83f582' : '#ff158a';
+          const fillColor = p.isStart ? '#5b9d6b' : '#e23b3b';
           leafletJS += `
             L.circleMarker([${p.lat}, ${p.lon}], {
               radius: 9,
@@ -536,20 +594,33 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
             }).addTo(map).bindPopup("<b>${cleanPlaceLabel(p.label, 'Stop').replace(/"/g, '\\"')}</b>");
           `;
         } else {
-          const emoji = modeEmoji(p.boardMode);
-          const label = cleanPlaceLabel(p.label, 'Change here').replace(/"/g, '&quot;');
-          leafletJS += `
-            L.marker([${p.lat}, ${p.lon}], {
-              icon: L.divIcon({
-                html: '<div style="background:#ffffff;width:30px;height:30px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:15px;line-height:1;">${emoji}</span></div>',
-                className: 'change-marker-icon',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
-              })
-            }).addTo(map).bindPopup("<b>${label}</b>");
-          `;
+          changeNodes.push({
+            lat: p.lat,
+            lon: p.lon,
+            emoji: modeEmoji(p.boardMode),
+            popup: changePopupByKey[(p.label || '').toLowerCase()] || cleanPlaceLabel(p.label, 'Change here'),
+          });
         }
       });
+
+      leafletJS += `
+        const changeNodes = ${JSON.stringify(changeNodes)};
+        let changeMarkers = [];
+        let changeHidden = false;
+        function renderChangeMarkers() {
+          changeMarkers.forEach((m) => map.removeLayer(m));
+          changeMarkers = [];
+          if (changeHidden) return;
+          changeNodes.forEach((c) => {
+            const html = '<div style="background:#ffffff;width:30px;height:30px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:15px;line-height:1;">' + c.emoji + '</span></div>';
+            const icon = L.divIcon({ html: html, className: 'change-marker-icon', iconSize: [30, 30], iconAnchor: [15, 15] });
+            const m = L.marker([c.lat, c.lon], { icon: icon }).addTo(map).bindPopup('<b>' + c.popup.replace(/"/g, '&quot;') + '</b>');
+            changeMarkers.push(m);
+          });
+        }
+        window.setChangeMarkersHidden = function(hidden) { changeHidden = !!hidden; renderChangeMarkers(); };
+        renderChangeMarkers();
+      `;
     }
 
     const leafletHtml = `
@@ -616,6 +687,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
               if (data.type === 'updateWarnings') {
                 window.updateWarnings(data.warnings);
+              } else if (data.type === 'setChangeMarkersHidden') {
+                if (window.setChangeMarkersHidden) { window.setChangeMarkersHidden(data.hidden); }
               }
             } catch (e) {}
           });
@@ -634,7 +707,7 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
       visible={visible}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={[styles.modalSheet, { backgroundColor: palette.surface }]}>
+      <SafeAreaView style={[styles.modalSheet, { backgroundColor: CLEARWAY.bgBase }]}>
         {/* Header row — back + home top-left (mirrors the journey screen) */}
         <View style={[styles.headerRow, { borderBottomColor: palette.divider }]}>
           <View style={styles.navButtonsRow}>
@@ -662,15 +735,44 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
             </TouchableOpacity>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.routeTitle, { color: palette.textPrimary }]} numberOfLines={1}>
-              {route.name}
-            </Text>
-            {route.subName ? (
-              <Text style={[styles.routeSub, { color: palette.textSecondary }]} numberOfLines={1}>
-                {route.subName}
-              </Text>
-            ) : null}
+
+          {/* Compact 2×2 map key, inline with the nav buttons (above the map's
+              Hide-warnings button) — same content/position as the live journey. */}
+          <View style={[styles.headerLegend, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
+              </View>
+            </View>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendWalkDots}>
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendEmojiStack}>
+                  <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚶</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚌</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚆</Text>
+                  </View>
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Changes</Text>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -705,6 +807,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                         const data = JSON.parse(event.nativeEvent.data);
                         if (data.type === 'warningClick' && data.id) {
                           openWarningById(data.id);
+                        } else if (data.type === 'warningClusterClick' && data.ids) {
+                          openClusterByIds(data.ids);
                         }
                       } catch {
                         // Ignore
@@ -716,26 +820,46 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               </View>
             )}
 
-            {/* Hide / show all warning markers (mirrors the journey screen) */}
+            {/* Map toggles: Hide changes + Hide warnings (mirrors the journey screen) */}
             {hasMapCoords && (
-              <TouchableOpacity
-                onPress={() => {
-                  analytics.trackClick();
-                  setHideAll(!hideAll);
-                }}
-                style={[
-                  styles.hideWarningsBtn,
-                  { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
-              >
-                <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
-                <Text style={[styles.hideWarningsText, { color: palette.textPrimary }]}>
-                  {hideAll ? 'Show warnings' : 'Hide warnings'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.mapTopControls} pointerEvents="box-none">
+                <TouchableOpacity
+                  onPress={() => {
+                    analytics.trackClick();
+                    setHideChanges((v) => !v);
+                  }}
+                  style={[
+                    styles.mapPill,
+                    { backgroundColor: hideChanges ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideChanges ? CLEARWAY.blueStrong : palette.border },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={hideChanges ? 'Show change icons on map' : 'Hide change icons from map'}
+                >
+                  <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={16} color={hideChanges ? CLEARWAY.white : palette.textPrimary} />
+                  <Text style={[styles.hideWarningsText, { color: hideChanges ? CLEARWAY.white : palette.textPrimary }]}>
+                    {hideChanges ? 'Show changes' : 'Hide changes'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    analytics.trackClick();
+                    setHideAll(!hideAll);
+                  }}
+                  style={[
+                    styles.mapPill,
+                    { backgroundColor: hideAll ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideAll ? CLEARWAY.blueStrong : palette.border },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+                >
+                  <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={hideAll ? CLEARWAY.white : palette.textPrimary} />
+                  <Text style={[styles.hideWarningsText, { color: hideAll ? CLEARWAY.white : palette.textPrimary }]}>
+                    {hideAll ? 'Show warnings' : 'Hide warnings'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
+
           </View>
 
           {/* Timeline sheet panel overlapping the bottom of the map */}
@@ -744,8 +868,8 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
             style={[
             styles.sheetPanel,
             {
-              backgroundColor: palette.surface,
-              borderColor: palette.border,
+              backgroundColor: GLASS.light.fill,
+              borderColor: GLASS.light.border,
               height: SHEET_HEIGHT,
               position: 'absolute',
               bottom: 0,
@@ -754,9 +878,12 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
               transform: [{ translateY: panY }]
             }
           ]}>
-            {/* Drag handle header wrapper */}
+            <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
+            {/* Drag handle header wrapper. `touchAction: none` on web stops the
+                browser from claiming the vertical drag as a scroll/overscroll
+                gesture (which cancelled the pan and made the sheet snap). */}
             <View
-              style={styles.sheetHeaderTouch}
+              style={[styles.sheetHeaderTouch, Platform.OS === 'web' ? ({ touchAction: 'none' } as any) : null]}
               {...headerPanResponder.panHandlers}
             >
               {/* Sheet drag indicator bar */}
@@ -779,12 +906,12 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={startJourney}
-                  style={[styles.startJourneyButton, { backgroundColor: accents.green, borderColor: palette.border }]}
+                  style={[styles.startJourneyButton, { backgroundColor: CLEARWAY.blue }]}
                   accessibilityRole="button"
                   accessibilityLabel="Start journey mode"
                 >
-                  <Ionicons name="play" size={18} color={palette.textPrimary} />
-                  <Text style={[styles.startJourneyText, { color: palette.textPrimary }]}>Start journey</Text>
+                  <Ionicons name="play" size={18} color={CLEARWAY.white} />
+                  <Text style={[styles.startJourneyText, { color: CLEARWAY.white }]}>Start journey</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -918,10 +1045,10 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                 onPress={() => setSelectedWarning(null)}
               />
               <View style={styles.warningCenterContainer} pointerEvents="box-none">
-                <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
                   <TouchableOpacity
                     onPress={() => setSelectedWarning(null)}
-                    style={[styles.warningCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                    style={[styles.warningCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
                     accessibilityRole="button"
                     accessibilityLabel="Dismiss"
                   >
@@ -939,18 +1066,18 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
 
                   <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
                   <WarningConfidence warning={selectedWarning} />
-                  <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
+                  <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{warningDisplayDesc(selectedWarning, username)}</Text>
 
                   <TouchableOpacity
                     onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
                     activeOpacity={0.85}
                     style={[
                       styles.warningCardAction,
-                      { backgroundColor: selectedIsOwn ? accents.pink : accents.green, borderColor: palette.border },
+                      { backgroundColor: selectedIsOwn ? CLEARWAY.bad : CLEARWAY.blue },
                     ]}
                   >
-                    <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
-                    <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                    <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={CLEARWAY.white} />
+                    <Text style={[styles.warningCardActionText, { color: CLEARWAY.white }]}>
                       {selectedIsOwn ? 'Remove' : 'Close'}
                     </Text>
                   </TouchableOpacity>
@@ -958,6 +1085,63 @@ export function RouteDetailsModal({ visible, route: propRoute, originLabel, dest
                   <Text style={[styles.warningCardHint, { color: palette.textMuted }]}>
                     {selectedIsOwn ? 'Removes it from the map for everyone' : 'Hides it for you only'}
                   </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Cluster breakdown — all sensory warnings in one ~100m area. */}
+          {selectedCluster && (
+            <View style={styles.warningOverlayRoot} pointerEvents="box-none">
+              <TouchableOpacity
+                style={styles.warningBackdrop}
+                activeOpacity={1}
+                onPress={() => setSelectedCluster(null)}
+              />
+              <View style={styles.warningCenterContainer} pointerEvents="box-none">
+                <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedCluster(null)}
+                    style={[styles.warningCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss"
+                  >
+                    <Ionicons name="close" size={16} color={palette.textPrimary} />
+                  </TouchableOpacity>
+                  <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>
+                    {selectedCluster.length} warnings here
+                  </Text>
+                  <ScrollView style={styles.clusterList} showsVerticalScrollIndicator={false}>
+                    {selectedCluster.map((w) => (
+                      <TouchableOpacity
+                        key={w.id}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setSelectedCluster(null);
+                          setSelectedWarning(w);
+                        }}
+                        style={styles.clusterRow}
+                      >
+                        <View
+                          style={[
+                            styles.clusterRowIcon,
+                            { backgroundColor: warningVisual(w.icon, accents).color, borderColor: palette.border },
+                          ]}
+                        >
+                          <Text style={{ fontSize: 15 }}>{warningVisual(w.icon, accents).emoji}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.clusterRowTitle, { color: palette.textPrimary }]} numberOfLines={1}>
+                            {w.title}
+                          </Text>
+                          <Text style={[styles.clusterRowDesc, { color: palette.textSecondary }]} numberOfLines={2}>
+                            {warningDisplayDesc(w, username)}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={palette.textMuted} />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
                 </View>
               </View>
             </View>
@@ -982,7 +1166,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 16,
-    borderBottomWidth: 1.5,
+    borderBottomWidth: 1,
   },
   navButtonsRow: {
     flexDirection: 'row',
@@ -990,23 +1174,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   circleButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 2,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    ...hardShadow(3),
+    ...softShadow(1),
   },
   routeTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontWeight: '800',
+    letterSpacing: -0.4,
   },
   routeSub: {
-    fontSize: 11,
+    fontSize: 12,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -1022,13 +1206,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sheetPanel: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
+    borderTopLeftRadius: Radii.cardLg,
+    borderTopRightRadius: Radii.cardLg,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     overflow: 'hidden',
-    ...hardShadow(10),
+    ...softShadow(3),
   },
   sheetHeaderTouch: {
     width: '100%',
@@ -1048,7 +1232,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderBottomWidth: 1.5,
+    borderBottomWidth: 1,
   },
   statsGroup: {
     flexDirection: 'row',
@@ -1059,33 +1243,32 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   statLabel: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 10,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   statVal: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: Fonts?.display,
     fontWeight: '800',
+    letterSpacing: -0.3,
     marginTop: 2,
   },
   startJourneyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    borderWidth: 2.5,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: Radii.pill,
+    paddingVertical: 13,
     paddingHorizontal: 24,
-    ...hardShadow(4),
+    ...softShadow(1),
   },
   startJourneyText: {
     fontSize: 15,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   scrollContent: {
     padding: 16,
@@ -1108,7 +1291,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -1126,15 +1309,18 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   stationText: {
-    fontSize: 13,
+    fontSize: 13.5,
+    fontFamily: Fonts?.semibold,
     fontWeight: '800',
   },
   instructionText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
   },
   arrivalText: {
-    fontSize: 11.5,
+    fontSize: 12,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -1150,8 +1336,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   stopsHeader: {
-    fontSize: 10.5,
-    fontWeight: '800',
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
   },
   stopsList: {
     gap: 2,
@@ -1165,14 +1352,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radii.input,
+    borderWidth: 1,
     marginTop: 8,
   },
   waitWarningText: {
-    fontSize: 11,
+    fontSize: 11.5,
+    fontFamily: Fonts?.body,
     fontWeight: '700',
     flex: 1,
   },
@@ -1184,27 +1372,30 @@ const styles = StyleSheet.create({
     bottom: '75%',
     zIndex: 5,
   },
-  hideWarningsBtn: {
+  mapTopControls: {
     position: 'absolute',
     top: 16,
     right: 16,
     flexDirection: 'row',
+    gap: 8,
+    zIndex: 10,
+  },
+  mapPill: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     height: 38,
-    paddingHorizontal: 12,
-    borderRadius: 19,
-    borderWidth: 2,
+    paddingHorizontal: 14,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
     justifyContent: 'center',
-    zIndex: 10,
-    ...hardShadow(3),
+    ...softShadow(1),
   },
   hideWarningsText: {
-    fontSize: 10.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   warningOverlayRoot: {
     ...StyleSheet.absoluteFillObject,
@@ -1221,8 +1412,8 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   warningCard: {
-    borderWidth: 3,
-    borderRadius: 20,
+    borderWidth: 1,
+    borderRadius: Radii.cardLg,
     paddingTop: 20,
     paddingBottom: 16,
     paddingHorizontal: 18,
@@ -1230,7 +1421,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 300,
     gap: 8,
-    ...hardShadow(6),
+    ...softShadow(3),
   },
   warningCancelBtn: {
     position: 'absolute',
@@ -1239,16 +1430,16 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    ...hardShadow(2),
+    ...softShadow(1),
   },
   warningCardIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    borderWidth: 2.5,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1256,17 +1447,18 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   warningCardTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: '800',
+    letterSpacing: -0.4,
     textAlign: 'center',
     marginTop: 2,
   },
   warningCardDesc: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
+    fontSize: 12.5,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
+    lineHeight: 17,
     textAlign: 'center',
   },
   warningCardAction: {
@@ -1274,23 +1466,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderWidth: 2.5,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: Radii.pill,
+    paddingVertical: 13,
     paddingHorizontal: 18,
     alignSelf: 'stretch',
     marginTop: 4,
-    ...hardShadow(2),
+    ...softShadow(1),
   },
   warningCardActionText: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontSize: 13,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
   },
   warningCardHint: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
     textAlign: 'center',
   },
+  // Compact 2×2 map key overlay (top-left of the pre-Go map).
+  // Map key inline in the header row, pushed to the right (above the map's
+  // Hide-warnings button), matching the live journey screen's position.
+  headerLegend: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    ...softShadow(1),
+  },
+  legendCol: { gap: 5 },
+  legendRowItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 13, height: 13, borderRadius: 7 },
+  legendWalkDots: { flexDirection: 'row', alignItems: 'center', gap: 3, width: 13, justifyContent: 'center' },
+  legendWalkDot: { width: 4, height: 4, borderRadius: 2 },
+  legendLabel: { fontSize: 11.5, fontFamily: Fonts?.semibold, fontWeight: '700' },
+  legendEmojiStack: { flexDirection: 'row', alignItems: 'center' },
+  legendEmojiChip: {
+    width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: '#ffffff',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  legendEmojiOverlap: { marginLeft: -8 },
+  legendEmoji: { fontSize: 10 },
+  clusterList: { alignSelf: 'stretch', maxHeight: 260, marginTop: 4 },
+  clusterRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  clusterRowIcon: {
+    width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+  },
+  clusterRowTitle: { fontSize: 13, fontFamily: Fonts?.semibold, fontWeight: '700' },
+  clusterRowDesc: { fontSize: 12, fontFamily: Fonts?.body, lineHeight: 16 },
 });

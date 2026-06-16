@@ -4,7 +4,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { presetDisplayName } from '@/constants/presets';
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, Fonts, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePresets } from '@/context/presets-context';
 
@@ -17,7 +17,6 @@ import { usePresets } from '@/context/presets-context';
 export function PresetIndicator() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
   const { presets, activeId } = usePresets();
 
   const active = presets.find((p) => p.id === activeId);
@@ -33,7 +32,7 @@ export function PresetIndicator() {
       accessibilityRole="button"
       accessibilityLabel={`Routes use your ${presetDisplayName(active)} sensory profile. Tap to change.`}
     >
-      <View style={[styles.dot, { backgroundColor: accents.pink, borderColor: palette.border }]} />
+      <View style={[styles.dot, { backgroundColor: CLEARWAY.blue }]} />
       <Text style={[styles.label, { color: palette.textSecondary }]} numberOfLines={1}>
         Sensory profile:{' '}
         <Text style={[styles.value, { color: palette.textPrimary }]}>{presetDisplayName(active)}</Text>
@@ -51,29 +50,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
     marginBottom: 10,
-    ...hardShadow(3),
+    ...softShadow(1),
   },
   dot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    borderWidth: 1.5,
   },
   label: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 12.5,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
   },
   value: {
-    fontFamily: Fonts?.display,
+    fontFamily: Fonts?.semibold,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    letterSpacing: 0,
   },
   changeRow: {
     flexDirection: 'row',
@@ -81,9 +79,9 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   change: {
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontSize: 11.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
 });

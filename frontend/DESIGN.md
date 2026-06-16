@@ -1,9 +1,14 @@
 # Frontend design system & screenshot workflow
 
-How UI gets built in this app. The app is **Expo / React Native on `react-native-web`** — there
-is **no Tailwind and no HTML/CSS**. Everything is `StyleSheet` + the theme in
+How UI gets built in this app. The app is **Expo / React Native on `react-native-web`** —
+there is **no Tailwind and no HTML/CSS**. Everything is `StyleSheet` + the tokens in
 `src/constants/theme.ts`. Architecture, services (DI), and the frozen API contract live in
 `CLAUDE.md` — read it for anything non-visual.
+
+> The app was rebranded from the old neo-brutalist **"Wero"** look to **Clearway** — a calm,
+> airy **glassmorphism** language (see `Clearway.pdf` at the repo root for the source deck).
+> If you find any leftover Wero idioms (hard offset shadows, neon pink/yellow fills, UPPERCASE
+> headings, 2px ink borders), they're bugs — migrate them to the tokens below.
 
 ## Always do first
 
@@ -11,95 +16,118 @@ is **no Tailwind and no HTML/CSS**. Everything is `StyleSheet` + the theme in
 - **Never ship a visual change you haven't screenshotted and looked at.** "It should look right"
   is not verification — the screenshot is.
 
+## The Clearway design language (use the tokens, don't reinvent)
+
+A single, calm theme — **there is no light/dark toggle anymore** (`useColorScheme()` always
+returns `'light'`; the old `ThemeProvider`/`ThemeToggle` are gone/no-ops). All tokens live in
+`src/constants/theme.ts`. Import `CLEARWAY`, `GLASS`, `Radii`, `softShadow`, `ClearwayFonts`
+directly; the older names (`getPalette`, `getAccents`, `getSemanticColors`, `hardShadow`,
+`BRAND`) are kept as **compatibility shims that now return calm Clearway values** so the tree
+keeps compiling — prefer the new tokens in new code.
+
+### Colour (`CLEARWAY`)
+- **Background:** a pale blue-grey field (`bgBase #d5dbe1`) under a few large, diffuse pastel
+  **mesh blobs** (`meshBlue / meshLilac / meshPeach`). Painted by `GradientBackground` — static,
+  no animation. **Each screen mounts its own** (RN-web gotcha below).
+- **Text:** `heading #1a1c1e` (near-black, big headings), `ink #33363b` (body/primary),
+  `textSecondary #5a5e66`, `textMuted #878d96`, `onGlassDark #f4f6f9` (on dark glass).
+- **Accent (single, soft blue):** `blue #5b8fd6`, `blueStrong #2f6fed` (links/active), and the
+  pill gradient `bluePillFrom → bluePillTo` (`#cfe0f5 → #a7c8ef`). A faint `lilac` pairs with
+  blue in the signature `GradientDot`. Don't reintroduce pink/yellow/green as decoration.
+- **Functional colour stays** (do NOT monochrome): the sensory severity ramp
+  (`good` green → amber `#d3a83c` → orange `#d9844e` → `bad` coral) and the official
+  `TFL_LINE_COLORS` liveries (`resolveLineColor`) for transit legs/markers. Warning surfaces use
+  the amber semantic tokens.
+
+### Glass (`GLASS`, the signature surface)
+Frosted glass is the product's identity. Use the primitives — don't hand-roll blur:
+- **`Glass`** (`components/ui/glass.tsx`) — the base frosted surface: real backdrop blur via
+  `expo-blur` `BlurView` (maps to CSS `backdrop-filter` on web) under a translucent tinted fill,
+  a **thin 1px light border**, soft shadow. Props: `tone` (`'light'` default / `'dark'`),
+  `radius`, `shadow` (0–3), `bordered`.
+- **`GlassCard`** — `Glass` + padding, for grouped content.
+- **`GlassButton`** — the signature CTA: `primary` (blue→light-blue gradient pill, white text),
+  `secondary` (frosted pill), `ghost`. Has a pressed (scale+dim) state.
+- **`Chip`** — selectable pill: selected = blue gradient (or a `selectedColor`), unselected =
+  frosted glass.
+- **`GradientDot`** — the small blue→lilac accent dot (card corners, the "Clearway." dot).
+- **`GLASS.light` / `GLASS.dark`** give `{ fill, border, blur }` if you need a bespoke frosted
+  surface (e.g. a bottom sheet): put a `BlurView` as an absolute-fill first child of an
+  `overflow:'hidden'` rounded container, then the translucent fill + content over it. See
+  `route-time-sheet.tsx` / `journey.tsx` sheet panels for the pattern.
+
+### Shadows — soft, never hard
+`softShadow(level)` (1 = pills/buttons → 3 = raised cards/sheets): a low-opacity, **blurred**
+ambient shadow. The old hard 0-radius offset block is gone (`hardShadow` is now an alias to
+`softShadow`). **No hard/un-blurred shadows.**
+
+### Type — heavy grotesque, mixed-case
+`ClearwayFonts` = **Hanken Grotesk** (loaded in `app/_layout.tsx`): `display` (800),
+`displayBlack` (900), `heading` (700), `semibold` (600), `body` (500), `bodyRegular` (400).
+Also exposed via `Fonts.display / .heading / .semibold / .body`.
+- **Headings are mixed-case** (NOT uppercase), heavy (800–900), with **tight negative tracking**
+  (`letterSpacing` ≈ -0.3 to -1.4 on large sizes). Build big, confident headings (e.g.
+  "My Planner", "Your preferences").
+- Body/labels are weight 500–700, generous line-height (~1.4 on body).
+
+### Radii & borders
+`Radii`: `chip 14`, `input 16`, `card 28`, `cardLg 36`, `pill 999`. Borders are **1px** hairlines
+(`palette.border` light, `palette.borderStrong` for a darker hairline), never 2px ink.
+
+### Motion
+Animate **only `transform` and `opacity`**, via RN core `Animated` (reanimated has no
+worklets/babel plugin here — its animated styles silently no-op). Keep motion gentle; the
+background is deliberately static (neurodivergent users).
+
 ## Screenshot workflow (REQUIRED for any visual change)
 
 **First-time setup (once per machine):** the Chromium download is skipped on install (so CI /
 Vercel stay green), so fetch a browser once: `npx puppeteer browsers install chrome`.
 
-1. Start the web dev server in the background: `npm run web` (`expo start --web`) → serves on
-   **http://localhost:8081**. Wait until it responds before shooting. Always use localhost,
-   never a `file://` URL (react-native-web needs the bundler).
-   - **Port gotcha:** if 8081 is already in use, Expo silently bumps to **8082 / 8083 …**. Kill
-     stale `expo start` processes first (or shoot the printed port) so you're not screenshotting
-     an old instance — a frequent "the screenshot didn't update" cause.
-2. Capture: `npm run screenshot -- <url> [label]`, e.g.
-   `npm run screenshot -- http://localhost:8081/routes routes`.
-   PNGs land in `frontend/screenshots/screenshot-N.png` (auto-incremented, never overwritten;
-   `-label` suffix optional). Viewport defaults to a phone (390×844); override with
-   `SHOT_WIDTH`/`SHOT_HEIGHT`.
+1. Start the web dev server in the background: `npm run web` → serves on
+   **http://localhost:8081**. Use **plain `npm run web`** (watch mode) for an iterative loop so
+   edits show on reload; `CI=1 npm run web` caches the bundle and **won't pick up edits without a
+   restart** (a frequent "the screenshot didn't update" cause). Wait until it responds.
+   - **Port gotcha:** if 8081 is in use, Expo silently bumps to 8082/8083… Kill stale
+     `expo start` processes first (`pkill -f "expo start"`) or shoot the printed port.
+2. Capture: `npm run screenshot -- <url> [label]` → PNGs land in `frontend/screenshots/`
+   (auto-incremented). Viewport defaults to a phone (390×844); override with `SHOT_WIDTH/HEIGHT`.
+   - **For data-backed / interactive states** (route list, details modal, journey, sheets) the
+     built-in script's fixed settle is often too short / can't click. Drive a one-off puppeteer
+     script: load `…/routes?start=Norbiton&end=Imperial%20College%20London`, wait ~12s for the
+     fetch, `page.mouse.click(...)` a card to open the details modal, then "Start journey", etc.
 3. **Read the PNG back with the Read tool** and actually inspect it.
-4. Compare against the reference/mockup and **fix mismatches, then re-screenshot**. Do at least
-   **2 comparison rounds**. Stop only when no visible differences remain — or the user says so.
-5. Be specific when comparing: spacing/padding, font size / weight / line-height, exact hex,
-   alignment, border-radius, shadows, icon/image sizing.
+4. Compare against the deck (`Clearway.pdf`) / mockup and **fix mismatches, then re-screenshot**.
+   Do at least **2 comparison rounds**. Stop only when no visible differences remain.
+5. Be specific: spacing/padding, font size/weight/tracking, exact hex, alignment, radius,
+   shadow softness, glass opacity.
 
 ## Reference images
-
-- **If a reference/mockup is provided** (e.g. the route-page sketches): match layout, spacing,
-  typography and colour **exactly**. Do not "improve" it, add sections, or invent content.
-- **If none:** design from scratch with high craft, following the guardrails below.
-
-## Design system — the Wero language (use the tokens, don't reinvent)
-
-The app uses a neo-brutalist "Wero" style (ink outlines, bright fills, hard offset shadows,
-heavy uppercase type, pill controls). All tokens live in `src/constants/theme.ts`:
-- **Colour:** `BRAND` (`ink #1d1c1c`, `yellow`, `pink #ff158a`, `pinkSoft`, `green`, `cyan`,
-  `orange`, `white`) and the semantic `getPalette(isDark)` (light: ink-on-white; dark: off-white on
-  charcoal). Bright BRAND fills used **as accents** must go through `getAccents(isDark)` (a muted,
-  desaturated ramp in dark) — not `BRAND.*` directly. Don't scatter raw hex — add a token if needed.
-- **Two themes, in-app toggle (not the device setting).** The scheme is an in-app, persisted choice
-  owned by `ThemeProvider` (`src/contexts/theme-context.tsx`, AsyncStorage); `useColorScheme()` returns
-  it, so `getPalette(useColorScheme() === 'dark')` flows everywhere and re-renders on toggle. The
-  `ThemeToggle` (`components/ui/theme-toggle.tsx`) sits top-right of every screen (in `HeaderNav`, and
-  the home header). **Dark mode must read from the in-app context, never the device `Appearance`** —
-  device dark mode used to leak the old palette into selected preference chips. Surfaces/borders that
-  hardcoded `BRAND.white`/`BRAND.ink` must be driven by `palette.surface`/`palette.border` (inline, not
-  in static `StyleSheet`), or they break in dark. **Animate with RN core `Animated`** (transform/opacity
-  only) — reanimated has no worklets/babel plugin configured here, so its animated styles silently no-op.
-- **Bottom sheets have no scrim.** `RouteFilterSheet` uses a **transparent** backdrop — the
-  2px ink border defines it; a dark scrim clashes with the gradient.
-- **Shadows:** the signature `hardShadow(offset)` helper — a hard, un-blurred ink offset block
-  (`shadowRadius: 0`). Use offset 6 for cards, 3–4 for pills/buttons, 2 for the pressed state.
-  **No soft/blurred shadows.**
-- **Type:** `Fonts.display` = Archivo (loaded in the root layout). Headings are **uppercase,
-  weight 800–900, tight tracking**; body is weight 500. Build big, confident headings.
-- **Background:** the pink→yellow `GradientBackground` (static). **Each screen mounts its own**
-  (see the RN-web gotchas) — don't rely on a single shared one.
-- **Borders/radius:** 2px ink borders; cards radius ~14, pills/segments 30.
-- **Reuse primitives:** `SensoryMeter`, `SegmentedControl`, `HeaderNav`, `RouteCard`,
-  `RouteFilterSheet`, `GradientBackground` before building new ones.
-
-## Anti-generic guardrails (translated to React Native)
-
-- **Type pairing:** distinct heading vs body; tight letter-spacing on large headings, generous
-  line-height (~1.4–1.7 equivalent) on body.
-- **Shadows:** layered/tinted and low-opacity — not one flat default shadow.
-- **Depth:** vary elevation so surfaces sit on different planes; don't flatten everything.
-- **Motion:** animate **only `transform` and `opacity`** (via `react-native-reanimated`); never
-  animate layout or "everything". Use spring-style easing.
-- **Interactive states:** every touchable needs a pressed state (and hover/focus on web).
-- **Gradients:** use `expo-linear-gradient` (not yet a dependency — add it if you need one).
-  CSS radial gradients, `mix-blend`, and SVG-noise grain are **not native to RN** — avoid them.
+- **If a reference/mockup is provided** (the deck, sketches): match layout, spacing, typography
+  and colour. Don't "improve" it, add sections, or invent content.
+- **If none:** design from scratch with high craft, following the tokens above.
 
 ## React Native Web gotchas (learned the hard way)
-
 - **Every screen needs its OWN opaque background.** The bottom-tab navigator does **not** detach
-  inactive screens on web, so transparent screen backgrounds over a single shared background let
-  screens **stack and bleed through each other** on navigation. Each screen mounts its own
-  `GradientBackground`; the navigator base is a solid colour, never `transparent`.
-- **`adjustsFontSizeToFit` / auto-shrink is a no-op on web** — text just truncates (`SOMEW…`).
-  Size text to fit explicitly instead of relying on shrink.
-- **Avoid nested horizontal `ScrollView`s inside list rows** — they repaint a blank/white frame
-  when the surrounding list updates (the route-card timeline is a wrapping row for this reason).
-- **Memoize list cards** (`React.memo`) so re-sorting reorders already-painted nodes instead of
-  re-rendering/remounting each one.
-- **`BRAND` tokens are `as const`** (literal types). A `let` initialised from one (e.g. a leg
-  badge colour) narrows to that literal — annotate it `: string` if it gets reassigned to other values.
+  inactive screens on web, so transparent screen backgrounds let screens bleed through on
+  navigation. Each screen mounts its own `GradientBackground`; the navigator base is a solid
+  colour (`CLEARWAY.bgBase`), never `transparent`.
+- **Glass blur:** `expo-blur` `BlurView` blurs what's *behind* it — it needs content behind
+  (the page/map), and the container needs `overflow:'hidden'` + a radius to clip the blur to
+  rounded corners. A `BlurView` whose card has an element poking outside (e.g. a cancel button at
+  `top:-10`) can't use `overflow:'hidden'` — make that card an **opaque** light surface instead.
+- **Translucent surfaces over a busy map** can be hard to read — frost them (BlurView) or make
+  them opaque; over the soft mesh background `palette.surface` (≈45–55% white) reads fine.
+- **`adjustsFontSizeToFit` / auto-shrink is a no-op on web** — size text to fit explicitly.
+- **Avoid nested horizontal `ScrollView`s inside list rows** (repaint a blank frame). The
+  route-card timeline is a wrapping row for this reason.
+- **Memoize list cards** (`React.memo`) so re-sorting reorders painted nodes instead of remounting.
 
 ## Hard rules
-
-- Match references; don't embellish or "improve" them.
+- Match the deck; don't embellish or "improve" it.
 - Don't stop after a single screenshot pass.
+- Single calm theme — don't reintroduce a light/dark toggle or the Wero palette.
+- Soft shadows only; mixed-case headings; 1px hairline borders; glass surfaces via the primitives.
 - Respect the **frozen `GET /routes/` contract** and the DI/services architecture (see `CLAUDE.md`).
 - New UI goes in `src/components/{area}/` — kebab-case files, PascalCase exports.
 - Don't introduce Tailwind, raw `fetch`, or a second styling system.

@@ -12,7 +12,7 @@ type Accents = ReturnType<typeof getAccents>;
  * pre-Go route details show identical markers.
  */
 export const REPORT_OPTIONS: {
-  type: 'sound' | 'heat' | 'smell' | 'crowds' | 'other';
+  type: 'sound' | 'heat' | 'smell' | 'crowds' | 'light';
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   emoji: string;
@@ -20,12 +20,42 @@ export const REPORT_OPTIONS: {
 }[] = [
   { type: 'sound', label: 'Sound', icon: 'radio-outline', emoji: '🔊', accent: 'cyan' },
   { type: 'heat', label: 'Heat', icon: 'thermometer-outline', emoji: '🌡️', accent: 'pink' },
-  { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '🌸', accent: 'green' },
+  { type: 'smell', label: 'Smell', icon: 'flower-outline', emoji: '👃', accent: 'green' },
   { type: 'crowds', label: 'Crowds', icon: 'people-outline', emoji: '👥', accent: 'orange' },
-  { type: 'other', label: 'Other', icon: 'add-circle-outline', emoji: '⚠️', accent: 'yellow' },
+  { type: 'light', label: 'Light', icon: 'sunny-outline', emoji: '💡', accent: 'yellow' },
 ];
 
 export type SensoryReportType = (typeof REPORT_OPTIONS)[number]['type'];
+
+/**
+ * Human description for a warning's action card, phrased by *where* it was
+ * reported rather than "flagged here by a traveller" (which reads wrong when
+ * you're viewing it from elsewhere on the route). The user's own report reads
+ * "<thing> flagged by you near <place>"; another traveller's reads "<thing>
+ * reported by a traveller near <place>". `place` is the nearest stop on the *viewer's* route
+ * (pass `null`/omit when unknown → "nearby"). Live (non-user) warnings such as
+ * TfL disruptions keep their stored description.
+ */
+export function warningDisplayDesc(
+  w: { title?: string; desc: string; username?: string | null },
+  username: string | null | undefined,
+  place?: string | null,
+): string {
+  const label = (w.title || '').replace(/\s+reported$/i, '').trim() || 'Warning';
+  const near = place ? ` near ${place}` : ' nearby';
+  // Logged-out users report under "anonymous", so compare against that too.
+  const isOwn = !!w.username && w.username === (username || 'anonymous');
+  if (isOwn) {
+    return `${label} flagged by you${near}`;
+  }
+  if (w.username) {
+    // Another traveller's community report — attribute generically and locate
+    // it by place, never "here" (the viewer may be elsewhere on the route).
+    return `${label} reported by a traveller${near}`;
+  }
+  // A live system warning (TfL disruption etc.) keeps its stored description.
+  return w.desc;
+}
 
 // Walking is drawn as a dotted line in this blue so the map legend can say
 // plainly "blue = walking" (distinct from the transit liveries). Shared by the
@@ -108,54 +138,96 @@ export function formatWarnings(
  */
 export function warningMarkerScript(): string {
   return `
-    let warningMarkers = {};
+    let warningMarkers = [];
+
+    function _wmDistM(aLat, aLon, bLat, bLon) {
+      const R = 6371000;
+      const dLat = (bLat - aLat) * Math.PI / 180;
+      const dLon = (bLon - aLon) * Math.PI / 180;
+      const s = Math.sin(dLat/2)**2 + Math.cos(aLat*Math.PI/180)*Math.cos(bLat*Math.PI/180)*Math.sin(dLon/2)**2;
+      return 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+    }
+
+    function _wmPost(payload) {
+      const msg = JSON.stringify(payload);
+      if (window.ReactNativeWebView) { window.ReactNativeWebView.postMessage(msg); }
+      else { window.parent.postMessage(msg, '*'); }
+    }
+
     window.updateWarnings = function(warningsJson) {
       const warnings = JSON.parse(warningsJson);
 
-      // Remove old warning markers
-      for (const id in warningMarkers) {
-        map.removeLayer(warningMarkers[id]);
+      // Remove old markers
+      warningMarkers.forEach((m) => map.removeLayer(m));
+      warningMarkers = [];
+
+      // Only visible, located warnings participate.
+      const visible = warnings.filter((w) => w.lat != null && w.lon != null && !w.hidden);
+
+      // Greedily cluster warnings within ~100m of each other so a busy area reads
+      // as one stacked marker the user can open for a breakdown.
+      const CLUSTER_RADIUS_M = 100;
+      const used = new Array(visible.length).fill(false);
+      const clusters = [];
+      for (let i = 0; i < visible.length; i++) {
+        if (used[i]) continue;
+        const group = [visible[i]];
+        used[i] = true;
+        for (let j = i + 1; j < visible.length; j++) {
+          if (used[j]) continue;
+          if (_wmDistM(visible[i].lat, visible[i].lon, visible[j].lat, visible[j].lon) <= CLUSTER_RADIUS_M) {
+            group.push(visible[j]);
+            used[j] = true;
+          }
+        }
+        clusters.push(group);
       }
-      warningMarkers = {};
 
-      warnings.forEach((w) => {
-        if (w.lat == null || w.lon == null || w.hidden) return;
+      clusters.forEach((group) => {
+        const lat = group.reduce((s, g) => s + g.lat, 0) / group.length;
+        const lon = group.reduce((s, g) => s + g.lon, 0) / group.length;
 
-        // Stronger signal (more / more-trusted reports) => bigger marker + thicker ring.
-        const size = w.severity === 'high' ? 46 : w.severity === 'medium' ? 40 : 34;
-        const ring = w.severity === 'high' ? 5 : w.severity === 'medium' ? 4 : 3;
-        const emojiSize = Math.round(size * 0.45);
-        const count = w.reportCount || 1;
-        const badge = count > 1
-          ? \`<div style="position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; background: #1d1c1c; color: #fff; border: 2px solid #fff; border-radius: 9px; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center;">\${count}</div>\`
-          : '';
+        let html, size;
+        if (group.length === 1) {
+          const w = group[0];
+          size = w.severity === 'high' ? 46 : w.severity === 'medium' ? 40 : 34;
+          const ring = w.severity === 'high' ? 5 : w.severity === 'medium' ? 4 : 3;
+          const emojiSize = Math.round(size * 0.45);
+          const count = w.reportCount || 1;
+          const badge = count > 1
+            ? \`<div style="position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;background:#1d1c1c;color:#fff;border:2px solid #fff;border-radius:9px;font-size:10px;font-weight:700;line-height:14px;text-align:center;">\${count}</div>\`
+            : '';
+          html = \`<div style="background-color:\${w.color};width:\${size}px;height:\${size}px;border-radius:50%;border:\${ring}px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px rgba(0,0,0,0.3);position:relative;"><span style="font-size:\${emojiSize}px;">\${w.emoji}</span>\${badge}</div>\`;
+        } else {
+          // Stacked cluster: up to 3 emoji discs peeking from behind each other,
+          // plus a total-count badge.
+          size = 46;
+          const discs = group.slice(0, 3).map((g, k) =>
+            \`<div style="position:absolute;left:\${k * 16}px;top:0;width:30px;height:30px;border-radius:50%;background:\${g.color};border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);z-index:\${10 - k};"><span style="font-size:14px;">\${g.emoji}</span></div>\`
+          ).join('');
+          const width = 30 + (Math.min(group.length, 3) - 1) * 16;
+          const badge = \`<div style="position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;background:#1d1c1c;color:#fff;border:2px solid #fff;border-radius:9px;font-size:10px;font-weight:700;line-height:14px;text-align:center;z-index:20;">\${group.length}</div>\`;
+          html = \`<div style="position:relative;width:\${width}px;height:30px;">\${discs}\${badge}</div>\`;
+          size = width;
+        }
 
-        const markerHtml = \`
-          <div style="background-color: \${w.color}; width: \${size}px; height: \${size}px; border-radius: 50%; border: \${ring}px solid #1d1c1c; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); font-weight: bold; position: relative;">
-            <span style="font-size: \${emojiSize}px;">\${w.emoji}</span>
-            \${badge}
-          </div>
-        \`;
-
-        const warningIcon = L.divIcon({
-          html: markerHtml,
+        const icon = L.divIcon({
+          html: html,
           className: 'warning-marker-icon',
-          iconSize: [size, size],
-          iconAnchor: [size / 2, size / 2]
+          iconSize: [size, group.length === 1 ? size : 30],
+          iconAnchor: [size / 2, group.length === 1 ? size / 2 : 15],
         });
-
-        const marker = L.marker([w.lat, w.lon], { icon: warningIcon }).addTo(map);
+        const marker = L.marker([lat, lon], { icon: icon }).addTo(map);
 
         marker.on('click', function() {
-          const msg = JSON.stringify({ type: 'warningClick', id: w.id });
-          if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(msg);
+          if (group.length === 1) {
+            _wmPost({ type: 'warningClick', id: group[0].id });
           } else {
-            window.parent.postMessage(msg, '*');
+            _wmPost({ type: 'warningClusterClick', ids: group.map((g) => g.id) });
           }
         });
 
-        warningMarkers[w.id] = marker;
+        warningMarkers.push(marker);
       });
     };
   `;

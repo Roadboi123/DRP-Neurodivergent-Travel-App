@@ -2,17 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { getAccents, getPalette, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useAuth } from '@/context/auth-context';
+import { previousPath } from '@/services/nav-history';
 
 export interface HeaderNavProps {
   onProfilePress?: () => void;
+  /** Show the Home button alongside Back (default true). */
+  showHome?: boolean;
 }
 
-/** Top bar: Back + Home circular buttons on the left, theme toggle + profile on the right. */
-export function HeaderNav({ onProfilePress }: HeaderNavProps) {
+/** Top bar: Back (+ optional Home) glass circular buttons on the left, profile on the right. */
+export function HeaderNav({ onProfilePress, showHome = true }: HeaderNavProps) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
   const accents = getAccents(isDark);
@@ -20,27 +22,41 @@ export function HeaderNav({ onProfilePress }: HeaderNavProps) {
   const btnStyle = [
     styles.iconBtn,
     { backgroundColor: palette.surface, borderColor: palette.border },
-    hardShadow(4),
+    softShadow(1),
   ];
+
+  // Return to the screen we actually came from (tracked in nav-history); fall
+  // back to the native stack, then Home, so Back never dead-ends.
+  const goBack = () => {
+    const prev = previousPath();
+    if (prev) {
+      router.navigate(prev as any);
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
 
   return (
     <View style={styles.row}>
       <View style={styles.left}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={goBack}
           accessibilityLabel="Go back"
           style={btnStyle}>
           <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => router.replace('/')}
-          accessibilityLabel="Go home"
-          style={btnStyle}>
-          <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
-        </TouchableOpacity>
+        {showHome && (
+          <TouchableOpacity
+            onPress={() => router.replace('/')}
+            accessibilityLabel="Go home"
+            style={btnStyle}>
+            <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
+          </TouchableOpacity>
+        )}
       </View>
       <View style={styles.right}>
-        <ThemeToggle />
         {onProfilePress && (
           <TouchableOpacity
             onPress={onProfilePress}
@@ -83,7 +99,7 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     position: 'relative',
   },
   profileActiveDot: {

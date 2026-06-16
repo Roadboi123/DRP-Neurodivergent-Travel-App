@@ -65,6 +65,12 @@
           "locationWhenInUsePermission": "We use your location to track your journey and let you report sensory conditions where you are."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/clearway-logo.png"
+        }
+      ],
       "expo-font"
     ],
     "experiments": {

@@ -1,24 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { PreferencesNudge } from '@/components/home/preferences-nudge';
-import { QuickActionCard } from '@/components/home/quick-action-card';
 import { PresetSwitcher } from '@/components/preferences/preset-switcher';
 import { PresetGlimpse } from '@/components/preferences/preset-glimpse';
 import { GradientBackground } from '@/components/ui/gradient-background';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { Glass } from '@/components/ui/glass';
+import { CLEARWAY, Fonts, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/context/auth-context';
+
+const LOGO = require('../../../assets/images/clearway-logo.png');
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
   const router = useRouter();
-  const { username, isLoggedIn, setProfileModalVisible } = useAuth();
+  const { isLoggedIn, setProfileModalVisible } = useAuth();
 
   // Hydration mismatch fix
   const [mounted, setMounted] = useState(false);
@@ -36,21 +37,19 @@ export default function HomeScreen() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Header — Clearway brand lockup + profile */}
         <View style={styles.headerRow}>
-          <View>
-            <Text style={[styles.greetingText, { color: palette.textSecondary }]}>
-              {isLoggedIn ? `Hello, ${username}!` : 'Hello!'}
-            </Text>
-            <Text style={[styles.title, { color: palette.textPrimary }]}>My Planner</Text>
+          <View style={styles.brand}>
+            <Image source={LOGO} style={styles.logo} contentFit="contain" />
+            <Text style={[styles.wordmark, { color: palette.textPrimary }]}>Clearway</Text>
           </View>
           <View style={styles.headerRightActions}>
-            <ThemeToggle />
             <TouchableOpacity
               onPress={() => setProfileModalVisible(true)}
               style={[
                 styles.profileIconBtn,
-                { backgroundColor: isDark ? '#2E3543' : '#F0F0EE' }
+                { backgroundColor: palette.surface, borderColor: palette.border, borderWidth: 1 },
+                softShadow(1),
               ]}
               activeOpacity={0.8}
               accessibilityLabel="Open profile modal"
@@ -58,26 +57,28 @@ export default function HomeScreen() {
               <Ionicons
                 name={isLoggedIn ? "person" : "person-outline"}
                 size={18}
-                color={isLoggedIn ? "#E91E63" : palette.textPrimary}
+                color={isLoggedIn ? CLEARWAY.blueStrong : palette.textPrimary}
               />
-              {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: palette.background }]} />}
+              {isLoggedIn && <View style={[styles.profileActiveDot, { borderColor: CLEARWAY.white }]} />}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Plan a route — the single primary action, full-width. */}
-        <Text style={[styles.sectionTitle, { color: palette.textPrimary }]}>
-          Plan a route
-        </Text>
-        <QuickActionCard
-          iconName="navigate"
-          iconColor={BRAND.ink}
-          iconBackground={accents.cyan}
-          title="Plan Calm Route"
-          description="Find sensory friendly paths"
+        {/* Primary action — an inviting, search-bar-style rectangular CTA. */}
+        <Pressable
           onPress={() => router.push('/routes')}
-          style={styles.planCard}
-        />
+          accessibilityRole="button"
+          accessibilityLabel="Get me somewhere — plan a calm route"
+          style={({ pressed }) => [styles.planCard, pressed && styles.ctaPressed]}>
+          <Glass radius={Radii.input} shadow={2}>
+            <View style={styles.searchRow}>
+              <View style={styles.searchIconTile}>
+                <Ionicons name="search" size={22} color={CLEARWAY.blueStrong} />
+              </View>
+              <Text style={[styles.searchText, { color: palette.textPrimary }]}>Get me somewhere</Text>
+            </View>
+          </Glass>
+        </Pressable>
 
         {/* Signpost for travellers who haven't personalised yet: preferences are
             account-bound, so for logged-out users this opens the login/profile
@@ -104,9 +105,9 @@ export default function HomeScreen() {
                 styles.editButton,
                 {
                   backgroundColor: palette.surface,
-                  borderColor: palette.border,
+                  borderColor: palette.borderStrong,
                 },
-                hardShadow(pressed ? 2 : 3),
+                softShadow(1),
                 pressed ? styles.editButtonPressed : null,
               ]}>
               <Ionicons name="build" size={14} color={palette.textPrimary} />
@@ -137,29 +138,72 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  brand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  logo: {
+    width: 70,
+    height: 70,
+    // The PNG's brain sits in the upper portion of the square, so nudge it down
+    // a touch to optically centre it against the wordmark.
+    marginTop: 6,
+  },
+  wordmark: {
+    fontSize: 44,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    letterSpacing: -1.6,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  searchIconTile: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: CLEARWAY.bluePillFrom,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchText: {
+    fontSize: 20,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  ctaPressed: {
+    transform: [{ scale: 0.99 }],
+    opacity: 0.92,
+  },
   profileIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   profileActiveDot: {
     position: 'absolute',
-    top: 2,
-    right: 2,
+    top: 3,
+    right: 3,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#2E7D32',
+    backgroundColor: CLEARWAY.good,
     borderWidth: 1.5,
   },
   statusRow: {
@@ -168,24 +212,23 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   greetingText: {
-    fontSize: 13,
+    fontSize: 14,
+    fontFamily: Fonts?.body,
     fontWeight: '600',
   },
   title: {
-    fontSize: 36,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: -1,
-    lineHeight: 36,
-  },
-  sectionTitle: {
-    fontSize: 17,
+    fontSize: 40,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
+    letterSpacing: -1.4,
+    lineHeight: 42,
+  },
+  sectionTitle: {
+    fontSize: 19,
+    fontFamily: Fonts?.display,
+    fontWeight: '800',
     marginBottom: 12,
-    letterSpacing: 0.2,
+    letterSpacing: -0.4,
   },
   planCard: {
     width: '100%',
@@ -202,20 +245,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
     marginBottom: 12,
   },
   editButtonPressed: {
-    transform: [{ translateY: 2 }],
+    transform: [{ scale: 0.97 }],
+    opacity: 0.85,
   },
   editButtonLabel: {
-    fontSize: 12,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontFamily: Fonts?.body,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
 });

@@ -11,11 +11,14 @@ import {
   REPORT_OPTIONS,
   WALK_BLUE,
   modeEmoji,
+  warningDisplayDesc,
   warningMarkerScript,
   warningVisual,
   type SensoryReportType,
 } from '@/components/routes/warning-markers';
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { BlurView } from 'expo-blur';
+
+import { CLEARWAY, Fonts, GLASS, getAccents, getPalette, hardShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLiveLocation } from '@/hooks/use-live-location';
 import { useRouteWarnings } from '@/hooks/use-route-warnings';
@@ -24,8 +27,8 @@ import { useRoutesService } from '@/services/services-context';
 import { useAuth } from '@/context/auth-context';
 import type { RouteOption, WarningItem } from '@/types/route';
 import { analytics } from '@/services/analytics';
-import { haversineMeters } from '@/utils/geo';
-import { cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
+import { haversineMeters, nearestRouteStop } from '@/utils/geo';
+import { buildChangeInstruction, cleanInstruction, cleanPlaceLabel } from '@/utils/place-label';
 import { sendLocalNotification } from '@/services/notifications';
 
 // How close (metres) the traveller must get to a warning before we ask them to
@@ -167,12 +170,22 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
     `;
   });
 
-  // Start (green) and end (pink) stay as plain dots; every interior point is a
+  // Build a readable interchange instruction for each change, keyed by the change
+  // station, so a tapped change marker explains the transfer in plain language.
+  const changePopupByKey: Record<string, string> = {};
+  for (let i = 0; i < processedLegs.length - 1; i++) {
+    const fromLeg = processedLegs[i];
+    const toLeg = processedLegs[i + 1];
+    changePopupByKey[(toLeg.departure || fromLeg.arrival || '').toLowerCase()] =
+      buildChangeInstruction(fromLeg, toLeg);
+  }
+
+  // Start (green) and end (red) stay as plain dots; every interior point is a
   // "change here" and gets a white marker with the boarding mode's emoji.
-  const changeNodes: { lat: number; lon: number; label: string; emoji: string }[] = [];
+  const changeNodes: { lat: number; lon: number; label: string; emoji: string; popup: string }[] = [];
   nodes.forEach((node) => {
     if (node.isStart || node.isEnd) {
-      const fillColor = node.isStart ? '#83f582' : '#ff158a';
+      const fillColor = node.isStart ? '#5b9d6b' : '#e23b3b';
       leafletJS += `
       L.circleMarker([${node.lat}, ${node.lon}], {
         radius: 9,
@@ -184,11 +197,13 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
       }).addTo(map).bindPopup("<b>${cleanPlaceLabel(node.label, 'Stop').replace(/"/g, '\\"')}</b>");
       `;
     } else {
+      const label = cleanPlaceLabel(node.label, 'Change here');
       changeNodes.push({
         lat: node.lat,
         lon: node.lon,
-        label: cleanPlaceLabel(node.label, 'Change here'),
+        label,
         emoji: modeEmoji(node.boardMode),
+        popup: changePopupByKey[(node.label || '').toLowerCase()] || label,
       });
     }
   });
@@ -205,7 +220,7 @@ function buildJourneyMap(route: RouteOption, accents: ReturnType<typeof getAccen
       changeNodes.forEach((c) => {
         const html = '<div style="background:#ffffff;width:32px;height:32px;border-radius:50%;border:3px solid #1d1c1c;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.3);"><span style="font-size:16px;line-height:1;">' + c.emoji + '</span></div>';
         const icon = L.divIcon({ html: html, className: 'change-marker-icon', iconSize: [32, 32], iconAnchor: [16, 16] });
-        const m = L.marker([c.lat, c.lon], { icon: icon }).addTo(map).bindPopup('<b>' + c.label.replace(/"/g, '&quot;') + '</b>');
+        const m = L.marker([c.lat, c.lon], { icon: icon }).addTo(map).bindPopup('<b>' + c.popup.replace(/"/g, '&quot;') + '</b>');
         changeMarkers.push(m);
       });
     }
@@ -367,14 +382,27 @@ export default function JourneyScreen() {
     formattedWarnings,
     selectedWarning,
     setSelectedWarning,
+    selectedCluster,
+    setSelectedCluster,
     openWarningById,
+    openClusterByIds,
     selectedIsOwn,
     removeOwnWarning,
     dismissWarning,
     addWarning,
     hideAll,
     setHideAll,
-  } = useRouteWarnings(route, accents);
+  } = useRouteWarnings(route, accents, true, true);
+
+  // Nearest stop on this route to a warning, for "<thing> reported near <place>"
+  // card wording (null when the warning has no/too-far coords → "nearby").
+  const warningPlace = useCallback(
+    (w: WarningItem | null): string | null =>
+      w && w.lat != null && w.lon != null
+        ? cleanPlaceLabel(nearestRouteStop(route, w.lat, w.lon) ?? '', '') || null
+        : null,
+    [route],
+  );
 
   // States
   const [reportingType, setReportingType] = useState<SensoryReportType | null>(null);
@@ -393,64 +421,11 @@ export default function JourneyScreen() {
   const [isExpanded, setIsExpanded] = useState(false);
   const initialPanDone = useRef(false);
 
-  // Map key (legend): a left-docked panel that starts on-screen and can be
-  // swiped off to the left (leaving a pull-tab) and back. `hideChanges` toggles
-  // the white "change here" markers on the map.
-  const [legendHidden, setLegendHidden] = useState(false);
+  // `hideChanges` toggles the white "change here" markers on the map (the toggle
+  // now lives in the top pill row; the legend itself is a static panel).
   const [hideChanges, setHideChanges] = useState(false);
-  const LEGEND_WIDTH = 210;
-  const LEGEND_TAB = 28;
-  const LEGEND_HIDDEN_X = -(LEGEND_WIDTH - LEGEND_TAB);
-  const legendX = useRef(new Animated.Value(0)).current; // 0 = fully shown
-  const legendCurX = useRef(0);
-  const legendStartX = useRef(0);
-
-  useEffect(() => {
-    const id = legendX.addListener(({ value }) => {
-      legendCurX.current = value;
-    });
-    return () => legendX.removeListener(id);
-  }, [legendX]);
-
-  const animateLegend = useCallback(
-    (hidden: boolean) => {
-      setLegendHidden(hidden);
-      Animated.spring(legendX, {
-        toValue: hidden ? LEGEND_HIDDEN_X : 0,
-        useNativeDriver: Platform.OS !== 'web',
-        overshootClamping: true,
-        tension: 60,
-        friction: 9,
-      }).start();
-    },
-    [legendX, LEGEND_HIDDEN_X],
-  );
-
-  const legendPan = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-      onPanResponderGrant: () => {
-        legendStartX.current = legendCurX.current;
-        legendX.setOffset(legendStartX.current);
-        legendX.setValue(0);
-      },
-      onPanResponderMove: (_, g) => {
-        const min = LEGEND_HIDDEN_X - legendStartX.current;
-        const max = 0 - legendStartX.current;
-        legendX.setValue(Math.max(min, Math.min(max, g.dx)));
-      },
-      onPanResponderRelease: (_, g) => {
-        legendX.flattenOffset();
-        const current = legendCurX.current;
-        const hide = g.vx < -0.25 ? true : g.vx > 0.25 ? false : current < LEGEND_HIDDEN_X / 2;
-        animateLegend(hide);
-      },
-      onPanResponderTerminate: () => {
-        legendX.flattenOffset();
-      },
-    }),
-  ).current;
+  // Per-leg expanded state for the intermediate-stops dropdown in the journey sheet.
+  const [stopsExpanded, setStopsExpanded] = useState<Record<number, boolean>>({});
 
   // Swipe-up bottom sheet (mirrors the pre-Go route-details sheet): collapsed shows
   // duration·cost minimised, expanded reveals sensory alignment + the step timeline.
@@ -463,6 +438,11 @@ export default function JourneyScreen() {
   const lastTranslateY = useRef(MAX_TRANSLATE_Y);
   const startTranslateY = useRef(MAX_TRANSLATE_Y);
   const scrollOffsetY = useRef(0);
+  // `gestureState.dy` is measured from touch-down, but the sheet pan is often
+  // granted *mid-gesture* (once the inner list scrolls back to the top). Record
+  // the dy at grant time and subtract it so the drag starts from the finger's
+  // current position instead of jumping ("snapping") by the pre-grant travel.
+  const grantDy = useRef(0);
 
   useEffect(() => {
     const id = panY.addListener(({ value }) => {
@@ -471,16 +451,18 @@ export default function JourneyScreen() {
     return () => panY.removeListener(id);
   }, [panY]);
 
-  const onPanResponderGrant = () => {
+  const onPanResponderGrant = (_: any, gestureState: any) => {
     startTranslateY.current = lastTranslateY.current;
+    grantDy.current = gestureState?.dy ?? 0;
     panY.setOffset(startTranslateY.current);
     panY.setValue(0);
   };
 
   const onPanResponderMove = (_: any, gestureState: any) => {
+    const dy = gestureState.dy - grantDy.current;
     const minVal = -startTranslateY.current;
     const maxVal = MAX_TRANSLATE_Y - startTranslateY.current;
-    panY.setValue(Math.max(minVal, Math.min(maxVal, gestureState.dy)));
+    panY.setValue(Math.max(minVal, Math.min(maxVal, dy)));
   };
 
   const onPanResponderRelease = (_: any, gestureState: any) => {
@@ -569,6 +551,8 @@ export default function JourneyScreen() {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
         if (data.type === 'warningClick' && data.id) {
           openWarningById(data.id);
+        } else if (data.type === 'warningClusterClick' && data.ids) {
+          openClusterByIds(data.ids);
         } else if (data.type === 'mapDrag') {
           setFollowUser(false);
         }
@@ -588,7 +572,7 @@ export default function JourneyScreen() {
       }
       analytics.endJourney();
     };
-  }, [openWarningById]);
+  }, [openWarningById, openClusterByIds]);
 
   // Concatenate path coordinates from all route legs
   const allPathCoords = useMemo(() => {
@@ -713,7 +697,9 @@ export default function JourneyScreen() {
     // Check all warnings
     warnings.forEach((w) => {
       if (w.lat == null || w.lon == null) return;
-      
+      // Never notify the traveller about their own report (anonymous included).
+      if (w.username === (username || 'anonymous')) return;
+
       // Check if it is a medium or higher confidence warning
       if (w.severity !== 'medium' && w.severity !== 'high') return;
 
@@ -736,16 +722,18 @@ export default function JourneyScreen() {
         // If traveler is within 10 minutes of the warning
         if (timeToReach <= 10.0 && timeToReach > 0 && !notifiedUpcomingWarningIds.current.has(w.id)) {
           notifiedUpcomingWarningIds.current.add(w.id);
-          
-          // Send push notification
+
+          const place = w.lat != null && w.lon != null ? nearestRouteStop(route, w.lat, w.lon) : null;
+          const label = (w.title || '').replace(/\s+reported$/i, '').trim() || w.title;
+          const where = place ? ` near ${cleanPlaceLabel(place, 'your route')}` : '';
           sendLocalNotification(
-            'Upcoming Warning on Journey!',
-            `${w.title} is coming up ahead in about ${Math.round(timeToReach)} minutes.`
+            'Upcoming warning on your journey',
+            `${label} reported by a traveller${where}, about ${Math.round(timeToReach)} min ahead.`
           ).catch((err) => console.warn('Failed to send upcoming warning notification:', err));
         }
       }
     });
-  }, [simulating, liveCoords, userCoords, route, allPathCoords, pathTimes, warnings]);
+  }, [simulating, liveCoords, userCoords, route, allPathCoords, pathTimes, warnings, username]);
 
   // Auto-play journey simulation
   useEffect(() => {
@@ -857,6 +845,8 @@ export default function JourneyScreen() {
       const data = JSON.parse(dataStr);
       if (data.type === 'warningClick' && data.id) {
         openWarningById(data.id);
+      } else if (data.type === 'warningClusterClick' && data.ids) {
+        openClusterByIds(data.ids);
       } else if (data.type === 'mapDrag') {
         setFollowUser(false);
       }
@@ -897,7 +887,7 @@ export default function JourneyScreen() {
       username: username || 'anonymous',
       warning_type: option.icon,
       title: `${option.label} reported`,
-      desc: `${option.label} flagged here by a traveller.`,
+      desc: `${option.label} reported nearby by a traveller.`,
       lat: userCoords[0],
       lon: userCoords[1],
     };
@@ -936,9 +926,9 @@ export default function JourneyScreen() {
         <Text style={[styles.emptyText, { color: palette.textPrimary }]}>No active journey.</Text>
         <TouchableOpacity
           onPress={() => router.replace('/(tabs)/routes')}
-          style={[styles.backBtnAction, { backgroundColor: accents.green, borderColor: palette.border }]}
+          style={[styles.backBtnAction, { backgroundColor: CLEARWAY.blue }]}
         >
-          <Text style={[styles.backBtnActionText, { color: palette.textPrimary }]}>Routes</Text>
+          <Text style={[styles.backBtnActionText, { color: CLEARWAY.white }]}>Routes</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -970,12 +960,13 @@ export default function JourneyScreen() {
         )}
       </View>
 
-      {/* Top Left Navigation Icons (Back and Home) */}
+      {/* Top controls: Back (left); Hide changes + Hide warnings (right, inline) */}
       <View
         pointerEvents="box-none"
         style={[styles.topControls, { top: insets.top + 16 }]}
       >
-        <View style={styles.navButtonsRow}>
+        {/* Row 1: back button + compact 2×2 map key inline */}
+        <View style={styles.topRow}>
           <TouchableOpacity
             onPress={() => {
               // Return to the route details sheet shown before "Go", not the bare list.
@@ -988,115 +979,92 @@ export default function JourneyScreen() {
           >
             <Ionicons name="arrow-back" size={20} color={palette.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.replace('/(tabs)/routes')}
-            style={[styles.circleButton, { backgroundColor: palette.surface, borderColor: palette.border }]}
-            accessibilityRole="button"
-            accessibilityLabel="Home"
-          >
-            <Ionicons name="home-outline" size={20} color={palette.textPrimary} />
-          </TouchableOpacity>
+
+          <View style={[styles.legendCard, { backgroundColor: '#f6f8fb', borderColor: palette.border }]}>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#5b9d6b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Start</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#e23b3b' }]} />
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Destination</Text>
+              </View>
+            </View>
+            <View style={styles.legendCol}>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendWalkDots}>
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                  <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Walking</Text>
+              </View>
+              <View style={styles.legendRowItem}>
+                <View style={styles.legendEmojiStack}>
+                  <View style={[styles.legendEmojiChip, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚶</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚌</Text>
+                  </View>
+                  <View style={[styles.legendEmojiChip, styles.legendEmojiOverlap, { borderColor: palette.border }]}>
+                    <Text style={styles.legendEmoji}>🚆</Text>
+                  </View>
+                </View>
+                <Text style={[styles.legendLabel, { color: palette.textPrimary }]}>Changes</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        {/* Hide / show all warning markers */}
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackClick();
-            setHideAll(!hideAll);
-          }}
-          style={[
-            styles.topPill,
-            { backgroundColor: hideAll ? accents.yellow : palette.surface, borderColor: palette.border },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
-        >
-          <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={palette.textPrimary} />
-          <Text style={[styles.topPillText, { color: palette.textPrimary }]}>
-            {hideAll ? 'Show warnings' : 'Hide warnings'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Map key / legend — a left-docked panel you can swipe off and back.
-          Starts on-screen; the chevron tab shows it can slide away. */}
-      <Animated.View
-        style={[
-          styles.legendPanel,
-          {
-            top: insets.top + 80,
-            width: LEGEND_WIDTH,
-            backgroundColor: palette.surface,
-            borderColor: palette.border,
-            transform: [{ translateX: legendX }],
-          },
-        ]}
-        {...legendPan.panHandlers}
-      >
-        <View style={[styles.legendBody, { width: LEGEND_WIDTH - LEGEND_TAB }]}>
-          <Text style={[styles.legendTitle, { color: palette.textPrimary }]}>Map key</Text>
-
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#83f582', borderColor: palette.border }]} />
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Start</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#ff158a', borderColor: palette.border }]} />
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Destination</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={styles.legendWalkDots}>
-              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-              <View style={[styles.legendWalkDot, { backgroundColor: WALK_BLUE }]} />
-            </View>
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Walking</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendChangeDot, { borderColor: palette.border }]}>
-              <Text style={styles.legendChangeEmoji}>🚌</Text>
-            </View>
-            <Text style={[styles.legendLabel, { color: palette.textSecondary }]}>Change (bus/train/tube)</Text>
-          </View>
-
-          <View style={[styles.legendDivider, { backgroundColor: palette.divider }]} />
-
+        {/* Row 2: hide toggles, below the back button */}
+        <View style={styles.topPillRow}>
           {/* Hide / show the white change markers */}
           <TouchableOpacity
             onPress={() => {
               analytics.trackClick();
               setHideChanges((v) => !v);
             }}
-            style={[styles.legendToggleBtn, { backgroundColor: hideChanges ? accents.yellow : palette.surface, borderColor: palette.border }]}
+            style={[
+              styles.topPill,
+              { backgroundColor: hideChanges ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideChanges ? CLEARWAY.blueStrong : palette.border },
+            ]}
             accessibilityRole="button"
             accessibilityLabel={hideChanges ? 'Show change icons on map' : 'Hide change icons from map'}
           >
-            <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={15} color={palette.textPrimary} />
-            <Text style={[styles.legendToggleText, { color: palette.textPrimary }]}>
+            <Ionicons name={hideChanges ? 'bus-outline' : 'bus'} size={16} color={hideChanges ? CLEARWAY.white : palette.textPrimary} />
+            <Text style={[styles.topPillText, { color: hideChanges ? CLEARWAY.white : palette.textPrimary }]}>
               {hideChanges ? 'Show changes' : 'Hide changes'}
             </Text>
           </TouchableOpacity>
-        </View>
 
-        {/* Pull-tab on the right edge — tap or swipe to slide the key off/on */}
-        <TouchableOpacity
-          onPress={() => {
-            analytics.trackClick();
-            animateLegend(!legendHidden);
-          }}
-          style={[styles.legendTab, { width: LEGEND_TAB, borderColor: palette.border }]}
-          accessibilityRole="button"
-          accessibilityLabel={legendHidden ? 'Show map key' : 'Hide map key'}
-        >
-          <Ionicons name={legendHidden ? 'chevron-forward' : 'chevron-back'} size={16} color={palette.textPrimary} />
-        </TouchableOpacity>
-      </Animated.View>
+          {/* Hide / show all warning markers */}
+          <TouchableOpacity
+            onPress={() => {
+              analytics.trackClick();
+              setHideAll(!hideAll);
+            }}
+            style={[
+              styles.topPill,
+              { backgroundColor: hideAll ? CLEARWAY.blueStrong : '#f6f8fb', borderColor: hideAll ? CLEARWAY.blueStrong : palette.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={hideAll ? 'Show sensory warnings on map' : 'Hide sensory warnings from map'}
+          >
+            <Ionicons name={hideAll ? 'eye-off' : 'eye'} size={16} color={hideAll ? CLEARWAY.white : palette.textPrimary} />
+            <Text style={[styles.topPillText, { color: hideAll ? CLEARWAY.white : palette.textPrimary }]}>
+              {hideAll ? 'Show warnings' : 'Hide warnings'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
-        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.yellow, borderColor: palette.border }]}>
-          <Ionicons name="information-circle-outline" size={16} color={palette.textPrimary} />
-          <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>{reportNotice}</Text>
+        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: CLEARWAY.blueStrong, borderColor: CLEARWAY.blueStrong }]}>
+          <Ionicons name="information-circle-outline" size={16} color={CLEARWAY.white} />
+          <Text style={[styles.noticeBannerText, { color: CLEARWAY.white }]}>{reportNotice}</Text>
         </View>
       )}
 
@@ -1112,27 +1080,31 @@ export default function JourneyScreen() {
 
       {/* Grouped Right Capsule-style Rail — tap a type to report it here */}
       <View style={[styles.reportCapsule, { top: insets.top + 144, backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <Text style={[styles.reportCapsuleHeader, { color: palette.textSecondary }]}>Report</Text>
+        <View style={[styles.reportCapsuleHeaderPill, { backgroundColor: CLEARWAY.okay }]}>
+          <Text style={[styles.reportCapsuleHeader, { color: CLEARWAY.heading }]}>Report</Text>
+          <Text style={[styles.reportCapsuleHeader, { color: CLEARWAY.heading }]}>below</Text>
+        </View>
         <View style={[styles.reportDivider, { backgroundColor: palette.divider }]} />
-        {REPORT_OPTIONS.map((option) => (
-          <TouchableOpacity
-            key={option.type}
-            activeOpacity={0.85}
-            onPress={() => {
-              analytics.startDisruptionReport();
-              setReportingType(option.type);
-            }}
-            style={[
-              styles.reportCapsuleBtn,
-              {
-                backgroundColor: reportingType === option.type ? accents[option.accent] : palette.surface,
-              },
-            ]}
-          >
-            <Ionicons name={option.icon} size={16} color={palette.textPrimary} />
-            <Text style={[styles.reportCapsuleLabel, { color: palette.textPrimary }]}>{option.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {REPORT_OPTIONS.map((option) => {
+          const selected = reportingType === option.type;
+          return (
+            <TouchableOpacity
+              key={option.type}
+              activeOpacity={0.85}
+              onPress={() => {
+                analytics.startDisruptionReport();
+                setReportingType(option.type);
+              }}
+              style={[
+                styles.reportCapsuleBtn,
+                { backgroundColor: selected ? CLEARWAY.blueStrong : palette.surface },
+              ]}
+            >
+              <Ionicons name={option.icon} size={16} color={selected ? CLEARWAY.white : palette.textPrimary} />
+              <Text style={[styles.reportCapsuleLabel, { color: selected ? CLEARWAY.white : palette.textPrimary }]}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Swipe-up journey sheet — collapsed shows duration·cost; swipe up for details */}
@@ -1141,14 +1113,17 @@ export default function JourneyScreen() {
         style={[
           styles.sheetPanel,
           {
-            backgroundColor: palette.surface,
-            borderColor: palette.border,
+            backgroundColor: GLASS.light.fill,
+            borderColor: GLASS.light.border,
             height: SHEET_HEIGHT,
             transform: [{ translateY: panY }],
           },
         ]}
       >
-        <View style={styles.sheetHeaderTouch} {...headerPanResponder.panHandlers}>
+        <BlurView intensity={GLASS.light.blur} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <View
+          style={[styles.sheetHeaderTouch, Platform.OS === 'web' ? ({ touchAction: 'none' } as any) : null]}
+          {...headerPanResponder.panHandlers}>
           <View style={styles.sheetHandleContainer}>
             <View style={[styles.sheetHandle, { backgroundColor: palette.divider }]} />
           </View>
@@ -1210,6 +1185,39 @@ export default function JourneyScreen() {
                           <Text style={{ fontWeight: '800', color: palette.textPrimary }}>{cleanPlaceLabel(leg.arrival, lIdx === (route.legs?.length ?? 0) - 1 ? destinationFallback : 'the next stop')}</Text>
                         </Text>
                       </View>
+
+                      {/* Intermediate stops along this leg (collapsible) — keeps the
+                          live journey detail consistent with the pre-Go sheet. */}
+                      {leg.stops && leg.stops.length > 0 && (
+                        <View style={[styles.stopsDropdown, { borderLeftColor: CLEARWAY.blueStrong }]}>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            onPress={() =>
+                              setStopsExpanded((prev) => ({ ...prev, [lIdx]: !prev[lIdx] }))
+                            }
+                            style={styles.stopsDropdownHeader}
+                          >
+                            <Text style={[styles.stopsHeader, { color: CLEARWAY.blueStrong }]}>
+                              {stopsExpanded[lIdx] ? 'Hide' : 'Show'} {leg.stops.length} stop{leg.stops.length > 1 ? 's' : ''}
+                            </Text>
+                            <Ionicons
+                              name={stopsExpanded[lIdx] ? 'chevron-up' : 'chevron-down'}
+                              size={11}
+                              color={CLEARWAY.blueStrong}
+                              style={{ marginLeft: 4 }}
+                            />
+                          </TouchableOpacity>
+                          {stopsExpanded[lIdx] && (
+                            <View style={styles.stopsList}>
+                              {leg.stops.map((stop, sIdx) => (
+                                <Text key={sIdx} style={[styles.stopItemText, { color: palette.textMuted }]}>
+                                  • {stop}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </View>
                   </View>
                 );
@@ -1242,14 +1250,14 @@ export default function JourneyScreen() {
         <View style={styles.reportOverlayRoot} pointerEvents="box-none">
           <View style={styles.reportBackdrop} pointerEvents="none" />
           <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.reportInputPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.reportInputPanel, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
               <TouchableOpacity
                 onPress={() => {
                   analytics.trackClick();
                   setReportingType(null);
                   analytics.endDisruptionReport(null);
                 }}
-                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                style={[styles.reportCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
                 accessibilityRole="button"
                 accessibilityLabel="Cancel report"
               >
@@ -1264,9 +1272,9 @@ export default function JourneyScreen() {
               <TouchableOpacity
                 onPress={() => submitReport()}
                 activeOpacity={0.85}
-                style={[styles.reportSubmitBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
+                style={[styles.reportSubmitBtn, { backgroundColor: CLEARWAY.blue }]}
               >
-                <Text style={[styles.reportSubmitBtnText, { color: palette.textPrimary }]}>Submit</Text>
+                <Text style={[styles.reportSubmitBtnText, { color: CLEARWAY.white }]}>Submit</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1282,10 +1290,10 @@ export default function JourneyScreen() {
             onPress={() => setSelectedWarning(null)}
           />
           <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
               <TouchableOpacity
                 onPress={() => setSelectedWarning(null)}
-                style={[styles.reportCancelBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                style={[styles.reportCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss"
               >
@@ -1303,18 +1311,18 @@ export default function JourneyScreen() {
 
               <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>{selectedWarning.title}</Text>
               <WarningConfidence warning={selectedWarning} />
-              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{selectedWarning.desc}</Text>
+              <Text style={[styles.warningCardDesc, { color: palette.textSecondary }]}>{warningDisplayDesc(selectedWarning, username, warningPlace(selectedWarning))}</Text>
 
               <TouchableOpacity
                 onPress={() => (selectedIsOwn ? removeOwnWarning(selectedWarning) : dismissWarning(selectedWarning))}
                 activeOpacity={0.85}
                 style={[
                   styles.warningCardAction,
-                  { backgroundColor: selectedIsOwn ? accents.pink : accents.green, borderColor: palette.border },
+                  { backgroundColor: selectedIsOwn ? CLEARWAY.bad : CLEARWAY.blue },
                 ]}
               >
-                <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={palette.textPrimary} />
-                <Text style={[styles.warningCardActionText, { color: palette.textPrimary }]}>
+                <Ionicons name={selectedIsOwn ? 'trash-outline' : 'eye-off-outline'} size={15} color={CLEARWAY.white} />
+                <Text style={[styles.warningCardActionText, { color: CLEARWAY.white }]}>
                   {selectedIsOwn ? 'Remove' : 'Close'}
                 </Text>
               </TouchableOpacity>
@@ -1327,12 +1335,70 @@ export default function JourneyScreen() {
         </View>
       )}
 
+      {/* Cluster breakdown — all sensory warnings in one ~100m area. */}
+      {selectedCluster && (
+        <View style={styles.reportOverlayRoot} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.reportBackdrop}
+            activeOpacity={1}
+            onPress={() => setSelectedCluster(null)}
+          />
+          <View style={styles.reportCenterContainer} pointerEvents="box-none">
+            <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
+              <TouchableOpacity
+                onPress={() => setSelectedCluster(null)}
+                style={[styles.reportCancelBtn, { backgroundColor: '#eef1f5', borderColor: palette.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+              >
+                <Ionicons name="close" size={16} color={palette.textPrimary} />
+              </TouchableOpacity>
+
+              <Text style={[styles.warningCardTitle, { color: palette.textPrimary }]}>
+                {selectedCluster.length} warnings here
+              </Text>
+              <ScrollView style={styles.clusterList} showsVerticalScrollIndicator={false}>
+                {selectedCluster.map((w) => (
+                  <TouchableOpacity
+                    key={w.id}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setSelectedCluster(null);
+                      setSelectedWarning(w);
+                    }}
+                    style={styles.clusterRow}
+                  >
+                    <View
+                      style={[
+                        styles.clusterRowIcon,
+                        { backgroundColor: warningVisual(w.icon, accents).color, borderColor: palette.border },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 15 }}>{warningVisual(w.icon, accents).emoji}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.clusterRowTitle, { color: palette.textPrimary }]} numberOfLines={1}>
+                        {w.title}
+                      </Text>
+                      <Text style={[styles.clusterRowDesc, { color: palette.textSecondary }]} numberOfLines={2}>
+                        {warningDisplayDesc(w, username, warningPlace(w))}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={palette.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Proximity confirm prompt — shown when the traveller nears a warning */}
       {proximityWarning && (
         <View style={styles.reportOverlayRoot} pointerEvents="box-none">
           <View style={styles.reportBackdrop} pointerEvents="none" />
           <View style={styles.reportCenterContainer} pointerEvents="box-none">
-            <View style={[styles.warningCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.warningCard, { backgroundColor: '#eef1f5', borderColor: palette.border }]}>
               <View
                 style={[
                   styles.warningCardIcon,
@@ -1354,22 +1420,22 @@ export default function JourneyScreen() {
                 <TouchableOpacity
                   onPress={() => respondProximity('yes')}
                   activeOpacity={0.85}
-                  style={[styles.proximityActionBtn, { backgroundColor: accents.green, borderColor: palette.border }]}
+                  style={[styles.proximityActionBtn, { backgroundColor: CLEARWAY.good }]}
                   accessibilityRole="button"
                   accessibilityLabel="Yes, still here"
                 >
-                  <Ionicons name="checkmark" size={16} color={palette.textPrimary} />
-                  <Text style={[styles.proximityActionText, { color: palette.textPrimary }]}>Yes</Text>
+                  <Ionicons name="checkmark" size={16} color={CLEARWAY.white} />
+                  <Text style={[styles.proximityActionText, { color: CLEARWAY.white }]}>Yes</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => respondProximity('no')}
                   activeOpacity={0.85}
-                  style={[styles.proximityActionBtn, { backgroundColor: accents.pink, borderColor: palette.border }]}
+                  style={[styles.proximityActionBtn, { backgroundColor: CLEARWAY.bad }]}
                   accessibilityRole="button"
                   accessibilityLabel="No, it's gone"
                 >
-                  <Ionicons name="close" size={16} color={palette.textPrimary} />
-                  <Text style={[styles.proximityActionText, { color: palette.textPrimary }]}>No</Text>
+                  <Ionicons name="close" size={16} color={CLEARWAY.white} />
+                  <Text style={[styles.proximityActionText, { color: CLEARWAY.white }]}>No</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => respondProximity('skip')}
@@ -1465,7 +1531,7 @@ export default function JourneyScreen() {
               accessibilityRole="button"
               accessibilityLabel="Exit simulation"
             >
-              <Ionicons name="stop-circle-outline" size={22} color={accents.pink} />
+              <Ionicons name="stop-circle-outline" size={22} color={CLEARWAY.bad} />
             </TouchableOpacity>
 
             {/* Step Back */}
@@ -1547,7 +1613,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   topControls: {
     position: 'absolute',
@@ -1556,13 +1621,21 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
   },
-  navButtonsRow: {
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    gap: 10,
+  },
+  topPillRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 8,
   },
   topPill: {
@@ -1572,68 +1645,44 @@ const styles = StyleSheet.create({
     height: 38,
     paddingHorizontal: 12,
     borderRadius: 19,
-    borderWidth: 2,
-    ...hardShadow(3),
+    borderWidth: 1,
+    ...hardShadow(2),
   },
   topPillText: {
-    fontSize: 10.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
-  },
-  legendPanel: {
-    position: 'absolute',
-    left: 0,
-    zIndex: 12,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    borderTopWidth: 2,
-    borderRightWidth: 2,
-    borderBottomWidth: 2,
-    borderTopRightRadius: 16,
-    borderBottomRightRadius: 16,
-    ...hardShadow(4),
-  },
-  legendBody: {
-    paddingVertical: 12,
-    paddingLeft: 14,
-    paddingRight: 8,
-  },
-  legendTab: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderLeftWidth: 2,
-  },
-  legendDivider: {
-    height: 1.5,
-    marginVertical: 8,
-  },
-  legendTitle: {
     fontSize: 11,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    marginBottom: 8,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
-  legendRow: {
+  // Compact 2×2 map key sitting inline beside the back button.
+  legendCard: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    ...hardShadow(1),
+  },
+  legendCol: {
+    gap: 5,
+  },
+  legendRowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 4,
+    gap: 6,
   },
   legendDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
+    width: 13,
+    height: 13,
+    borderRadius: 7,
   },
   legendWalkDots: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    width: 16,
+    width: 13,
     justifyContent: 'center',
   },
   legendWalkDot: {
@@ -1641,45 +1690,44 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  legendChangeDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
+  legendLabel: {
+    fontSize: 11.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+  },
+  legendEmojiStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendEmojiChip: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -3,
   },
-  legendChangeEmoji: {
-    fontSize: 11,
+  legendEmojiOverlap: {
+    marginLeft: -8,
   },
-  legendLabel: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    flex: 1,
+  legendEmoji: {
+    fontSize: 10,
   },
-  legendToggleBtn: {
-    flexDirection: 'row',
+  reportCapsuleHeaderPill: {
+    alignSelf: 'stretch',
+    borderRadius: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    marginTop: 4,
+    marginBottom: 2,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderWidth: 2,
-    borderRadius: 10,
-    paddingVertical: 9,
-    marginTop: 2,
-  },
-  legendToggleText: {
-    fontSize: 10.5,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
   },
   circleButton: {
     width: 54,
     height: 54,
     borderRadius: 27,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     ...hardShadow(3),
@@ -1697,22 +1745,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     ...hardShadow(3),
   },
   noticeBannerText: {
     fontSize: 11,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   reportCapsule: {
     position: 'absolute',
     // `top` applied inline as insets.top + 144 (see render).
     right: 16,
-    width: 54,
+    width: 60,
     zIndex: 10,
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 22,
     padding: 5,
     gap: 4,
@@ -1720,14 +1767,11 @@ const styles = StyleSheet.create({
     ...hardShadow(3),
   },
   reportCapsuleHeader: {
-    fontSize: 8,
-    fontFamily: Fonts?.display,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontSize: 9.5,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
     textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 4,
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
   reportDivider: {
     height: 1.5,
@@ -1747,7 +1791,6 @@ const styles = StyleSheet.create({
     fontSize: 7.5,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   sheetPanel: {
     position: 'absolute',
@@ -1812,7 +1855,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   reportInputPanel: {
-    borderWidth: 3,
+    borderWidth: 1,
     borderRadius: 20,
     padding: 16,
     flexDirection: 'row',
@@ -1830,7 +1873,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     ...hardShadow(2),
@@ -1839,7 +1882,7 @@ const styles = StyleSheet.create({
     width: 66,
     height: 66,
     borderRadius: 33,
-    borderWidth: 2.5,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 4,
@@ -1848,11 +1891,10 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     marginTop: 1,
   },
   reportSubmitBtn: {
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 18,
@@ -1865,13 +1907,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   warningListEmoji: {
     fontSize: 22,
   },
   warningCard: {
-    borderWidth: 3,
+    borderWidth: 1,
     borderRadius: 20,
     paddingTop: 20,
     paddingBottom: 16,
@@ -1886,7 +1927,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    borderWidth: 2.5,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1894,7 +1935,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     textAlign: 'center',
     marginTop: 2,
   },
@@ -1909,7 +1949,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 18,
@@ -1921,12 +1961,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   warningCardHint: {
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  stopsDropdown: {
+    marginTop: 6,
+    paddingLeft: 8,
+    borderLeftWidth: 2,
+    gap: 3,
+  },
+  stopsDropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  stopsHeader: {
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+  },
+  stopsList: {
+    gap: 2,
+    marginTop: 2,
+  },
+  stopItemText: {
+    fontSize: 11,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
+  },
+  clusterList: {
+    alignSelf: 'stretch',
+    maxHeight: 260,
+    marginTop: 4,
+  },
+  clusterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  clusterRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clusterRowTitle: {
+    fontSize: 13,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+  },
+  clusterRowDesc: {
+    fontSize: 12,
+    fontFamily: Fonts?.body,
+    lineHeight: 16,
   },
   proximityPromptSub: {
     fontSize: 13,
@@ -1951,7 +2044,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 12,
     ...hardShadow(2),
@@ -1960,7 +2053,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   detailsScrollContent: {
     padding: 16,
@@ -1983,7 +2075,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -2014,7 +2106,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   backBtnAction: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -2024,12 +2116,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
   },
   simControlRow: {
     height: 54,
     borderRadius: 27,
-    borderWidth: 2,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -2055,7 +2146,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 6,
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   simSpeedText: {
     fontSize: 9,
@@ -2065,7 +2156,7 @@ const styles = StyleSheet.create({
   simStartBtn: {
     height: 48,
     borderRadius: 24,
-    borderWidth: 2,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -2075,7 +2166,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: Fonts?.display,
     fontWeight: '900',
-    textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
 });

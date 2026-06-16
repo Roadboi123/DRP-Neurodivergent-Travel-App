@@ -1,9 +1,6 @@
-import { useTheme } from '@/contexts/theme-context';
-
-// The active scheme is an in-app, persisted choice owned by ThemeProvider — not
-// the device setting (which used to leak broken colours into components). Every
-// existing `getPalette(useColorScheme() === 'dark')` call now follows the toggle
-// and re-renders when it flips. Platform-agnostic, so there is no `.web` variant.
+// Clearway ships a single calm theme — there is no light/dark choice anymore.
+// This hook is kept (many components still call it) but always reports 'light'
+// so every `getPalette(useColorScheme() === 'dark')` resolves to the one theme.
 export function useColorScheme(): 'light' | 'dark' {
-  return useTheme().scheme;
+  return 'light';
 }

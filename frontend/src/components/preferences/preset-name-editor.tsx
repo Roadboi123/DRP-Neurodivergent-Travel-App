@@ -6,7 +6,8 @@ import {
   PRESET_NAME_MAX_LENGTH,
   presetDisplayName,
 } from '@/constants/presets';
-import { Fonts, getPalette, hardShadow } from '@/constants/theme';
+import { Glass } from '@/components/ui/glass';
+import { Fonts, getPalette, Radii } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePresets } from '@/context/presets-context';
 
@@ -45,8 +46,8 @@ export function PresetNameEditor() {
   };
 
   return (
-    <View
-      style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+    <Glass radius={Radii.card} shadow={2} style={styles.card}>
+      <View style={styles.inner}>
       <Text style={[styles.heading, { color: palette.textPrimary }]}>Rename presets</Text>
       <Text style={[styles.subtitle, { color: palette.textMuted }]}>
         Give each preset a name that means something to you.
@@ -65,7 +66,7 @@ export function PresetNameEditor() {
           <TextInput
             style={[
               styles.input,
-              { color: palette.textPrimary, backgroundColor: palette.background, borderColor: palette.border },
+              { color: palette.textPrimary, backgroundColor: 'rgba(255,255,255,0.5)', borderColor: palette.border },
             ]}
             value={drafts[preset.id] ?? ''}
             onChangeText={(text) => setDrafts((d) => ({ ...d, [preset.id]: text }))}
@@ -79,29 +80,29 @@ export function PresetNameEditor() {
           />
         </View>
       ))}
-    </View>
+      </View>
+    </Glass>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 14,
-    borderWidth: 2,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
     marginBottom: 20,
-    ...hardShadow(6),
   } as ViewStyle,
+  inner: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
   heading: {
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontFamily: Fonts?.body,
+    fontWeight: '500',
     marginTop: 2,
     marginBottom: 6,
   },
@@ -113,20 +114,19 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   slotLabel: {
     width: 64,
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0,
   },
   input: {
     flex: 1,
     fontSize: 15,
     fontFamily: Fonts?.body,
     fontWeight: '600',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: Radii.input,
+    borderWidth: 1,
   },
 });

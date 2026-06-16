@@ -12,9 +12,11 @@ import {
   View,
 } from 'react-native';
 
+import { BlurView } from 'expo-blur';
+
 import { SegmentedControl, type SegmentOption } from '@/components/routes/segmented-control';
 import { formatClock, type JourneyTime, type JourneyTimeMode } from '@/components/routes/journey-time';
-import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, Fonts, GLASS, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const MODE_OPTIONS: SegmentOption<JourneyTimeMode>[] = [
@@ -187,7 +189,6 @@ export function RouteTimeSheet({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
 
   // Working copy so edits only commit on "Done".
   const [draft, setDraft] = useState<JourneyTime>(value);
@@ -224,8 +225,9 @@ export function RouteTimeSheet({
       <Pressable style={styles.backdrop} onPress={onClose}>
         <TouchableOpacity
           activeOpacity={1}
-          style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}
+          style={[styles.sheet, { backgroundColor: GLASS.light.fill, borderColor: GLASS.light.border }]}
           onPress={(e) => e.stopPropagation()}>
+          <BlurView intensity={GLASS.light.blur} tint="light" style={styles.sheetBlur} />
           <View style={styles.handle} />
 
           <View style={styles.header}>
@@ -275,7 +277,7 @@ export function RouteTimeSheet({
               onClose();
             }}
             activeOpacity={0.85}
-            style={[styles.doneButton, { backgroundColor: accents.pink, borderColor: palette.border }]}>
+            style={[styles.doneButton, { backgroundColor: CLEARWAY.blue }]}>
             <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -291,12 +293,17 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: Radii.cardLg,
+    borderTopRightRadius: Radii.cardLg,
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
-    borderWidth: 2,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...softShadow(3),
+  },
+  sheetBlur: {
+    ...StyleSheet.absoluteFillObject,
   },
   handle: {
     alignSelf: 'center',
@@ -313,11 +320,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: Fonts?.display,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   wheels: {
     flexDirection: 'row',
@@ -332,8 +338,8 @@ const styles = StyleSheet.create({
     left: 40,
     right: 40,
     height: ITEM_H,
-    borderTopWidth: 2,
-    borderBottomWidth: 2,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderRadius: 2,
     opacity: 0.5,
   },
@@ -360,24 +366,23 @@ const styles = StyleSheet.create({
   },
   dayNote: {
     fontSize: 13,
+    fontFamily: Fonts?.body,
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 16,
   },
   doneButton: {
     marginTop: 24,
-    paddingVertical: 15,
-    borderRadius: 30,
+    paddingVertical: 16,
+    borderRadius: Radii.pill,
     alignItems: 'center',
-    borderWidth: 2,
-    ...hardShadow(5),
+    ...softShadow(1),
   },
   doneButtonText: {
-    color: BRAND.white,
-    fontFamily: Fonts?.display,
-    fontSize: 15,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: CLEARWAY.white,
+    fontFamily: Fonts?.semibold,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

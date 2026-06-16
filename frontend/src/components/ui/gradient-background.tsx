@@ -1,27 +1,32 @@
-import { StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
+import { StyleSheet, View } from 'react-native';
 
-import { GRADIENTS } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MESH } from '@/constants/theme';
+
+// The soft blue-blur backdrop asset (a diffuse radial glow on white). Used in
+// place of drawn blob shapes for a calmer, photo-quality blur.
+const BLUR_BG = require('../../../assets/images/drp-blue-blur-bg.png');
 
 /**
- * The fixed Wero page field — pink→yellow in light, a muted charcoal/plum sweep
- * in the calm dark theme. Each screen mounts its own and renders over it with a
- * transparent background. Static (no animation) — deliberately, to avoid
- * motion/over-stimulation for the app's users.
+ * The Clearway page field — a pale base tinted by a large, soft blue blur image
+ * (`drp-blue-blur-bg.png`), `cover`-scaled to fill the screen. Static (no
+ * animation) — deliberately, to avoid motion/over-stimulation for the app's
+ * neurodivergent users.
+ *
+ * Each screen mounts its OWN background and renders over it with a transparent
+ * surface; the bottom-tab navigator does not detach inactive screens on web, so a
+ * shared transparent background would let screens bleed through each other.
  */
 export function GradientBackground() {
-  const isDark = useColorScheme() === 'dark';
-  const gradient = isDark ? GRADIENTS.backgroundDark : GRADIENTS.background;
-
   return (
-    <LinearGradient
-      colors={gradient.colors}
-      locations={gradient.locations}
-      start={gradient.start}
-      end={gradient.end}
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
-    />
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: MESH.base }]} pointerEvents="none">
+      <Image
+        source={BLUR_BG}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={0}
+      />
+    </View>
   );
 }

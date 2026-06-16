@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-import { Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { Fonts, getAccents, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRoutesService } from '@/services/services-context';
 import type { LocationSuggestion } from '@/types/route';
@@ -323,7 +323,12 @@ export function RouteSearchInputs({
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={startLoc}
               onChangeText={onStartChange}
-              onFocus={() => setFocusedInput('start')}
+              selectTextOnFocus
+              onFocus={(e) => {
+                setFocusedInput('start');
+                // Web: highlight the whole field so it's easy to replace.
+                (e?.target as any)?.select?.();
+              }}
               onBlur={handleBlur}
               placeholder="Enter starting location..."
               placeholderTextColor={placeholderColor}
@@ -349,7 +354,11 @@ export function RouteSearchInputs({
               style={[styles.textInput, { color: palette.textPrimary }]}
               value={endLoc}
               onChangeText={onEndChange}
-              onFocus={() => setFocusedInput('end')}
+              selectTextOnFocus
+              onFocus={(e) => {
+                setFocusedInput('end');
+                (e?.target as any)?.select?.();
+              }}
               onBlur={handleBlur}
               placeholder="Enter destination..."
               placeholderTextColor={placeholderColor}
@@ -379,7 +388,7 @@ export function RouteSearchInputs({
         <View
           style={[
             styles.suggestionsDropdown,
-            { backgroundColor: palette.surface, borderColor: palette.borderStrong },
+            { backgroundColor: '#f6f8fb', borderColor: palette.borderStrong },
           ]}>
           {suggestionsLoading && suggestions.length === 0 ? (
             <View style={styles.suggestionsLoadingContainer}>
@@ -436,11 +445,11 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   inputCard: {
-    borderRadius: 14,
-    borderWidth: 2,
+    borderRadius: Radii.card,
+    borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    ...hardShadow(5),
+    paddingVertical: 14,
+    ...softShadow(2),
   },
   inputRow: {
     flexDirection: 'row',
@@ -470,11 +479,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fieldLabel: {
-    fontSize: 10,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontSize: 11,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
     marginBottom: 3,
   },
   textInput: {
@@ -496,21 +504,21 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    borderWidth: 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    ...hardShadow(3),
+    ...softShadow(1),
   },
   suggestionsDropdown: {
     position: 'absolute',
-    top: 136,
+    top: 140,
     left: 16,
     right: 16,
-    borderRadius: 14,
-    borderWidth: 2,
+    borderRadius: Radii.card,
+    borderWidth: 1,
     maxHeight: 250,
     zIndex: 2000,
-    ...hardShadow(5),
+    ...softShadow(2),
   },
   suggestionsLoadingContainer: {
     padding: 16,

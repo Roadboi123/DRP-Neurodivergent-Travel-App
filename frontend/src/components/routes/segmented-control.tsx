@@ -2,7 +2,7 @@ import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { BRAND, Fonts, getAccents, getPalette, hardShadow } from '@/constants/theme';
+import { CLEARWAY, Fonts, getPalette, Radii, softShadow } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -32,7 +32,6 @@ export function SegmentedControl<T extends string>({
 }) {
   const isDark = useColorScheme() === 'dark';
   const palette = getPalette(isDark);
-  const accents = getAccents(isDark);
   const isTab = variant === 'tab';
   const surfaceStyle = { backgroundColor: palette.surface, borderColor: palette.border };
 
@@ -40,7 +39,7 @@ export function SegmentedControl<T extends string>({
     <View style={isTab ? [styles.tabTrack, surfaceStyle] : styles.chipRow}>
       {options.map((option) => {
         const active = option.value === value;
-        const fg = active ? BRAND.white : palette.textPrimary;
+        const fg = active ? CLEARWAY.white : palette.textPrimary;
         return (
           <TouchableOpacity
             key={option.value}
@@ -48,12 +47,11 @@ export function SegmentedControl<T extends string>({
             activeOpacity={0.85}
             style={[
               isTab ? styles.tabSegment : [styles.chip, surfaceStyle],
-              active && { backgroundColor: accents.pink },
+              active && { backgroundColor: CLEARWAY.blue, ...softShadow(1) },
             ]}>
             {option.icon && <Ionicons name={option.icon} size={isTab ? 13 : 15} color={fg} />}
             <Text
               numberOfLines={1}
-              adjustsFontSizeToFit
               style={[styles.label, isTab && styles.tabLabel, { color: fg }]}>
               {option.label}
             </Text>
@@ -67,10 +65,10 @@ export function SegmentedControl<T extends string>({
 const styles = StyleSheet.create({
   tabTrack: {
     flexDirection: 'row',
-    borderRadius: 30,
+    borderRadius: Radii.pill,
     padding: 4,
-    borderWidth: 2,
-    ...hardShadow(4),
+    borderWidth: 1,
+    ...softShadow(1),
   },
   tabSegment: {
     flex: 1,
@@ -80,7 +78,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 10,
     paddingHorizontal: 4,
-    borderRadius: 24,
+    borderRadius: Radii.pill,
   },
   chipRow: {
     flexDirection: 'row',
@@ -93,16 +91,15 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 30,
-    borderWidth: 2,
-    ...hardShadow(3),
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+    ...softShadow(1),
   },
   label: {
     fontSize: 13,
-    fontFamily: Fonts?.display,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontFamily: Fonts?.semibold,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   // Tabs share the row 50/50, so "Preference" + icon must stay compact.
   tabLabel: {
