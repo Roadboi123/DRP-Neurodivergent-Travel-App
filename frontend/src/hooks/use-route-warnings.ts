@@ -159,14 +159,15 @@ export function useRouteWarnings(
           const me = username || 'anonymous';
           const isOwn = w.username === me;
           if (notify && !isOwn) {
-            // Phrase it by roughly where the warning is, e.g. "Sound reported
-            // near South Kensington".
+            // Phrase it by roughly where the warning is and attribute it
+            // generically, e.g. "Sound reported by a traveller near South
+            // Kensington" (never "here" — the traveller may be elsewhere).
             const place =
               w.lat != null && w.lon != null ? nearestRouteStop(route, w.lat, w.lon) : null;
             const label = (w.title || '').replace(/\s+reported$/i, '').trim() || w.title;
             const body = place
-              ? `${label} reported near ${cleanPlaceLabel(place, 'your route')}`
-              : `${w.title}: ${w.desc}`;
+              ? `${label} reported by a traveller near ${cleanPlaceLabel(place, 'your route')}`
+              : `${label} reported by a traveller nearby`;
             sendLocalNotification('New warning on your journey', body).catch((err) =>
               console.warn('Failed to send local notification:', err),
             );

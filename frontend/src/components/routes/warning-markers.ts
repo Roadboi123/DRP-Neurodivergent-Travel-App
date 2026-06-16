@@ -32,7 +32,7 @@ export type SensoryReportType = (typeof REPORT_OPTIONS)[number]['type'];
  * reported rather than "flagged here by a traveller" (which reads wrong when
  * you're viewing it from elsewhere on the route). The user's own report reads
  * "<thing> flagged by you near <place>"; another traveller's reads "<thing>
- * reported near <place>". `place` is the nearest stop on the *viewer's* route
+ * reported by a traveller near <place>". `place` is the nearest stop on the *viewer's* route
  * (pass `null`/omit when unknown → "nearby"). Live (non-user) warnings such as
  * TfL disruptions keep their stored description.
  */
@@ -49,8 +49,9 @@ export function warningDisplayDesc(
     return `${label} flagged by you${near}`;
   }
   if (w.username) {
-    // Another traveller's community report — locate it, never "here".
-    return `${label} reported${near}`;
+    // Another traveller's community report — attribute generically and locate
+    // it by place, never "here" (the viewer may be elsewhere on the route).
+    return `${label} reported by a traveller${near}`;
   }
   // A live system warning (TfL disruption etc.) keeps its stored description.
   return w.desc;
