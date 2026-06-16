@@ -6,7 +6,7 @@ certifi==2026.5.20
 cffi==2.0.0
 charset-normalizer==3.4.7
 click==8.4.1
-cryptography==48.0.0
+cryptography==48.0.1
 deprecation==2.1.0
 fastapi==0.136.3
 fsspec==2026.4.0
