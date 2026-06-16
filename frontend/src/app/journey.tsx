@@ -376,6 +376,14 @@ export default function JourneyScreen() {
 
   const webViewRef = useRef<WebView>(null);
 
+  // In-app alert shown when another traveller's warning arrives mid-journey. The
+  // OS notification fires too, but is unreliable while the app is foregrounded
+  // (which is exactly this case), so the banner is the alert the user sees.
+  const [warningAlert, setWarningAlert] = useState<string | null>(null);
+  const handleNewWarning = useCallback((_title: string, body: string) => {
+    setWarningAlert(body);
+  }, []);
+
   // Warnings state, polling and remove/hide actions — shared with route details.
   const {
     warnings,
@@ -392,7 +400,7 @@ export default function JourneyScreen() {
     addWarning,
     hideAll,
     setHideAll,
-  } = useRouteWarnings(route, accents, true, true);
+  } = useRouteWarnings(route, accents, true, true, handleNewWarning);
 
   // Nearest stop on this route to a warning, for "<thing> reported near <place>"
   // card wording (null when the warning has no/too-far coords → "nearby").
@@ -922,6 +930,13 @@ export default function JourneyScreen() {
     return () => clearTimeout(timer);
   }, [reportNotice]);
 
+  // Auto-dismiss the in-app new-warning alert after a few seconds.
+  useEffect(() => {
+    if (!warningAlert) return;
+    const timer = setTimeout(() => setWarningAlert(null), 6000);
+    return () => clearTimeout(timer);
+  }, [warningAlert]);
+
   const mapHtml = useMemo(() => {
     return route ? buildJourneyMap(route, accents) : '';
   }, [route, accents]);
@@ -1066,9 +1081,22 @@ export default function JourneyScreen() {
         </View>
       </View>
 
+      {/* New-warning alert — another traveller reported on this route mid-journey */}
+      {warningAlert && (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setWarningAlert(null)}
+          style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.orange, borderColor: accents.orange }]}
+          accessibilityRole="alert"
+        >
+          <Ionicons name="warning-outline" size={16} color={CLEARWAY.white} />
+          <Text style={[styles.noticeBannerText, { color: CLEARWAY.white }]}>{warningAlert}</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Transient notice (e.g. duplicate report rejected) */}
       {reportNotice && (
-        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: CLEARWAY.blueStrong, borderColor: CLEARWAY.blueStrong }]}>
+        <View style={[styles.noticeBanner, { top: insets.top + (warningAlert ? 124 : 76), backgroundColor: CLEARWAY.blueStrong, borderColor: CLEARWAY.blueStrong }]}>
           <Ionicons name="information-circle-outline" size={16} color={CLEARWAY.white} />
           <Text style={[styles.noticeBannerText, { color: CLEARWAY.white }]}>{reportNotice}</Text>
         </View>
@@ -1076,7 +1104,7 @@ export default function JourneyScreen() {
 
       {/* Location-off fallback notice — reports/marker use the route start instead */}
       {!reportNotice && locationPermission === 'denied' && (
-        <View style={[styles.noticeBanner, { top: insets.top + 76, backgroundColor: accents.orange, borderColor: palette.border }]}>
+        <View style={[styles.noticeBanner, { top: insets.top + (warningAlert ? 124 : 76), backgroundColor: accents.orange, borderColor: palette.border }]}>
           <Ionicons name="location-outline" size={16} color={palette.textPrimary} />
           <Text style={[styles.noticeBannerText, { color: palette.textPrimary }]}>
             Location off — using route start
