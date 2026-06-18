@@ -35,10 +35,10 @@ jobs:
         password: ${{ secrets.DOCKER_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Cache node_modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: frontend/node_modules
           key: node-${{ hashFiles('frontend/package-lock.json') }}
@@ -74,10 +74,10 @@ jobs:
     container: *builder_container
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Cache node_modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: frontend/node_modules
           key: node-${{ hashFiles('frontend/package-lock.json') }}
@@ -106,7 +106,7 @@ jobs:
 #     if: github.ref == 'refs/heads/main'
 
 #     steps:
-#       - uses: actions/checkout@v4
+#       - uses: actions/checkout@v7
 
 #       - name: Set up Node
 #         uses: actions/setup-node@v4
@@ -121,20 +121,20 @@ jobs:
 
 #       # Cache NDK and CMake before prebuild so they're available when Gradle runs
 #       - name: Cache Android NDK
-#         uses: actions/cache@v4
+#         uses: actions/cache@v5
 #         with:
 #           path: /usr/local/lib/android/sdk/ndk
 #           key: ndk-27.1.12297006
 
 #       - name: Cache Android CMake
-#         uses: actions/cache@v4
+#         uses: actions/cache@v5
 #         with:
 #           path: /usr/local/lib/android/sdk/cmake
 #           key: cmake-3.22.1
 
 #       # Cache Gradle — keyed on package.json not android/ (android/ gets wiped by --clean)
 #       - name: Cache Gradle
-#         uses: actions/cache@v4
+#         uses: actions/cache@v5
 #         with:
 #           path: |
 #             ~/.gradle/caches
@@ -181,7 +181,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
