@@ -37,7 +37,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 realtime==2.30.0
 requests==2.34.2
-rich==14.3.4
+rich==15.0.0
 six==1.17.0
 starlette==1.2.0
 storage3==2.30.0
