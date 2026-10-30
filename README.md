@@ -1,3 +1,3 @@
-# DRP group 10
+# Neurodivergent-Travel-App
 
 Re-inventing the travel space for neurodivergent people.
